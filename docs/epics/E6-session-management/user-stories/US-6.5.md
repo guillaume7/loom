@@ -11,20 +11,22 @@ Update the `loom_heartbeat` MCP tool to include `wait: true` and `retry_in_secon
 ```
 Given the FSM is in state AWAITING_CI (a gate state)
 When `loom_heartbeat` is called
-Then the response JSON is `{"state":"AWAITING_CI","wait":true,"retry_in_seconds":30}`
+Then the response, after unmarshalling, has `state` equal to `"AWAITING_CI"`
+  And `wait` is `true`
+  And `retry_in_seconds` is `30`
 ```
 
 ```
 Given the FSM is in state MERGING (a non-gate state)
 When `loom_heartbeat` is called
-Then the response JSON contains `"wait":false`
-  And `retry_in_seconds` is absent or 0
+Then the response, after unmarshalling, has `wait` equal to `false`
+  And `retry_in_seconds` is `0`
 ```
 
 ```
 Given `loom_heartbeat` is called 60 times in quick succession in a gate state
 When responses are collected
-Then every response contains `"wait":true` and `"retry_in_seconds":30`
+Then every response has `wait` equal to `true` and `retry_in_seconds` equal to `30`
   And the FSM state is unchanged after all 60 calls
 ```
 

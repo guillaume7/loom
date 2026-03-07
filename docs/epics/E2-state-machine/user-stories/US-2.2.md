@@ -10,35 +10,35 @@ Implement `Machine.Transition(event Event) error` in `internal/fsm/machine.go` b
 
 ```
 Given the FSM is in state IDLE
-When `Transition(EventStart)` is called
+When the `start` event is received
 Then the FSM state becomes SCANNING
   And no error is returned
 ```
 
 ```
 Given the FSM is in state AWAITING_CI
-When `Transition(EventCIGreen)` is called
+When the `ci_green` event is received
 Then the FSM state becomes REVIEWING
   And no error is returned
 ```
 
 ```
 Given the FSM is in state AWAITING_CI
-When `Transition(EventCIRed)` is called
+When the `ci_red` event is received
 Then the FSM state becomes DEBUGGING
   And no error is returned
 ```
 
 ```
 Given the FSM is in any state
-When `Transition` is called with an event that has no entry in the transition table for the current state
+When an event is received that has no entry in the transition table for the current state
 Then an error is returned describing the invalid transition
   And the FSM state is unchanged
 ```
 
 ```
 Given the FSM is in state MERGING
-When `Transition(EventMerged)` is called with an epic-boundary flag set
+When the `merged` event is received with an epic-boundary flag set
 Then the FSM state becomes REFACTORING
 ```
 

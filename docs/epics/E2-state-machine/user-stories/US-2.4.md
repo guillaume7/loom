@@ -11,21 +11,21 @@ Automatically transition the FSM to `PAUSED` when any gate state's retry budget 
 ```
 Given the FSM is in state AWAITING_PR
   And the retry budget for AWAITING_PR is 20
-When `Transition(EventTimeout)` is called for the 21st time
+When the `timeout` event is received for the 21st time
 Then the FSM state becomes PAUSED
   And the returned error is nil (budget exhaustion is an expected transition, not an error)
 ```
 
 ```
 Given the FSM is in any non-terminal state
-When `Transition(EventAbort)` is called
+When the `abort` event is received
 Then the FSM state becomes PAUSED
   And no error is returned
 ```
 
 ```
 Given the FSM is in state PAUSED
-When `Transition(EventStart)` is called
+When the `start` event is received
 Then an error is returned (PAUSED is a terminal gate; no automatic escape)
   And the FSM state remains PAUSED
 ```

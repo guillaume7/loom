@@ -9,7 +9,7 @@ Ensure `loom resume` reads the PAUSED checkpoint from the store, transitions the
 ## Acceptance Criteria
 
 ```
-Given a PAUSED checkpoint exists with `previous_state: "AWAITING_CI"`
+Given a PAUSED checkpoint exists with the pre-pause `state` field set to `"AWAITING_CI"`
 When `loom resume` is executed
 Then the FSM is initialised at AWAITING_CI (not IDLE)
   And the command prints `"Resuming from AWAITING_CI"` to stdout
@@ -32,7 +32,7 @@ Then the stall reason is logged at `slog.Info` level before resuming
 ## Tasks
 
 1. [ ] Write `resume_session_test.go` with PAUSED-checkpoint, no-checkpoint, and stall-reason cases (write tests first)
-2. [ ] Update `cmd_resume.go` to read the checkpoint's `previous_state` and initialise the FSM there
+2. [ ] Update `cmd_resume.go` to read the checkpoint's `state` field and initialise the FSM at that state
 3. [ ] Log the stall reason if present before entering the loop
 4. [ ] Reset the stall timer on resume so the 5-minute window restarts
 5. [ ] Run `go test ./cmd/loom/... -race` and confirm green

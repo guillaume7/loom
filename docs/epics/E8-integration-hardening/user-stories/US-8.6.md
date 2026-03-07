@@ -37,7 +37,7 @@ Then the release workflow does NOT trigger
 3. [ ] Add cross-compile matrix steps for all 5 platforms with `CGO_ENABLED=0`
 4. [ ] Generate `checksums.txt` using `sha256sum` on all binaries
 5. [ ] Use `softprops/action-gh-release` to create the release and upload assets
-6. [ ] Push a test tag `v0.0.1-test` to a branch and confirm the workflow produces all assets
+6. [ ] Create and push a test tag `v0.0.1-test` pointing at a commit on `main` and confirm the workflow produces all 5 binary assets
 
 ## Dependencies
 - US-8.5

@@ -9,7 +9,7 @@ Implement the `loom_heartbeat` tool handler so it returns the current FSM state 
 ## Acceptance Criteria
 
 ```
-Given the FSM is in a gate state (AWAITING_PR, AWAITING_CI, REVIEWING)
+Given the FSM is in a gate state (AWAITING_PR, AWAITING_READY, AWAITING_CI, REVIEWING)
 When the session calls `loom_heartbeat`
 Then the response contains `"state": "<current_state>"`, `"wait": true`, and `"retry_in_seconds": 30`
   And the FSM state is unchanged after the call

@@ -9,7 +9,7 @@ Start a background goroutine when the FSM enters a gate state that emits a struc
 ## Acceptance Criteria
 
 ```
-Given the FSM transitions into a gate state (AWAITING_PR, AWAITING_CI, REVIEWING)
+Given the FSM transitions into a gate state (AWAITING_PR, AWAITING_READY, AWAITING_CI, REVIEWING)
 When 60 seconds elapse (using a fake clock in tests)
 Then a `slog.Info("heartbeat")` entry is emitted with fields `state` and `elapsed_seconds`
 ```

@@ -12,7 +12,7 @@ Create the `checkpoints` table DDL and run it on first open so `internal/store/s
 Given an empty `:memory:` database
 When `store.New(":memory:")` is called
 Then the `checkpoints` table is created without error
-  And the table has columns: `id`, `state`, `phase`, `pr_number`, `issue_number`, `retry_counts` (JSON), `reason`, `updated_at`
+  And the table has columns: `id`, `state`, `previous_state`, `phase`, `pr_number`, `issue_number`, `retry_counts` (JSON), `reason`, `updated_at`
 ```
 
 ```
