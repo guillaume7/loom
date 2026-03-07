@@ -3,6 +3,11 @@
 ## Epic
 E6: Session Management
 
+## Assigned Agent
+
+**[Backend Developer](../../../../.github/agents/backend-developer.md)** — apply [`loom-architecture`](../../../../.github/skills/loom-architecture.md) · [`go-standards`](../../../../.github/skills/go-standards.md) · [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md).
+
+
 ## Goal
 Ensure `loom resume` reads the PAUSED checkpoint from the store, transitions the FSM back to the checkpointed pre-pause state, and re-enters the FSM action loop from that state.
 

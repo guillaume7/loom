@@ -3,6 +3,11 @@
 ## Epic
 E4: MCP Server
 
+## Assigned Agent
+
+**[Backend Developer](../../../../.github/agents/backend-developer.md)** — apply [`loom-architecture`](../../../../.github/skills/loom-architecture.md) · [`go-standards`](../../../../.github/skills/go-standards.md) · [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md).
+
+
 ## Goal
 Implement the `loom_next_step` tool handler so it returns a structured instruction object describing the next WORKFLOW_GITHUB.md action for the current FSM state.
 

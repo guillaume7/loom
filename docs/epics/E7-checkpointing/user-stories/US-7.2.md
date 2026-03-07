@@ -3,6 +3,11 @@
 ## Epic
 E7: Checkpointing
 
+## Assigned Agent
+
+**[Backend Developer](../../../../.github/agents/backend-developer.md)** — apply [`loom-architecture`](../../../../.github/skills/loom-architecture.md) · [`go-standards`](../../../../.github/skills/go-standards.md) · [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md).
+
+
 ## Goal
 Implement `Store.WriteCheckpoint(cp Checkpoint) error` using `INSERT OR REPLACE` so writing the same checkpoint twice is idempotent and the latest value always wins.
 

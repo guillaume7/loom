@@ -3,6 +3,13 @@
 ## Epic
 E2: State Machine
 
+## Assigned Agent
+
+**[Architect](../../../../.github/agents/architect.md)** — apply [`loom-architecture`](../../../../.github/skills/loom-architecture.md) · [`go-standards`](../../../../.github/skills/go-standards.md).
+
+**[Backend Developer](../../../../.github/agents/backend-developer.md)** — apply [`loom-architecture`](../../../../.github/skills/loom-architecture.md) · [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md) · [`go-standards`](../../../../.github/skills/go-standards.md).
+
+
 ## Goal
 Implement `Machine.Transition(event Event) error` in `internal/fsm/machine.go` backed by a complete, data-driven transition table covering every row in analysis.md §5.2.
 

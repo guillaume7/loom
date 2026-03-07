@@ -3,6 +3,11 @@
 ## Epic
 E5: CLI
 
+## Assigned Agent
+
+**[Backend Developer](../../../../.github/agents/backend-developer.md)** — apply [`loom-architecture`](../../../../.github/skills/loom-architecture.md) · [`go-standards`](../../../../.github/skills/go-standards.md) · [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md).
+
+
 ## Goal
 Add the `loom reset` subcommand that deletes all checkpoint rows from the store after prompting the user for confirmation, preventing accidental state loss.
 

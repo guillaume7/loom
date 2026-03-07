@@ -3,6 +3,13 @@
 ## Epic
 E8: Integration & Hardening
 
+## Assigned Agent
+
+**[Test Engineer](../../../../.github/agents/test-engineer.md)** — apply [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md) · [`loom-architecture`](../../../../.github/skills/loom-architecture.md).
+
+**[Debugger](../../../../.github/agents/debugger.md)** — apply [`loom-architecture`](../../../../.github/skills/loom-architecture.md) · [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md).
+
+
 ## Goal
 Write an integration test that drives the AWAITING_PR retry budget to exhaustion, asserts PAUSED is reached, and then verifies `loom resume` correctly re-enters the FSM from AWAITING_PR.
 

@@ -3,6 +3,13 @@
 ## Epic
 E7: Checkpointing
 
+## Assigned Agent
+
+**[Architect](../../../../.github/agents/architect.md)** — apply [`loom-architecture`](../../../../.github/skills/loom-architecture.md) · [`go-standards`](../../../../.github/skills/go-standards.md).
+
+**[Backend Developer](../../../../.github/agents/backend-developer.md)** — apply [`loom-architecture`](../../../../.github/skills/loom-architecture.md) · [`go-standards`](../../../../.github/skills/go-standards.md) · [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md).
+
+
 ## Goal
 Create the `checkpoints` table DDL and run it on first open so `internal/store/sqlite.go` has a stable schema every subsequent operation can rely on.
 

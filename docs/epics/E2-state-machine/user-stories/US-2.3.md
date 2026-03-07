@@ -3,6 +3,11 @@
 ## Epic
 E2: State Machine
 
+## Assigned Agent
+
+**[Backend Developer](../../../../.github/agents/backend-developer.md)** — apply [`loom-architecture`](../../../../.github/skills/loom-architecture.md) · [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md) · [`go-standards`](../../../../.github/skills/go-standards.md).
+
+
 ## Goal
 Add per-gate retry counters to `Machine` so each gate state (AWAITING_PR, AWAITING_READY, AWAITING_CI) tracks how many timeout events it has consumed against a configurable maximum.
 

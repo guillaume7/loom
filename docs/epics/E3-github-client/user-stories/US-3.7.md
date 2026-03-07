@@ -3,6 +3,11 @@
 ## Epic
 E3: GitHub Client
 
+## Assigned Agent
+
+**[Test Engineer](../../../../.github/agents/test-engineer.md)** — apply [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md) · [`loom-architecture`](../../../../.github/skills/loom-architecture.md).
+
+
 ## Goal
 Provide a complete, self-contained test suite using `httptest.NewServer` and JSON fixture files so the full `GitHubClient` implementation can be exercised with no live GitHub token.
 

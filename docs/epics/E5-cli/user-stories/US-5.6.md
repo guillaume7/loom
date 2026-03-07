@@ -3,6 +3,11 @@
 ## Epic
 E5: CLI
 
+## Assigned Agent
+
+**[Backend Developer](../../../../.github/agents/backend-developer.md)** — apply [`loom-architecture`](../../../../.github/skills/loom-architecture.md) · [`go-standards`](../../../../.github/skills/go-standards.md) · [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md).
+
+
 ## Goal
 Add the `loom log` subcommand that tails and streams the structured JSON log file to stdout, supporting both historical output and live-follow mode.
 

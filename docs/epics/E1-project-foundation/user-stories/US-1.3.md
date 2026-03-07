@@ -3,6 +3,11 @@
 ## Epic
 E1: Project Foundation
 
+## Assigned Agent
+
+**[DevOps / Release Manager](../../../../.github/agents/devops-release.md)** — apply [`go-standards`](../../../../.github/skills/go-standards.md) · [`git-branching-workflow`](../../../../.github/skills/git-branching-workflow.md).
+
+
 ## Goal
 Add a `.golangci.yml` that enforces the project's required linters so CI can gate every PR on lint quality.
 

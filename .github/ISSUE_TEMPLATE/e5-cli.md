@@ -1,13 +1,24 @@
-# E5: CLI
+---
+name: "E5 — CLI"
+about: Wrap the MCP server in a cobra-based CLI with 7 subcommands, providing a human-operable interface to Loom.
+title: "E5: CLI"
+labels: ["epic", "E5"]
+---
+
+## Assigned Agents
+
+| Role | Agent | Required Skills |
+|---|---|---|
+| Owner | [Backend Developer](../agents/backend-developer.md) | [`loom-architecture`](../skills/loom-architecture.md) · [`go-standards`](../skills/go-standards.md) · [`tdd-workflow`](../skills/tdd-workflow.md) |
 
 ## Goal
 
-Wrap the MCP server in a `cobra`-based CLI with 7 subcommands, providing
-a human-operable interface to Loom.
+Wrap the MCP server in a `cobra`-based CLI with 7 subcommands, providing a human-operable interface to Loom.
 
 ## Description
 
 The CLI is the entry point for human operators. It must:
+
 - Route to the correct internal action per subcommand
 - Load config from `~/.loom/config.toml` (or env overrides)
 - Print structured status output for `status` and `log` commands
@@ -23,12 +34,6 @@ The CLI is the entry point for human operators. It must:
 - [ ] US-5.6 — `loom log` — stream structured JSON log
 - [ ] US-5.7 — Config loading from file + env overrides
 
-## Assigned Agents
-
-| Role | Agent | Required Skills |
-|---|---|---|
-| Owner | [Backend Developer](../../../.github/agents/backend-developer.md) | [`loom-architecture`](../../../.github/skills/loom-architecture.md) · [`go-standards`](../../../.github/skills/go-standards.md) · [`tdd-workflow`](../../../.github/skills/tdd-workflow.md) |
-
 ## Dependencies
 
 - E4 (MCP server)
@@ -42,3 +47,7 @@ The CLI is the entry point for human operators. It must:
 - [ ] Config loads from `LOOM_OWNER`, `LOOM_REPO`, `LOOM_TOKEN` env vars
 - [ ] `loom status` exits 0 even when no checkpoint exists (prints "No active session")
 - [ ] `go build ./cmd/loom` produces a binary < 30 MB
+
+## Notes
+
+<!-- Any additional context, design decisions, or blockers. -->

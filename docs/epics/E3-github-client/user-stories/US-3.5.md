@@ -3,6 +3,11 @@
 ## Epic
 E3: GitHub Client
 
+## Assigned Agent
+
+**[Backend Developer](../../../../.github/agents/backend-developer.md)** — apply [`loom-architecture`](../../../../.github/skills/loom-architecture.md) · [`go-standards`](../../../../.github/skills/go-standards.md) · [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md).
+
+
 ## Goal
 Provide working implementations of `CreateTag` and `CreateRelease` so Loom can publish the final release when all phases are complete.
 

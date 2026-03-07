@@ -1,14 +1,24 @@
-# E7: Checkpointing
+---
+name: "E7 — Checkpointing"
+about: Persist FSM state to SQLite after every transition so Loom can resume from any point after a crash or restart.
+title: "E7: Checkpointing"
+labels: ["epic", "E7"]
+---
+
+## Assigned Agents
+
+| Role | Agent | Required Skills |
+|---|---|---|
+| Owner | [Backend Developer](../agents/backend-developer.md) | [`loom-architecture`](../skills/loom-architecture.md) · [`go-standards`](../skills/go-standards.md) · [`tdd-workflow`](../skills/tdd-workflow.md) |
+| Schema Design | [Architect](../agents/architect.md) | [`loom-architecture`](../skills/loom-architecture.md) · [`go-standards`](../skills/go-standards.md) |
 
 ## Goal
 
-Persist FSM state to SQLite after every transition so Loom can resume from any
-point after a crash, reboot, or VS Code restart.
+Persist FSM state to SQLite after every transition so Loom can resume from any point after a crash, reboot, or VS Code restart.
 
 ## Description
 
-The `Store` interface (defined in E4) is backed by a real SQLite database in
-this epic. The database lives at `.loom/state.db` in the workspace.
+The `Store` interface (defined in E4) is backed by a real SQLite database in this epic. The database lives at `.loom/state.db` in the workspace.
 
 The store must be idempotent: writing the same checkpoint twice is harmless.
 
@@ -20,13 +30,6 @@ The store must be idempotent: writing the same checkpoint twice is harmless.
 - [ ] US-7.4 — `loom start` reads checkpoint on startup, resumes from persisted state
 - [ ] US-7.5 — `loom reset` deletes all rows (with confirmation)
 - [ ] US-7.6 — SQLite tests using `":memory:"` database
-
-## Assigned Agents
-
-| Role | Agent | Required Skills |
-|---|---|---|
-| Owner | [Backend Developer](../../../.github/agents/backend-developer.md) | [`loom-architecture`](../../../.github/skills/loom-architecture.md) · [`go-standards`](../../../.github/skills/go-standards.md) · [`tdd-workflow`](../../../.github/skills/tdd-workflow.md) |
-| Schema Design | [Architect](../../../.github/agents/architect.md) | [`loom-architecture`](../../../.github/skills/loom-architecture.md) · [`go-standards`](../../../.github/skills/go-standards.md) |
 
 ## Dependencies
 
@@ -41,3 +44,7 @@ The store must be idempotent: writing the same checkpoint twice is harmless.
 - [ ] `modernc.org/sqlite` used (no CGo dependency)
 - [ ] All Store tests use `":memory:"` — no filesystem access
 - [ ] `go test ./internal/store/... -race` exits 0
+
+## Notes
+
+<!-- Any additional context, design decisions, or blockers. -->

@@ -3,6 +3,11 @@
 ## Epic
 E4: MCP Server
 
+## Assigned Agent
+
+**[Backend Developer](../../../../.github/agents/backend-developer.md)** — apply [`loom-architecture`](../../../../.github/skills/loom-architecture.md) · [`go-standards`](../../../../.github/skills/go-standards.md) · [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md).
+
+
 ## Goal
 Implement the `loom_checkpoint` tool handler so it accepts an outcome from the session, fires the corresponding FSM event, persists the new state to the store, and returns the new state.
 

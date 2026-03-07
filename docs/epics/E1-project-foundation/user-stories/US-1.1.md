@@ -3,6 +3,13 @@
 ## Epic
 E1: Project Foundation
 
+## Assigned Agent
+
+**[Backend Developer](../../../../.github/agents/backend-developer.md)** — apply [`go-standards`](../../../../.github/skills/go-standards.md) · [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md).
+
+**[DevOps / Release Manager](../../../../.github/agents/devops-release.md)** — apply [`git-branching-workflow`](../../../../.github/skills/git-branching-workflow.md).
+
+
 ## Goal
 Create a valid `go.mod` and `go.sum` with all approved direct dependencies pinned so every subsequent epic can import them without modification.
 

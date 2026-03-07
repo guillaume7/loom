@@ -3,6 +3,11 @@
 ## Epic
 E5: CLI
 
+## Assigned Agent
+
+**[Backend Developer](../../../../.github/agents/backend-developer.md)** — apply [`loom-architecture`](../../../../.github/skills/loom-architecture.md) · [`go-standards`](../../../../.github/skills/go-standards.md) · [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md).
+
+
 ## Goal
 Add the `loom start` subcommand that reads any existing checkpoint, prints the current state, and enters the FSM-driven action loop — or resumes from the persisted state if a prior checkpoint exists.
 

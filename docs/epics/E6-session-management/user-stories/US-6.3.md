@@ -3,6 +3,11 @@
 ## Epic
 E6: Session Management
 
+## Assigned Agent
+
+**[Backend Developer](../../../../.github/agents/backend-developer.md)** — apply [`loom-architecture`](../../../../.github/skills/loom-architecture.md) · [`go-standards`](../../../../.github/skills/go-standards.md) · [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md).
+
+
 ## Goal
 When the stall detector fires, transition the FSM to PAUSED, write a checkpoint with the stall reason, and emit a structured error log entry so the operator knows what happened.
 

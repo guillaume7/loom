@@ -1,14 +1,23 @@
-# E6: Session Management
+---
+name: "E6 — Session Management"
+about: Keep the VS Code Copilot session alive during long async gates and detect stalls with automatic recovery.
+title: "E6: Session Management"
+labels: ["epic", "E6"]
+---
+
+## Assigned Agents
+
+| Role | Agent | Required Skills |
+|---|---|---|
+| Owner | [Backend Developer](../agents/backend-developer.md) | [`loom-architecture`](../skills/loom-architecture.md) · [`go-standards`](../skills/go-standards.md) · [`tdd-workflow`](../skills/tdd-workflow.md) |
 
 ## Goal
 
-Keep the VS Code Copilot session alive during long async gates and detect
-stalls — with automatic recovery where possible.
+Keep the VS Code Copilot session alive during long async gates and detect stalls — with automatic recovery where possible.
 
 ## Description
 
-Loom's design relies on the Copilot session calling MCP tools in a loop.
-Two failure modes can break this loop:
+Loom's design relies on the Copilot session calling MCP tools in a loop. Two failure modes can break this loop:
 
 1. **Session timeout** — VS Code treats an idle session as abandoned
 2. **Stall** — the session stops calling tools (model divergence, context limit)
@@ -23,12 +32,6 @@ This epic adds heartbeat emission, stall detection, and session restart logic.
 - [ ] US-6.4 — `loom resume` re-opens the session from the last checkpoint
 - [ ] US-6.5 — `loom_heartbeat` response includes `wait: true` and `retry_in_seconds` to guide the session
 
-## Assigned Agents
-
-| Role | Agent | Required Skills |
-|---|---|---|
-| Owner | [Backend Developer](../../../.github/agents/backend-developer.md) | [`loom-architecture`](../../../.github/skills/loom-architecture.md) · [`go-standards`](../../../.github/skills/go-standards.md) · [`tdd-workflow`](../../../.github/skills/tdd-workflow.md) |
-
 ## Dependencies
 
 - E4 (MCP server)
@@ -38,7 +41,11 @@ This epic adds heartbeat emission, stall detection, and session restart logic.
 
 - [ ] Go binary logs a heartbeat entry every 60 seconds during gate states
 - [ ] Stall detected after configurable timeout (default: 5 minutes without tool call)
-- [ ] On stall: state written to PAUSED, stall reason logged
+- [ ] On stall: state written to `PAUSED`, stall reason logged
 - [ ] `loom_heartbeat` response always includes `{ "wait": true, "retry_in_seconds": 30 }` in gate states
 - [ ] `loom_heartbeat` response returns `{ "wait": false }` in non-gate states
 - [ ] Fake clock used in all stall-detection tests (no `time.Sleep`)
+
+## Notes
+
+<!-- Any additional context, design decisions, or blockers. -->

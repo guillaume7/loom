@@ -1,15 +1,23 @@
-# E4: MCP Server
+---
+name: "E4 — MCP Server"
+about: Expose the FSM and GitHub client through a standards-compliant MCP stdio server callable from a VS Code Copilot session.
+title: "E4: MCP Server"
+labels: ["epic", "E4"]
+---
+
+## Assigned Agents
+
+| Role | Agent | Required Skills |
+|---|---|---|
+| Owner | [Backend Developer](../agents/backend-developer.md) | [`loom-architecture`](../skills/loom-architecture.md) · [`go-standards`](../skills/go-standards.md) · [`tdd-workflow`](../skills/tdd-workflow.md) |
 
 ## Goal
 
-Expose the FSM and GitHub client through a standards-compliant MCP stdio server
-that a VS Code Copilot session can call.
+Expose the FSM and GitHub client through a standards-compliant MCP stdio server that a VS Code Copilot session can call.
 
 ## Description
 
-The MCP server wires together `internal/fsm`, `internal/github`, and
-`internal/store` into 5 callable tools. Tool handlers must be fully testable
-(round-trip tool call tests) without a live VS Code session.
+The MCP server wires together `internal/fsm`, `internal/github`, and `internal/store` into 5 callable tools. Tool handlers must be fully testable (round-trip tool call tests) without a live VS Code session.
 
 The server uses `github.com/mark3labs/mcp-go`.
 
@@ -22,12 +30,6 @@ The server uses `github.com/mark3labs/mcp-go`.
 - [ ] US-4.5 — Implement `loom_get_state` tool
 - [ ] US-4.6 — Implement `loom_abort` tool
 - [ ] US-4.7 — Round-trip tests for all 5 tools
-
-## Assigned Agents
-
-| Role | Agent | Required Skills |
-|---|---|---|
-| Owner | [Backend Developer](../../../.github/agents/backend-developer.md) | [`loom-architecture`](../../../.github/skills/loom-architecture.md) · [`go-standards`](../../../.github/skills/go-standards.md) · [`tdd-workflow`](../../../.github/skills/tdd-workflow.md) |
 
 ## Dependencies
 
@@ -44,3 +46,7 @@ The server uses `github.com/mark3labs/mcp-go`.
 - [ ] `loom_checkpoint` with an invalid action returns an error (not panics)
 - [ ] Round-trip tests pass with injected mock FSM and mock GitHub client
 - [ ] `go test ./internal/mcp/... -race` exits 0
+
+## Notes
+
+<!-- Any additional context, design decisions, or blockers. -->
