@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "loom": {
+      "type": "stdio",
+      "command": "loom",
+      "args": ["mcp"],
+      "description": "Loom autonomous orchestrator. Exposes loom_next_step, loom_checkpoint, loom_heartbeat, loom_get_state, and loom_abort. The master Copilot session calls these tools to drive the WORKFLOW_GITHUB.md playbook without human intervention. Run 'loom start' from this workspace before the session begins."
+    },
+    "context7": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp@latest"],
+      "description": "Fetches live, version-accurate documentation for Go stdlib, github.com/mark3labs/mcp-go, google/go-github, and modernc.org/sqlite. Prevents the coding agent from using outdated APIs."
+    }
+  }
+}
