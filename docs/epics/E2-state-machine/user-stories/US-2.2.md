@@ -1,0 +1,58 @@
+# US-2.2 — Implement the transition table with guard conditions
+
+## Epic
+E2: State Machine
+
+## Goal
+Implement `Machine.Transition(event Event) error` in `internal/fsm/machine.go` backed by a complete, data-driven transition table covering every row in analysis.md §5.2.
+
+## Acceptance Criteria
+
+```
+Given the FSM is in state IDLE
+When `Transition(EventStart)` is called
+Then the FSM state becomes SCANNING
+  And no error is returned
+```
+
+```
+Given the FSM is in state AWAITING_CI
+When `Transition(EventCIGreen)` is called
+Then the FSM state becomes REVIEWING
+  And no error is returned
+```
+
+```
+Given the FSM is in state AWAITING_CI
+When `Transition(EventCIRed)` is called
+Then the FSM state becomes DEBUGGING
+  And no error is returned
+```
+
+```
+Given the FSM is in any state
+When `Transition` is called with an event that has no entry in the transition table for the current state
+Then an error is returned describing the invalid transition
+  And the FSM state is unchanged
+```
+
+```
+Given the FSM is in state MERGING
+When `Transition(EventMerged)` is called with an epic-boundary flag set
+Then the FSM state becomes REFACTORING
+```
+
+## Tasks
+
+1. [ ] Write `machine_test.go` with a table-driven test covering all transitions in analysis.md §5.2 (write test first)
+2. [ ] Define `type Machine struct` in `machine.go` with a `State` field and a transition map
+3. [ ] Implement `NewMachine(initialState State) *Machine`
+4. [ ] Implement `Machine.Transition(event Event) error` using the transition table
+5. [ ] Add guard condition for epic-boundary flag on the MERGING→REFACTORING vs MERGING→SCANNING fork
+6. [ ] Run `go test ./internal/fsm/... -race -count=1` and confirm green
+
+## Dependencies
+- US-2.1
+
+## Size Estimate
+M
