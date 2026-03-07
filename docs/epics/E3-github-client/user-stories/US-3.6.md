@@ -3,6 +3,11 @@
 ## Epic
 E3: GitHub Client
 
+## Assigned Agent
+
+**[Backend Developer](../../../../.github/agents/backend-developer.md)** — apply [`loom-architecture`](../../../../.github/skills/loom-architecture.md) · [`go-standards`](../../../../.github/skills/go-standards.md) · [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md).
+
+
 ## Goal
 Respect `X-RateLimit-Remaining` and `X-RateLimit-Reset` response headers so the client backs off exponentially when the GitHub API quota drops below 10% and never returns a hard 429 error to callers as an unexpected failure.
 

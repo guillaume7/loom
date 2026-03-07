@@ -3,6 +3,11 @@
 ## Epic
 E4: MCP Server
 
+## Assigned Agent
+
+**[Backend Developer](../../../../.github/agents/backend-developer.md)** — apply [`loom-architecture`](../../../../.github/skills/loom-architecture.md) · [`go-standards`](../../../../.github/skills/go-standards.md) · [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md).
+
+
 ## Goal
 Implement the `loom_heartbeat` tool handler so it returns the current FSM state and a `wait` signal without advancing the state machine — keeping the Copilot session alive during long gate waits.
 

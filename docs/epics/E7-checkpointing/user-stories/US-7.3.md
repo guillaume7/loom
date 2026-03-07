@@ -3,6 +3,11 @@
 ## Epic
 E7: Checkpointing
 
+## Assigned Agent
+
+**[Backend Developer](../../../../.github/agents/backend-developer.md)** — apply [`loom-architecture`](../../../../.github/skills/loom-architecture.md) · [`go-standards`](../../../../.github/skills/go-standards.md) · [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md).
+
+
 ## Goal
 Implement `Store.ReadCheckpoint() (Checkpoint, error)` so it returns the most recent checkpoint row, or a zero-value `Checkpoint{}` with a nil error when the table is empty.
 

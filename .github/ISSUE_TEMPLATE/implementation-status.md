@@ -5,6 +5,13 @@ title: "status: Implementation status update"
 labels: ["status", "tracking"]
 ---
 
+## Assigned Agents
+
+| Role | Agent | Required Skills |
+|---|---|---|
+| Coordinator | [Orchestrator](../agents/orchestrator.md) | [`epic-story-breakdown`](../skills/epic-story-breakdown.md) · [`github-phase-loop`](../skills/github-phase-loop.md) |
+| Backlog Owner | [Product Manager](../agents/product-manager.md) | [`epic-story-breakdown`](../skills/epic-story-breakdown.md) · [`loom-architecture`](../skills/loom-architecture.md) |
+
 ## Summary
 
 <!-- One paragraph describing the current state of the implementation. -->

@@ -3,6 +3,11 @@
 ## Epic
 E1: Project Foundation
 
+## Assigned Agent
+
+**[Backend Developer](../../../../.github/agents/backend-developer.md)** — apply [`go-standards`](../../../../.github/skills/go-standards.md) · [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md).
+
+
 ## Goal
 Create all required package directories with minimal stub files so every internal package path is importable and `go build ./...` succeeds.
 

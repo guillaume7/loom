@@ -23,6 +23,12 @@ The CLI is the entry point for human operators. It must:
 - [ ] US-5.6 — `loom log` — stream structured JSON log
 - [ ] US-5.7 — Config loading from file + env overrides
 
+## Assigned Agents
+
+| Role | Agent | Required Skills |
+|---|---|---|
+| Owner | [Backend Developer](../../../.github/agents/backend-developer.md) | [`loom-architecture`](../../../.github/skills/loom-architecture.md) · [`go-standards`](../../../.github/skills/go-standards.md) · [`tdd-workflow`](../../../.github/skills/tdd-workflow.md) |
+
 ## Dependencies
 
 - E4 (MCP server)

@@ -23,6 +23,14 @@ This epic also adds the release automation (git tag → CI artifact upload).
 - [ ] US-8.5 — Cross-compilation matrix verified in CI (linux/darwin/windows × amd64/arm64)
 - [ ] US-8.6 — Release workflow: `git tag v*` triggers binary upload to GitHub Releases
 
+## Assigned Agents
+
+| Role | Agent | Required Skills |
+|---|---|---|
+| Owner | [Test Engineer](../../../.github/agents/test-engineer.md) | [`tdd-workflow`](../../../.github/skills/tdd-workflow.md) · [`loom-architecture`](../../../.github/skills/loom-architecture.md) |
+| Support | [Debugger](../../../.github/agents/debugger.md) | [`loom-architecture`](../../../.github/skills/loom-architecture.md) · [`tdd-workflow`](../../../.github/skills/tdd-workflow.md) |
+| Support | [DevOps / Release Manager](../../../.github/agents/devops-release.md) | [`git-branching-workflow`](../../../.github/skills/git-branching-workflow.md) |
+
 ## Dependencies
 
 - E2 (FSM), E3 (GitHub client), E4 (MCP server), E5 (CLI), E6 (session), E7 (checkpointing)

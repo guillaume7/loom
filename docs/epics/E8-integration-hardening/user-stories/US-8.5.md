@@ -3,6 +3,11 @@
 ## Epic
 E8: Integration & Hardening
 
+## Assigned Agent
+
+**[DevOps / Release Manager](../../../../.github/agents/devops-release.md)** — apply [`git-branching-workflow`](../../../../.github/skills/git-branching-workflow.md).
+
+
 ## Goal
 Add a CI job matrix that cross-compiles the `loom` binary for all 5 target platforms (linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64) with `CGO_ENABLED=0` and confirms each binary is non-zero in size.
 

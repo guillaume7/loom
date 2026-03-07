@@ -5,6 +5,13 @@ title: "E1: Project Foundation"
 labels: ["epic", "E1"]
 ---
 
+## Assigned Agents
+
+| Role | Agent | Required Skills |
+|---|---|---|
+| Owner | [DevOps / Release Manager](../agents/devops-release.md) | [`git-branching-workflow`](../skills/git-branching-workflow.md) |
+| Implementor | [Backend Developer](../agents/backend-developer.md) | [`go-standards`](../skills/go-standards.md) · [`tdd-workflow`](../skills/tdd-workflow.md) |
+
 ## Goal
 
 Create a compilable, linted, CI-green Go module scaffold with all configurations that every subsequent epic depends on.

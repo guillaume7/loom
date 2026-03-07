@@ -3,6 +3,11 @@
 ## Epic
 E8: Integration & Hardening
 
+## Assigned Agent
+
+**[DevOps / Release Manager](../../../../.github/agents/devops-release.md)** — apply [`git-branching-workflow`](../../../../.github/skills/git-branching-workflow.md).
+
+
 ## Goal
 Add a GitHub Actions release workflow that triggers on `v*` tag pushes, cross-compiles all 5 binaries, and uploads them as assets to a GitHub Release — making Loom installable without building from source.
 

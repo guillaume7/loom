@@ -3,6 +3,11 @@
 ## Epic
 E4: MCP Server
 
+## Assigned Agent
+
+**[Backend Developer](../../../../.github/agents/backend-developer.md)** — apply [`loom-architecture`](../../../../.github/skills/loom-architecture.md) · [`go-standards`](../../../../.github/skills/go-standards.md) · [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md).
+
+
 ## Goal
 Implement the `loom_abort` tool handler so it immediately transitions the FSM to PAUSED, persists the checkpoint with the abort reason, and returns a summary to the session.
 

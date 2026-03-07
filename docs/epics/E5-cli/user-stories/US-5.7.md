@@ -3,6 +3,11 @@
 ## Epic
 E5: CLI
 
+## Assigned Agent
+
+**[Backend Developer](../../../../.github/agents/backend-developer.md)** — apply [`loom-architecture`](../../../../.github/skills/loom-architecture.md) · [`go-standards`](../../../../.github/skills/go-standards.md) · [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md).
+
+
 ## Goal
 Load Loom configuration from `~/.loom/config.toml` with field-by-field overrides from `LOOM_OWNER`, `LOOM_REPO`, `LOOM_TOKEN`, and `LOOM_DB_PATH` environment variables so every CLI subcommand shares a single, consistent config source.
 

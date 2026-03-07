@@ -5,6 +5,12 @@ title: "E5: CLI"
 labels: ["epic", "E5"]
 ---
 
+## Assigned Agents
+
+| Role | Agent | Required Skills |
+|---|---|---|
+| Owner | [Backend Developer](../agents/backend-developer.md) | [`loom-architecture`](../skills/loom-architecture.md) · [`go-standards`](../skills/go-standards.md) · [`tdd-workflow`](../skills/tdd-workflow.md) |
+
 ## Goal
 
 Wrap the MCP server in a `cobra`-based CLI with 7 subcommands, providing a human-operable interface to Loom.

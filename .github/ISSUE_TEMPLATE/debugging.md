@@ -5,6 +5,10 @@ title: "debug: "
 labels: ["bug", "debugging"]
 ---
 
+## Assigned Agent
+
+**[Debugger](../agents/debugger.md)** — apply [`loom-architecture`](../skills/loom-architecture.md) · [`tdd-workflow`](../skills/tdd-workflow.md).
+
 ## Problem Description
 
 <!-- Describe the observed behaviour and what you expected to happen. -->

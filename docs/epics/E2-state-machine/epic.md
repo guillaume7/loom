@@ -24,6 +24,13 @@ be implemented and tested.
 - [ ] US-2.5 — Full table-driven test matrix for all valid transitions
 - [ ] US-2.6 — Full table-driven test matrix for all invalid transitions
 
+## Assigned Agents
+
+| Role | Agent | Required Skills |
+|---|---|---|
+| Owner | [Architect](../../../.github/agents/architect.md) | [`loom-architecture`](../../../.github/skills/loom-architecture.md) · [`go-standards`](../../../.github/skills/go-standards.md) |
+| Implementor | [Backend Developer](../../../.github/agents/backend-developer.md) | [`loom-architecture`](../../../.github/skills/loom-architecture.md) · [`tdd-workflow`](../../../.github/skills/tdd-workflow.md) · [`go-standards`](../../../.github/skills/go-standards.md) |
+
 ## Dependencies
 
 - E1 (project scaffold)

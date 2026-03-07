@@ -3,6 +3,11 @@
 ## Epic
 E8: Integration & Hardening
 
+## Assigned Agent
+
+**[Test Engineer](../../../../.github/agents/test-engineer.md)** — apply [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md) · [`loom-architecture`](../../../../.github/skills/loom-architecture.md).
+
+
 ## Goal
 Write an end-to-end integration test that drives the full FSM + MCP + GitHub client + Store stack through a simulated 3-phase lifecycle from IDLE to COMPLETE using an `httptest` server.
 

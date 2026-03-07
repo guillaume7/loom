@@ -24,6 +24,13 @@ outside (enabling mock substitution in MCP tests).
 - [ ] US-3.6 — Implement rate-limit handling (respect `X-RateLimit-Remaining`)
 - [ ] US-3.7 — `httptest`-based tests for all operations using recorded fixtures
 
+## Assigned Agents
+
+| Role | Agent | Required Skills |
+|---|---|---|
+| Owner | [Backend Developer](../../../.github/agents/backend-developer.md) | [`loom-architecture`](../../../.github/skills/loom-architecture.md) · [`go-standards`](../../../.github/skills/go-standards.md) · [`tdd-workflow`](../../../.github/skills/tdd-workflow.md) |
+| Support | [Test Engineer](../../../.github/agents/test-engineer.md) | [`tdd-workflow`](../../../.github/skills/tdd-workflow.md) · [`loom-architecture`](../../../.github/skills/loom-architecture.md) |
+
 ## Dependencies
 
 - E1 (project scaffold)

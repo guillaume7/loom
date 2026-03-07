@@ -5,6 +5,13 @@ title: "E7: Checkpointing"
 labels: ["epic", "E7"]
 ---
 
+## Assigned Agents
+
+| Role | Agent | Required Skills |
+|---|---|---|
+| Owner | [Backend Developer](../agents/backend-developer.md) | [`loom-architecture`](../skills/loom-architecture.md) · [`go-standards`](../skills/go-standards.md) · [`tdd-workflow`](../skills/tdd-workflow.md) |
+| Schema Design | [Architect](../agents/architect.md) | [`loom-architecture`](../skills/loom-architecture.md) · [`go-standards`](../skills/go-standards.md) |
+
 ## Goal
 
 Persist FSM state to SQLite after every transition so Loom can resume from any point after a crash, reboot, or VS Code restart.

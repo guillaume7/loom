@@ -5,6 +5,14 @@ title: "E8: Integration & Hardening"
 labels: ["epic", "E8"]
 ---
 
+## Assigned Agents
+
+| Role | Agent | Required Skills |
+|---|---|---|
+| Owner | [Test Engineer](../agents/test-engineer.md) | [`tdd-workflow`](../skills/tdd-workflow.md) · [`loom-architecture`](../skills/loom-architecture.md) |
+| Support | [Debugger](../agents/debugger.md) | [`loom-architecture`](../skills/loom-architecture.md) · [`tdd-workflow`](../skills/tdd-workflow.md) |
+| Support | [DevOps / Release Manager](../agents/devops-release.md) | [`git-branching-workflow`](../skills/git-branching-workflow.md) |
+
 ## Goal
 
 Verify the complete Loom workflow end-to-end with a simulated GitHub interaction, exercise all retry-budget exhaustion paths, and ship cross-compiled release binaries.

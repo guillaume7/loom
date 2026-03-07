@@ -3,6 +3,11 @@
 ## Epic
 E2: State Machine
 
+## Assigned Agent
+
+**[Test Engineer](../../../../.github/agents/test-engineer.md)** — apply [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md) · [`loom-architecture`](../../../../.github/skills/loom-architecture.md).
+
+
 ## Goal
 Ensure every (from-state, event) pair that does NOT appear in the transition table returns a non-nil error and leaves the FSM state unchanged.
 

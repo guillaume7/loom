@@ -3,6 +3,11 @@
 ## Epic
 E5: CLI
 
+## Assigned Agent
+
+**[Backend Developer](../../../../.github/agents/backend-developer.md)** — apply [`loom-architecture`](../../../../.github/skills/loom-architecture.md) · [`go-standards`](../../../../.github/skills/go-standards.md) · [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md).
+
+
 ## Goal
 Add `loom pause` and `loom resume` subcommands so a human operator can gracefully halt the running FSM loop and later resume it from the persisted state.
 

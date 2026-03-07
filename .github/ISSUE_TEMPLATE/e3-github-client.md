@@ -5,6 +5,13 @@ title: "E3: GitHub Client"
 labels: ["epic", "E3"]
 ---
 
+## Assigned Agents
+
+| Role | Agent | Required Skills |
+|---|---|---|
+| Owner | [Backend Developer](../agents/backend-developer.md) | [`loom-architecture`](../skills/loom-architecture.md) · [`go-standards`](../skills/go-standards.md) · [`tdd-workflow`](../skills/tdd-workflow.md) |
+| Support | [Test Engineer](../agents/test-engineer.md) | [`tdd-workflow`](../skills/tdd-workflow.md) · [`loom-architecture`](../skills/loom-architecture.md) |
+
 ## Goal
 
 Implement a minimal GitHub REST API wrapper that covers all operations needed by the Loom FSM, tested entirely with `httptest` — no real GitHub token required.

@@ -5,6 +5,12 @@ title: "E4: MCP Server"
 labels: ["epic", "E4"]
 ---
 
+## Assigned Agents
+
+| Role | Agent | Required Skills |
+|---|---|---|
+| Owner | [Backend Developer](../agents/backend-developer.md) | [`loom-architecture`](../skills/loom-architecture.md) · [`go-standards`](../skills/go-standards.md) · [`tdd-workflow`](../skills/tdd-workflow.md) |
+
 ## Goal
 
 Expose the FSM and GitHub client through a standards-compliant MCP stdio server that a VS Code Copilot session can call.

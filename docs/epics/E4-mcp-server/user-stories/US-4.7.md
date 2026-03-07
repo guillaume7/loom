@@ -3,6 +3,11 @@
 ## Epic
 E4: MCP Server
 
+## Assigned Agent
+
+**[Test Engineer](../../../../.github/agents/test-engineer.md)** — apply [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md) · [`loom-architecture`](../../../../.github/skills/loom-architecture.md).
+
+
 ## Goal
 Verify the complete MCP request→handler→response cycle for every tool using injected mock FSM and mock GitHub client, without a live VS Code session.
 

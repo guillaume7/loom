@@ -24,6 +24,13 @@ epics run through `loom start`.
 - [ ] US-1.3 — Configure `.golangci.yml` with required linters
 - [ ] US-1.4 — Confirm CI pipeline green on `main`
 
+## Assigned Agents
+
+| Role | Agent | Required Skills |
+|---|---|---|
+| Owner | [DevOps / Release Manager](../../../.github/agents/devops-release.md) | [`git-branching-workflow`](../../../.github/skills/git-branching-workflow.md) |
+| Implementor | [Backend Developer](../../../.github/agents/backend-developer.md) | [`go-standards`](../../../.github/skills/go-standards.md) · [`tdd-workflow`](../../../.github/skills/tdd-workflow.md) |
+
 ## Dependencies
 
 None — this is the first epic.

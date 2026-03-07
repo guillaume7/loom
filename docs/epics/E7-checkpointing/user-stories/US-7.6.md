@@ -3,6 +3,11 @@
 ## Epic
 E7: Checkpointing
 
+## Assigned Agent
+
+**[Test Engineer](../../../../.github/agents/test-engineer.md)** — apply [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md) · [`loom-architecture`](../../../../.github/skills/loom-architecture.md).
+
+
 ## Goal
 Ensure the entire `internal/store` test suite runs against an in-memory SQLite database so tests are fast, isolated, and require no filesystem access.
 

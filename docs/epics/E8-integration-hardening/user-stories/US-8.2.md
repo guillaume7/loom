@@ -3,6 +3,13 @@
 ## Epic
 E8: Integration & Hardening
 
+## Assigned Agent
+
+**[Test Engineer](../../../../.github/agents/test-engineer.md)** — apply [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md) · [`loom-architecture`](../../../../.github/skills/loom-architecture.md).
+
+**[Debugger](../../../../.github/agents/debugger.md)** — apply [`loom-architecture`](../../../../.github/skills/loom-architecture.md) · [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md).
+
+
 ## Goal
 Write an integration test that exercises the debug loop: CI fails, a debug issue is created, a fix is pushed, CI goes green, review is approved, and the PR is merged.
 

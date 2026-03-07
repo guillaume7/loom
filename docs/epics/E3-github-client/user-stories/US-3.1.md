@@ -3,6 +3,13 @@
 ## Epic
 E3: GitHub Client
 
+## Assigned Agent
+
+**[Architect](../../../../.github/agents/architect.md)** — apply [`loom-architecture`](../../../../.github/skills/loom-architecture.md) · [`go-standards`](../../../../.github/skills/go-standards.md).
+
+**[Backend Developer](../../../../.github/agents/backend-developer.md)** — apply [`go-standards`](../../../../.github/skills/go-standards.md) · [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md).
+
+
 ## Goal
 Declare the `GitHubClient` interface in `internal/github/client.go` and all supporting types in `internal/github/types.go` so the rest of the codebase can depend on the interface without a concrete implementation.
 

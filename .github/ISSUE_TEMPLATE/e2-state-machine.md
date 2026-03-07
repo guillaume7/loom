@@ -5,6 +5,13 @@ title: "E2: State Machine"
 labels: ["epic", "E2"]
 ---
 
+## Assigned Agents
+
+| Role | Agent | Required Skills |
+|---|---|---|
+| Owner | [Architect](../agents/architect.md) | [`loom-architecture`](../skills/loom-architecture.md) · [`go-standards`](../skills/go-standards.md) |
+| Implementor | [Backend Developer](../agents/backend-developer.md) | [`loom-architecture`](../skills/loom-architecture.md) · [`tdd-workflow`](../skills/tdd-workflow.md) · [`go-standards`](../skills/go-standards.md) |
+
 ## Goal
 
 Implement the complete 13-state FSM with all valid transitions, retry budgets, and the PAUSED escape state — with 100% branch coverage and zero external dependencies.

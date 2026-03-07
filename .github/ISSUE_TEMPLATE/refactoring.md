@@ -5,6 +5,10 @@ title: "refactor: "
 labels: ["refactoring"]
 ---
 
+## Assigned Agent
+
+**[Refactoring Agent](../agents/refactoring-agent.md)** — apply [`go-standards`](../skills/go-standards.md) · [`review-checklist`](../skills/review-checklist.md).
+
 ## Motivation
 
 <!-- Why does this refactoring need to happen? What problem does it solve? -->

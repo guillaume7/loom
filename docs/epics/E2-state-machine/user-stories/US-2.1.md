@@ -3,6 +3,13 @@
 ## Epic
 E2: State Machine
 
+## Assigned Agent
+
+**[Architect](../../../../.github/agents/architect.md)** — apply [`loom-architecture`](../../../../.github/skills/loom-architecture.md) · [`go-standards`](../../../../.github/skills/go-standards.md).
+
+**[Backend Developer](../../../../.github/agents/backend-developer.md)** — apply [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md) · [`go-standards`](../../../../.github/skills/go-standards.md).
+
+
 ## Goal
 Declare all 13 `State` constants and all FSM `Event` constants in `internal/fsm/states.go` and `internal/fsm/events.go` so the rest of the FSM can reference them as typed values.
 

@@ -3,6 +3,11 @@
 ## Epic
 E6: Session Management
 
+## Assigned Agent
+
+**[Backend Developer](../../../../.github/agents/backend-developer.md)** — apply [`loom-architecture`](../../../../.github/skills/loom-architecture.md) · [`go-standards`](../../../../.github/skills/go-standards.md) · [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md).
+
+
 ## Goal
 Start a background goroutine when the FSM enters a gate state that emits a structured `slog.Info("heartbeat")` log entry every 60 seconds, and stops when the FSM leaves the gate state.
 

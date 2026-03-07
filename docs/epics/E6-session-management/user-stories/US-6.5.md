@@ -3,6 +3,11 @@
 ## Epic
 E6: Session Management
 
+## Assigned Agent
+
+**[Backend Developer](../../../../.github/agents/backend-developer.md)** — apply [`loom-architecture`](../../../../.github/skills/loom-architecture.md) · [`go-standards`](../../../../.github/skills/go-standards.md) · [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md).
+
+
 ## Goal
 Update the `loom_heartbeat` MCP tool to include `wait: true` and `retry_in_seconds: 30` in its response when the FSM is in a gate state, giving the Copilot session explicit guidance on how long to wait before calling again.
 

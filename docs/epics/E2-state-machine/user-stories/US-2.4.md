@@ -3,6 +3,11 @@
 ## Epic
 E2: State Machine
 
+## Assigned Agent
+
+**[Backend Developer](../../../../.github/agents/backend-developer.md)** — apply [`loom-architecture`](../../../../.github/skills/loom-architecture.md) · [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md) · [`go-standards`](../../../../.github/skills/go-standards.md).
+
+
 ## Goal
 Automatically transition the FSM to `PAUSED` when any gate state's retry budget is exhausted, and support the `EventAbort` event as an emergency escape from any state.
 

@@ -3,6 +3,11 @@
 ## Epic
 E1: Project Foundation
 
+## Assigned Agent
+
+**[DevOps / Release Manager](../../../../.github/agents/devops-release.md)** — apply [`git-branching-workflow`](../../../../.github/skills/git-branching-workflow.md).
+
+
 ## Goal
 Add a GitHub Actions workflow that runs `go vet`, `golangci-lint`, `go test`, and cross-compilation on every push to `main` and every pull request.
 

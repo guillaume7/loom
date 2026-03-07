@@ -5,6 +5,12 @@ title: "E6: Session Management"
 labels: ["epic", "E6"]
 ---
 
+## Assigned Agents
+
+| Role | Agent | Required Skills |
+|---|---|---|
+| Owner | [Backend Developer](../agents/backend-developer.md) | [`loom-architecture`](../skills/loom-architecture.md) · [`go-standards`](../skills/go-standards.md) · [`tdd-workflow`](../skills/tdd-workflow.md) |
+
 ## Goal
 
 Keep the VS Code Copilot session alive during long async gates and detect stalls — with automatic recovery where possible.

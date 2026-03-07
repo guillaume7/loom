@@ -23,6 +23,12 @@ This epic adds heartbeat emission, stall detection, and session restart logic.
 - [ ] US-6.4 — `loom resume` re-opens the session from the last checkpoint
 - [ ] US-6.5 — `loom_heartbeat` response includes `wait: true` and `retry_in_seconds` to guide the session
 
+## Assigned Agents
+
+| Role | Agent | Required Skills |
+|---|---|---|
+| Owner | [Backend Developer](../../../.github/agents/backend-developer.md) | [`loom-architecture`](../../../.github/skills/loom-architecture.md) · [`go-standards`](../../../.github/skills/go-standards.md) · [`tdd-workflow`](../../../.github/skills/tdd-workflow.md) |
+
 ## Dependencies
 
 - E4 (MCP server)

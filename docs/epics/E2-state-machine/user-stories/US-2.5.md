@@ -3,6 +3,11 @@
 ## Epic
 E2: State Machine
 
+## Assigned Agent
+
+**[Test Engineer](../../../../.github/agents/test-engineer.md)** — apply [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md) · [`loom-architecture`](../../../../.github/skills/loom-architecture.md).
+
+
 ## Goal
 Achieve 100% branch coverage on `machine.go` by exhaustively testing every valid (from-state, event, expected-to-state) triple defined in analysis.md §5.2.
 

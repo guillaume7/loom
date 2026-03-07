@@ -3,6 +3,13 @@
 ## Epic
 E8: Integration & Hardening
 
+## Assigned Agent
+
+**[Test Engineer](../../../../.github/agents/test-engineer.md)** — apply [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md) · [`loom-architecture`](../../../../.github/skills/loom-architecture.md).
+
+**[Debugger](../../../../.github/agents/debugger.md)** — apply [`loom-architecture`](../../../../.github/skills/loom-architecture.md) · [`tdd-workflow`](../../../../.github/skills/tdd-workflow.md).
+
+
 ## Goal
 Write an integration test that simulates a session stall (no `loom_checkpoint` calls for the configured timeout) and verifies that the stall detector transitions the FSM to PAUSED and that `loom resume` recovers correctly.
 

@@ -23,6 +23,12 @@ The server uses `github.com/mark3labs/mcp-go`.
 - [ ] US-4.6 — Implement `loom_abort` tool
 - [ ] US-4.7 — Round-trip tests for all 5 tools
 
+## Assigned Agents
+
+| Role | Agent | Required Skills |
+|---|---|---|
+| Owner | [Backend Developer](../../../.github/agents/backend-developer.md) | [`loom-architecture`](../../../.github/skills/loom-architecture.md) · [`go-standards`](../../../.github/skills/go-standards.md) · [`tdd-workflow`](../../../.github/skills/tdd-workflow.md) |
+
 ## Dependencies
 
 - E2 (FSM)

@@ -21,6 +21,13 @@ The store must be idempotent: writing the same checkpoint twice is harmless.
 - [ ] US-7.5 — `loom reset` deletes all rows (with confirmation)
 - [ ] US-7.6 — SQLite tests using `":memory:"` database
 
+## Assigned Agents
+
+| Role | Agent | Required Skills |
+|---|---|---|
+| Owner | [Backend Developer](../../../.github/agents/backend-developer.md) | [`loom-architecture`](../../../.github/skills/loom-architecture.md) · [`go-standards`](../../../.github/skills/go-standards.md) · [`tdd-workflow`](../../../.github/skills/tdd-workflow.md) |
+| Schema Design | [Architect](../../../.github/agents/architect.md) | [`loom-architecture`](../../../.github/skills/loom-architecture.md) · [`go-standards`](../../../.github/skills/go-standards.md) |
+
 ## Dependencies
 
 - E4 (MCP server — Store interface defined there)
