@@ -1,0 +1,26 @@
+# Binaries
+/loom
+/loom-*
+*.exe
+
+# Build artifacts
+dist/
+
+# Database
+.loom/
+*.db
+
+# Go
+vendor/
+coverage.out
+coverage.html
+
+# Editor
+.idea/
+.vscode/settings.json
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
