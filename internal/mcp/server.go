@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/guillaume7/loom/internal/fsm"
@@ -36,6 +37,7 @@ type FSM interface {
 
 // Server is the Loom MCP server that exposes workflow tools.
 type Server struct {
+	mu      sync.RWMutex // guards all access to machine
 	machine FSM
 	st      store.Store
 	gh      loomgh.Client
@@ -49,6 +51,14 @@ func NewServer(machine FSM, st store.Store, gh loomgh.Client) *Server {
 		st:      st,
 		gh:      gh,
 	}
+}
+
+// CheckpointRequest is the typed input struct for loom_checkpoint.
+// Action is the spec-aligned field name (see US-4.3 acceptance criteria);
+// Event is accepted for backward compatibility when Action is absent.
+type CheckpointRequest struct {
+	Action string `json:"action"`
+	Event  string `json:"event"`
 }
 
 // NextStepResult is returned by loom_next_step.
@@ -85,27 +95,27 @@ type AbortResult struct {
 func stateInstruction(state fsm.State) string {
 	switch state {
 	case fsm.StateIdle:
-		return "Call loom_checkpoint with event=start to begin the workflow"
+		return "Call loom_checkpoint with action=start to begin the workflow"
 	case fsm.StateScanning:
 		return "Scan the project for the next unimplemented phase and create a GitHub issue"
 	case fsm.StateIssueCreated:
 		return "Assign @copilot to the created issue"
 	case fsm.StateAwaitingPR:
-		return "Poll GitHub for a PR opened by @copilot; call loom_checkpoint with event=pr_opened when found"
+		return "Poll GitHub for a PR opened by @copilot; call loom_checkpoint with action=pr_opened when found"
 	case fsm.StateAwaitingReady:
-		return "Wait for the PR to leave draft status; call loom_checkpoint with event=pr_ready when ready"
+		return "Wait for the PR to leave draft status; call loom_checkpoint with action=pr_ready when ready"
 	case fsm.StateAwaitingCI:
-		return "Poll CI check runs; call loom_checkpoint with event=ci_green or event=ci_red"
+		return "Poll CI check runs; call loom_checkpoint with action=ci_green or action=ci_red"
 	case fsm.StateReviewing:
-		return "Request a review; call loom_checkpoint with event=review_approved or event=review_changes_requested"
+		return "Request a review; call loom_checkpoint with action=review_approved or action=review_changes_requested"
 	case fsm.StateDebugging:
-		return "Wait for @copilot to push a fix; call loom_checkpoint with event=fix_pushed"
+		return "Wait for @copilot to push a fix; call loom_checkpoint with action=fix_pushed"
 	case fsm.StateAddressingFeedback:
-		return "Wait for @copilot to address review feedback; call loom_checkpoint with event=feedback_addressed"
+		return "Wait for @copilot to address review feedback; call loom_checkpoint with action=feedback_addressed"
 	case fsm.StateMerging:
-		return "Merge the approved PR; call loom_checkpoint with event=merged or event=merged_epic_boundary"
+		return "Merge the approved PR; call loom_checkpoint with action=merged or action=merged_epic_boundary"
 	case fsm.StateRefactoring:
-		return "Wait for the refactor PR to merge; call loom_checkpoint with event=refactor_merged"
+		return "Wait for the refactor PR to merge; call loom_checkpoint with action=refactor_merged"
 	case fsm.StateComplete:
 		return "All phases complete \u2014 workflow finished"
 	case fsm.StatePaused:
@@ -139,7 +149,15 @@ func (s *Server) readCheckpoint(ctx context.Context, toolName string) store.Chec
 func (s *Server) handleNextStep(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 	const toolName = "loom_next_step"
 	start := time.Now()
+
+	if err := ctx.Err(); err != nil {
+		return mcplib.NewToolResultError(fmt.Sprintf("request cancelled: %v", err)), nil
+	}
+
+	s.mu.RLock()
 	currentState := s.machine.State()
+	s.mu.RUnlock()
+
 	slog.InfoContext(ctx, "tool called", "tool", toolName, "state", string(currentState))
 
 	result := NextStepResult{
@@ -154,16 +172,29 @@ func (s *Server) handleNextStep(ctx context.Context, req mcplib.CallToolRequest)
 func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 	const toolName = "loom_checkpoint"
 	start := time.Now()
-	previousState := s.machine.State()
-	slog.InfoContext(ctx, "tool called", "tool", toolName, "state", string(previousState))
 
-	eventStr, ok := req.Params.Arguments["event"].(string)
-	if !ok || eventStr == "" {
-		slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(previousState), "duration_ms", time.Since(start).Milliseconds())
-		return mcplib.NewToolResultError("missing or invalid 'event' argument: must be a non-empty string"), nil
+	// Guard against cancelled context before acquiring any locks or mutating state.
+	if err := ctx.Err(); err != nil {
+		return mcplib.NewToolResultError(fmt.Sprintf("request cancelled: %v", err)), nil
 	}
 
-	newState, transErr := s.machine.Transition(fsm.Event(eventStr))
+	// Decode the typed checkpoint request from generic MCP arguments using
+	// direct type assertions, avoiding an unnecessary JSON round-trip.
+	actionStr, _ := req.Params.Arguments["action"].(string)
+	if actionStr == "" {
+		// Accept "event" for backward compatibility.
+		actionStr, _ = req.Params.Arguments["event"].(string)
+	}
+	if actionStr == "" {
+		return mcplib.NewToolResultError("missing or invalid 'action' argument: must be a non-empty string"), nil
+	}
+
+	s.mu.Lock()
+	previousState := s.machine.State()
+	slog.InfoContext(ctx, "tool called", "tool", toolName, "state", string(previousState))
+	newState, transErr := s.machine.Transition(fsm.Event(actionStr))
+	s.mu.Unlock()
+
 	if transErr != nil {
 		slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(previousState), "duration_ms", time.Since(start).Milliseconds())
 		return mcplib.NewToolResultError(transErr.Error()), nil
@@ -171,7 +202,9 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 
 	cp := s.readCheckpoint(ctx, toolName)
 	if writeErr := s.st.WriteCheckpoint(ctx, store.Checkpoint{State: string(newState), Phase: cp.Phase}); writeErr != nil {
-		slog.InfoContext(ctx, "store write error", "tool", toolName, "error", writeErr)
+		slog.ErrorContext(ctx, "store write error", "tool", toolName, "state", string(newState), "error", writeErr)
+		slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(newState), "duration_ms", time.Since(start).Milliseconds(), "error", writeErr)
+		return mcplib.NewToolResultError(fmt.Sprintf("failed to persist checkpoint: %v", writeErr)), nil
 	}
 
 	result := CheckpointResult{
@@ -187,7 +220,15 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 func (s *Server) handleHeartbeat(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 	const toolName = "loom_heartbeat"
 	start := time.Now()
+
+	if err := ctx.Err(); err != nil {
+		return mcplib.NewToolResultError(fmt.Sprintf("request cancelled: %v", err)), nil
+	}
+
+	s.mu.RLock()
 	currentState := s.machine.State()
+	s.mu.RUnlock()
+
 	slog.InfoContext(ctx, "tool called", "tool", toolName, "state", string(currentState))
 
 	cp := s.readCheckpoint(ctx, toolName)
@@ -203,7 +244,15 @@ func (s *Server) handleHeartbeat(ctx context.Context, req mcplib.CallToolRequest
 func (s *Server) handleGetState(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 	const toolName = "loom_get_state"
 	start := time.Now()
+
+	if err := ctx.Err(); err != nil {
+		return mcplib.NewToolResultError(fmt.Sprintf("request cancelled: %v", err)), nil
+	}
+
+	s.mu.RLock()
 	currentState := s.machine.State()
+	s.mu.RUnlock()
+
 	slog.InfoContext(ctx, "tool called", "tool", toolName, "state", string(currentState))
 
 	cp := s.readCheckpoint(ctx, toolName)
@@ -219,10 +268,18 @@ func (s *Server) handleGetState(ctx context.Context, req mcplib.CallToolRequest)
 func (s *Server) handleAbort(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 	const toolName = "loom_abort"
 	start := time.Now()
+
+	// Guard against cancelled context before acquiring any locks or mutating state.
+	if err := ctx.Err(); err != nil {
+		return mcplib.NewToolResultError(fmt.Sprintf("request cancelled: %v", err)), nil
+	}
+
+	s.mu.Lock()
 	currentState := s.machine.State()
 	slog.InfoContext(ctx, "tool called", "tool", toolName, "state", string(currentState))
-
 	newState, transErr := s.machine.Transition(fsm.EventAbort)
+	s.mu.Unlock()
+
 	if transErr != nil {
 		// EventAbort is universally accepted; this branch is defensive only.
 		slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(currentState), "duration_ms", time.Since(start).Milliseconds())
@@ -231,7 +288,9 @@ func (s *Server) handleAbort(ctx context.Context, req mcplib.CallToolRequest) (*
 
 	cp := s.readCheckpoint(ctx, toolName)
 	if writeErr := s.st.WriteCheckpoint(ctx, store.Checkpoint{State: string(newState), Phase: cp.Phase}); writeErr != nil {
-		slog.InfoContext(ctx, "store write error", "tool", toolName, "error", writeErr)
+		slog.ErrorContext(ctx, "store write error", "tool", toolName, "state", string(newState), "error", writeErr)
+		slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(newState), "duration_ms", time.Since(start).Milliseconds(), "error", writeErr)
+		return mcplib.NewToolResultError(fmt.Sprintf("failed to persist abort state: %v", writeErr)), nil
 	}
 
 	result := AbortResult{State: string(newState)}
@@ -255,9 +314,9 @@ func (s *Server) MCPServer() *mcpserver.MCPServer {
 	srv.AddTool(
 		mcplib.NewTool("loom_checkpoint",
 			mcplib.WithDescription("Fires an event on the Loom FSM to advance the workflow and persists the new state"),
-			mcplib.WithString("event",
+			mcplib.WithString("action",
 				mcplib.Required(),
-				mcplib.Description("The event to fire (e.g. start, pr_opened, ci_green, ci_red, review_approved, abort)"),
+				mcplib.Description("The action to fire (e.g. start, pr_opened, ci_green, ci_red, review_approved, abort)"),
 			),
 		),
 		s.handleCheckpoint,
