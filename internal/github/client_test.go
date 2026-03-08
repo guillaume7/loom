@@ -20,9 +20,8 @@ func newTestClient(t *testing.T, handler http.Handler) *loomgithub.HTTPClient {
 	t.Helper()
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
-	c := loomgithub.NewHTTPClient(srv.URL, "test-token", "owner", "repo")
-	c.RetryBase = 1 * time.Millisecond // speed up back-off in tests
-	return c
+	return loomgithub.NewHTTPClient(srv.URL, "test-token", "owner", "repo",
+		loomgithub.WithRetryBase(1*time.Millisecond)) // speed up back-off in tests
 }
 
 // fixture reads a JSON fixture file from testdata/.

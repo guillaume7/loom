@@ -30,21 +30,16 @@ func TestHTTPClient_RateLimit_LowWarning(t *testing.T) {
 	assert.Equal(t, 42, issue.Number)
 }
 
-func TestHTTPClient_RateLimit_ZeroRemaining_ResetInPast(t *testing.T) {
-	// Remaining=0, reset in the past → client should retry immediately and succeed on next call.
+func TestHTTPClient_RateLimit_ZeroRemaining_SuccessfulResponse(t *testing.T) {
+	// Remaining=0 but the HTTP response is 200 OK (request succeeded).
+	// The client must decode and return the response without retrying — retrying a
+	// state-mutating call (CreateIssue, MergePR, …) could duplicate resources.
 	var callCount atomic.Int32
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		n := callCount.Add(1)
-		if n == 1 {
-			// First call: rate limit exhausted, reset already passed.
-			w.Header().Set("X-RateLimit-Limit", "60")
-			w.Header().Set("X-RateLimit-Remaining", "0")
-			w.Header().Set("X-RateLimit-Reset", fmt.Sprintf("%d", time.Now().Add(-1*time.Second).Unix()))
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{}`))
-			return
-		}
-		// Second call: success.
+		callCount.Add(1)
+		w.Header().Set("X-RateLimit-Limit", "60")
+		w.Header().Set("X-RateLimit-Remaining", "0")
+		w.Header().Set("X-RateLimit-Reset", fmt.Sprintf("%d", time.Now().Add(-1*time.Second).Unix()))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(fixture(t, "issue_created.json"))
@@ -54,7 +49,7 @@ func TestHTTPClient_RateLimit_ZeroRemaining_ResetInPast(t *testing.T) {
 	issue, err := c.CreateIssue(context.Background(), "test", "body", nil)
 	require.NoError(t, err)
 	assert.Equal(t, 42, issue.Number)
-	assert.GreaterOrEqual(t, int(callCount.Load()), 2)
+	assert.Equal(t, int32(1), callCount.Load()) // no retry for a successful response
 }
 
 func TestHTTPClient_RateLimit_HTTP429_ExponentialBackoff(t *testing.T) {

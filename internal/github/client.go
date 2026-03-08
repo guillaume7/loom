@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 )
@@ -37,22 +38,35 @@ type HTTPClient struct {
 	owner      string
 	repo       string
 	httpClient *http.Client
-	// RetryBase is the base duration for exponential back-off on HTTP 429
-	// responses. Defaults to 100 ms; tests set it to 1 ms for speed.
-	RetryBase time.Duration
+	// retryBase is the base duration for exponential back-off on HTTP 429
+	// responses. Defaults to 100 ms. Override via WithRetryBase option.
+	retryBase time.Duration
+}
+
+// Option configures an HTTPClient.
+type Option func(*HTTPClient)
+
+// WithRetryBase sets the base duration for exponential back-off on HTTP 429
+// responses. Useful in tests to set a very short duration (e.g. 1 ms).
+func WithRetryBase(d time.Duration) Option {
+	return func(c *HTTPClient) { c.retryBase = d }
 }
 
 // NewHTTPClient constructs an HTTPClient pointed at baseURL
 // (e.g. "https://api.github.com").
-func NewHTTPClient(baseURL, token, owner, repo string) *HTTPClient {
-	return &HTTPClient{
+func NewHTTPClient(baseURL, token, owner, repo string, opts ...Option) *HTTPClient {
+	c := &HTTPClient{
 		baseURL:    baseURL,
 		token:      token,
 		owner:      owner,
 		repo:       repo,
 		httpClient: &http.Client{},
-		RetryBase:  100 * time.Millisecond,
+		retryBase:  100 * time.Millisecond,
 	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
 }
 
 func (c *HTTPClient) repoBase() string {
@@ -137,8 +151,9 @@ const maxRetries = 3
 // doRequest executes method against rawURL, JSON-encoding reqBody when
 // non-nil. It decodes a successful response into v (when non-nil), handles
 // X-RateLimit-* headers, and retries on HTTP 429 with exponential back-off
-// up to maxRetries times. When X-RateLimit-Remaining is 0 the client sleeps
-// until X-RateLimit-Reset and retries the same request.
+// up to maxRetries times. Rate-limit warnings are logged for successful
+// responses, but retries are never issued for a successful response to avoid
+// duplicating state-mutating operations (CreateIssue, MergePR, etc.).
 func (c *HTTPClient) doRequest(ctx context.Context, method, rawURL string, reqBody, v interface{}) error {
 	var bodyBytes []byte
 	if reqBody != nil {
@@ -176,36 +191,10 @@ func (c *HTTPClient) doRequest(ctx context.Context, method, rawURL string, reqBo
 			return fmt.Errorf("read response body: %w", readErr)
 		}
 
-		rl := parseRateLimitHeaders(resp)
-
-		// Rate-limit exhausted: sleep until reset then retry.
-		if rl.limit > 0 && rl.remaining == 0 {
-			if attempt < maxRetries {
-				sleepDur := time.Until(rl.reset)
-				if sleepDur > 0 {
-					slog.Warn("GitHub rate limit exhausted, sleeping",
-						"reset", rl.reset, "attempt", attempt)
-					select {
-					case <-time.After(sleepDur):
-					case <-ctx.Done():
-						return fmt.Errorf("context done waiting for rate limit: %w", ctx.Err())
-					}
-				}
-				continue
-			}
-			return fmt.Errorf("rate limit exhausted after %d retries", maxRetries)
-		}
-
-		// Approaching limit: warn but proceed.
-		if rl.limit > 0 && rl.remaining > 0 && rl.remaining*10 < rl.limit {
-			slog.Warn("GitHub rate limit low",
-				"remaining", rl.remaining, "limit", rl.limit)
-		}
-
-		// HTTP 429: exponential back-off.
+		// HTTP 429: exponential back-off and retry.
 		if resp.StatusCode == http.StatusTooManyRequests {
 			if attempt < maxRetries {
-				backoff := time.Duration(1<<uint(attempt)) * c.RetryBase
+				backoff := time.Duration(1<<uint(attempt)) * c.retryBase
 				slog.Warn("HTTP 429 received, backing off",
 					"backoff", backoff, "attempt", attempt)
 				select {
@@ -224,7 +213,22 @@ func (c *HTTPClient) doRequest(ctx context.Context, method, rawURL string, reqBo
 			return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
 		}
 
-		// Success: decode and return.
+		// Successful response: inspect rate-limit headers for warnings only.
+		// We never retry a successful response even when remaining == 0, since
+		// retrying a state-mutating request (CreateIssue, MergePR, …) could
+		// create duplicate resources.
+		rl := parseRateLimitHeaders(resp)
+		if rl.limit > 0 {
+			if rl.remaining == 0 {
+				slog.Warn("GitHub rate limit exhausted after successful request",
+					"reset", rl.reset)
+			} else if rl.remaining*10 < rl.limit {
+				slog.Warn("GitHub rate limit low",
+					"remaining", rl.remaining, "limit", rl.limit)
+			}
+		}
+
+		// Decode and return.
 		if v != nil && len(respBody) > 0 {
 			if err := json.Unmarshal(respBody, v); err != nil {
 				return fmt.Errorf("decode response: %w", err)
@@ -294,10 +298,13 @@ func (c *HTTPClient) CloseIssue(ctx context.Context, issueNumber int) error {
 
 // ListPRs returns open pull requests filtered by head branch.
 func (c *HTTPClient) ListPRs(ctx context.Context, branch string) ([]*PR, error) {
-	url := fmt.Sprintf("%s/pulls?head=%s&state=open", c.repoBase(), branch)
+	params := url.Values{}
+	params.Set("head", branch)
+	params.Set("state", "open")
+	pullsURL := fmt.Sprintf("%s/pulls?%s", c.repoBase(), params.Encode())
 
 	var raw []prAPIResponse
-	if err := c.doRequest(ctx, http.MethodGet, url, nil, &raw); err != nil {
+	if err := c.doRequest(ctx, http.MethodGet, pullsURL, nil, &raw); err != nil {
 		return nil, fmt.Errorf("listing PRs: %w", err)
 	}
 
