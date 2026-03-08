@@ -1,14 +1,21 @@
-// Package mcp implements the Loom MCP stdio server.
+// Package mcp implements the scaffolding for the Loom MCP stdio server.
 //
-// The server exposes the loom_next_step, loom_checkpoint, loom_heartbeat,
-// loom_get_state, and loom_abort tools to the VS Code Copilot master session.
+// In the future this package will host the server that exposes the
+// loom_next_step, loom_checkpoint, loom_heartbeat, loom_get_state, and
+// loom_abort tools to the VS Code Copilot master session.
 package mcp
 
-// Server holds the wired-up dependencies for the Loom MCP server.
-// Use NewServer to construct a Server rather than a struct literal.
+// Server is a placeholder for the Loom MCP server implementation.
+//
+// As the MCP tools are implemented, this struct will grow fields for any
+// dependencies they require. Prefer using NewServer so call sites do not
+// need to change when wiring is added.
 type Server struct{}
 
-// NewServer constructs a Server with all dependencies injected.
+// NewServer constructs a Server.
+//
+// At present it returns an empty Server; dependency fields will be added as
+// the MCP tool surface is implemented.
 func NewServer() *Server {
 	return &Server{}
 }
