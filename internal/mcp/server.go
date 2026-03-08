@@ -75,7 +75,7 @@ func NewServer(machine FSM, st store.Store, gh loomgh.Client, opts ...Option) *S
 	for _, opt := range opts {
 		opt(s)
 	}
-	// Initialise lastActivity to now so a fresh server is not immediately stale.
+	// Initialize lastActivity to now so a fresh server is not immediately stale.
 	s.lastActivity = s.clock.Now()
 	return s
 }

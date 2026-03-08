@@ -453,8 +453,7 @@ func newTestServerWithClock(t *testing.T, clk mcp.Clock) (*mcp.Server, *mcpserve
 // --------------------------------------------------------------------------
 
 func TestLoomHeartbeat_GateState_ReturnsWaitTrue(t *testing.T) {
-	s, mcpSvr := newTestServer(t)
-	_ = s
+	_, mcpSvr := newTestServer(t)
 
 	// Advance FSM: IDLE → SCANNING → ISSUE_CREATED → AWAITING_PR (gate state).
 	callTool(t, mcpSvr, "loom_checkpoint", map[string]interface{}{"action": "start"})
