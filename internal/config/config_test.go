@@ -25,6 +25,7 @@ func TestLoad_MissingFile_ReturnsDefaultsNoError(t *testing.T) {
 	t.Setenv("LOOM_REPO", "")
 	t.Setenv("LOOM_TOKEN", "")
 	t.Setenv("LOOM_DB_PATH", "")
+	t.Setenv("LOOM_LOG_PATH", "")
 
 	cfg, err := config.Load()
 	require.NoError(t, err)
@@ -32,6 +33,7 @@ func TestLoad_MissingFile_ReturnsDefaultsNoError(t *testing.T) {
 	assert.Empty(t, cfg.Repo)
 	assert.Empty(t, cfg.Token)
 	assert.Equal(t, ".loom/state.db", cfg.DBPath)
+	assert.Contains(t, cfg.LogPath, ".loom/loom.log")
 }
 
 func TestLoad_FromFile(t *testing.T) {
@@ -41,6 +43,7 @@ func TestLoad_FromFile(t *testing.T) {
 	t.Setenv("LOOM_REPO", "")
 	t.Setenv("LOOM_TOKEN", "")
 	t.Setenv("LOOM_DB_PATH", "")
+	t.Setenv("LOOM_LOG_PATH", "")
 
 	dir := filepath.Join(home, ".loom")
 	require.NoError(t, os.MkdirAll(dir, 0o700))
@@ -100,6 +103,7 @@ func TestLoad_DefaultDBPath(t *testing.T) {
 	t.Setenv("LOOM_OWNER", "")
 	t.Setenv("LOOM_REPO", "")
 	t.Setenv("LOOM_TOKEN", "")
+	t.Setenv("LOOM_LOG_PATH", "")
 
 	cfg, err := config.Load()
 	require.NoError(t, err)

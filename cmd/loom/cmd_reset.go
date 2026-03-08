@@ -28,6 +28,7 @@ func newResetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			defer st.Close()
 
 			if !force {
 				fmt.Fprint(cmd.OutOrStdout(), "Are you sure? [y/N] ")

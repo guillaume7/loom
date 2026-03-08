@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os/signal"
 	"syscall"
 
@@ -27,6 +28,7 @@ func newStartCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			defer st.Close()
 
 			ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 			defer stop()
@@ -46,10 +48,12 @@ func newStartCmd() *cobra.Command {
 			// Block until a signal is received, then write a PAUSED checkpoint.
 			<-ctx.Done()
 
-			_ = st.WriteCheckpoint(context.Background(), store.Checkpoint{
+			if err := st.WriteCheckpoint(context.Background(), store.Checkpoint{
 				State: string(fsm.StatePaused),
 				Phase: cp.Phase,
-			})
+			}); err != nil {
+				slog.Error("failed to write PAUSED checkpoint on shutdown", "error", err)
+			}
 			// TODO: drive the FSM action loop using machine.
 			_ = machine
 			return nil

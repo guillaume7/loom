@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"time"
 
+	"github.com/guillaume7/loom/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -20,7 +20,11 @@ func newLogCmd() *cobra.Command {
 		Short: "Stream structured JSON log output",
 		Long:  "Print log entries from the Loom log file. Use --follow to stream new entries in real time.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			logPath := filepath.Join(os.Getenv("HOME"), ".loom", "loom.log")
+			cfg, err := config.Load()
+			if err != nil {
+				return fmt.Errorf("loading config: %w", err)
+			}
+			logPath := cfg.LogPath
 
 			f, err := os.Open(logPath)
 			if err != nil {

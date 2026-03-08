@@ -20,6 +20,9 @@ type Config struct {
 	// DBPath is the path to the SQLite checkpoint database.
 	// Defaults to ".loom/state.db" if unset.
 	DBPath string `toml:"db_path"`
+	// LogPath is the path to the structured JSON log file.
+	// Defaults to ~/.loom/loom.log if unset.
+	LogPath string `toml:"log_path"`
 
 	// RepoOwner and RepoName are legacy aliases kept for backward compatibility.
 	RepoOwner string `toml:"repo_owner"`
@@ -29,21 +32,26 @@ type Config struct {
 // Load reads configuration from ~/.loom/config.toml and then applies
 // field-level overrides from environment variables:
 //
-//	LOOM_OWNER    → cfg.Owner
-//	LOOM_REPO     → cfg.Repo
-//	LOOM_TOKEN    → cfg.Token
-//	LOOM_DB_PATH  → cfg.DBPath
+//	LOOM_OWNER     → cfg.Owner
+//	LOOM_REPO      → cfg.Repo
+//	LOOM_TOKEN     → cfg.Token
+//	LOOM_DB_PATH   → cfg.DBPath
+//	LOOM_LOG_PATH  → cfg.LogPath
 //
 // A missing config file is not an error; Load returns a zero-value Config.
-// DBPath defaults to ".loom/state.db" when it is still empty after loading.
+// DBPath defaults to ".loom/state.db" and LogPath defaults to
+// ~/.loom/loom.log when they are still empty after loading.
 func Load() (Config, error) {
 	var cfg Config
 
-	path := filepath.Join(os.Getenv("HOME"), ".loom", "config.toml")
-	data, err := os.ReadFile(path)
-	if err == nil {
-		if err2 := toml.Unmarshal(data, &cfg); err2 != nil {
-			return cfg, err2
+	homeDir, _ := os.UserHomeDir()
+	if homeDir != "" {
+		path := filepath.Join(homeDir, ".loom", "config.toml")
+		data, err := os.ReadFile(path)
+		if err == nil {
+			if err2 := toml.Unmarshal(data, &cfg); err2 != nil {
+				return cfg, err2
+			}
 		}
 	}
 
@@ -60,10 +68,17 @@ func Load() (Config, error) {
 	if v := os.Getenv("LOOM_DB_PATH"); v != "" {
 		cfg.DBPath = v
 	}
+	if v := os.Getenv("LOOM_LOG_PATH"); v != "" {
+		cfg.LogPath = v
+	}
 
 	// Default DBPath.
 	if cfg.DBPath == "" {
 		cfg.DBPath = ".loom/state.db"
+	}
+	// Default LogPath to ~/.loom/loom.log.
+	if cfg.LogPath == "" && homeDir != "" {
+		cfg.LogPath = filepath.Join(homeDir, ".loom", "loom.log")
 	}
 
 	// Populate legacy aliases if not already set by file.

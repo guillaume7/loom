@@ -26,6 +26,7 @@ func newPauseCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			defer st.Close()
 
 			ctx := context.Background()
 			cp, err := st.ReadCheckpoint(ctx)

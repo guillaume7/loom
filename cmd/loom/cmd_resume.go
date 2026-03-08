@@ -25,13 +25,14 @@ func newResumeCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			defer st.Close()
 
 			cp, err := st.ReadCheckpoint(context.Background())
 			if err != nil {
 				return err
 			}
 
-			if cp.State == "" || cp.State != string(fsm.StatePaused) {
+			if cp.State != string(fsm.StatePaused) {
 				fmt.Fprintln(cmd.OutOrStdout(), "Nothing to resume")
 				return nil
 			}

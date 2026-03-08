@@ -39,6 +39,8 @@ func (s *memStore) DeleteAll(_ context.Context) error {
 	return nil
 }
 
+func (s *memStore) Close() error { return nil }
+
 func TestMemStore_ReadCheckpoint_ReturnsZeroValue_WhenEmpty(t *testing.T) {
 	s := newMemStore()
 	cp, err := s.ReadCheckpoint(context.Background())

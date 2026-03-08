@@ -77,7 +77,7 @@ func TestPauseCmd_WritesCheckpoint(t *testing.T) {
 	assert.Contains(t, buf.String(), "Paused.")
 }
 
-func TestResumeCmd_NothingToPause(t *testing.T) {
+func TestResumeCmd_NothingToResume(t *testing.T) {
 	t.Setenv("LOOM_DB_PATH", t.TempDir()+"/state.db")
 	var buf bytes.Buffer
 	cmd := newRootCmd()
@@ -89,7 +89,8 @@ func TestResumeCmd_NothingToPause(t *testing.T) {
 }
 
 func TestLogCmd_EmptyFile_ExitsOK(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	t.Setenv("LOOM_LOG_PATH", t.TempDir()+"/nonexistent.log")
+	t.Setenv("LOOM_DB_PATH", t.TempDir()+"/state.db")
 	var buf bytes.Buffer
 	cmd := newRootCmd()
 	cmd.SetOut(&buf)

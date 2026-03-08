@@ -24,6 +24,7 @@ func newStatusCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			defer st.Close()
 
 			cp, err := st.ReadCheckpoint(context.Background())
 			if err != nil {

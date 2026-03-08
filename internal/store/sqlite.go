@@ -56,3 +56,7 @@ func (s *sqliteStore) DeleteAll(ctx context.Context) error {
 	_, err := s.db.ExecContext(ctx, "DELETE FROM checkpoint")
 	return err
 }
+
+func (s *sqliteStore) Close() error {
+	return s.db.Close()
+}

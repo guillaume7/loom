@@ -30,6 +30,7 @@ func newMCPCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			defer st.Close()
 
 			machine := fsm.NewMachine(fsm.DefaultConfig())
 

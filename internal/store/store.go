@@ -26,4 +26,8 @@ type Store interface {
 
 	// DeleteAll removes all persisted checkpoints from the store.
 	DeleteAll(ctx context.Context) error
+
+	// Close releases any resources held by the store (e.g. the database
+	// connection). Callers must call Close when they are done with the store.
+	Close() error
 }
