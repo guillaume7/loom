@@ -3,7 +3,7 @@ module github.com/guillaume7/loom
 go 1.23
 
 require (
-	github.com/google/go-github/v62 v62.0.0
+	github.com/google/go-github/v68 v68.0.0
 	github.com/mark3labs/mcp-go v0.18.0
 	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/spf13/cobra v1.8.1
