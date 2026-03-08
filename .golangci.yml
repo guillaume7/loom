@@ -1,0 +1,15 @@
+# golangci-lint configuration for Loom.
+#
+# staticcheck subsumes gosimple and unused.
+# typecheck is the compiler type-check pass (always active, listed for clarity).
+run:
+  timeout: 5m
+
+linters:
+  disable-all: true
+  enable:
+    - govet
+    - errcheck
+    - staticcheck
+    - ineffassign
+    - typecheck
