@@ -3,9 +3,12 @@
 // The Server struct exposes five MCP tools to VS Code Copilot master sessions:
 //   - loom_next_step:   returns the current workflow state and the next action
 //   - loom_checkpoint:  fires an FSM event and persists the new state
-//   - loom_heartbeat:   health-check returning current state and phase
+//   - loom_heartbeat:   health-check returning current state, phase, and wait guidance
 //   - loom_get_state:   read-only view of the current state and phase
 //   - loom_abort:       universally transitions the FSM to PAUSED
+//
+// Session management (E6) is handled by monitor.go: Clock interface,
+// MonitorConfig, heartbeat log emission, and stall detection via RunStallCheck.
 //
 // Construct a Server with NewServer and call Serve to start the stdio loop,
 // or call MCPServer to obtain the underlying *server.MCPServer for testing.
@@ -37,21 +40,49 @@ type FSM interface {
 
 // Server is the Loom MCP server that exposes workflow tools.
 type Server struct {
-	mu      sync.RWMutex // guards all access to machine
+	mu      sync.RWMutex // guards all access to machine and lastActivity
 	machine FSM
 	st      store.Store
 	gh      loomgh.Client
+
+	// Session management (E6).
+	clock        Clock
+	monCfg       MonitorConfig
+	lastActivity time.Time // wall-clock time of the last loom_checkpoint call
 }
+
+// Option configures a Server.
+type Option func(*Server)
+
+// WithClock sets the Clock implementation. Inject a fake clock in tests to
+// avoid time.Sleep calls in stall-detection logic.
+func WithClock(c Clock) Option { return func(s *Server) { s.clock = c } }
+
+// WithMonitorConfig overrides the default MonitorConfig.
+func WithMonitorConfig(cfg MonitorConfig) Option { return func(s *Server) { s.monCfg = cfg } }
 
 // NewServer constructs a Server with the provided dependencies.
 // gh may be nil when GitHub connectivity is not required by the active tools.
-func NewServer(machine FSM, st store.Store, gh loomgh.Client) *Server {
-	return &Server{
+// Optional Option values can be passed to override the clock or monitor config.
+func NewServer(machine FSM, st store.Store, gh loomgh.Client, opts ...Option) *Server {
+	s := &Server{
 		machine: machine,
 		st:      st,
 		gh:      gh,
+		clock:   RealClock,
+		monCfg:  DefaultMonitorConfig(),
 	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	// Initialise lastActivity to now so a fresh server is not immediately stale.
+	s.lastActivity = s.clock.Now()
+	return s
 }
+
+// Store returns the underlying store.Store. Exposed for use in tests that need
+// to read the checkpoint state after a RunStallCheck call.
+func (s *Server) Store() store.Store { return s.st }
 
 // CheckpointRequest is the typed input struct for loom_checkpoint.
 // Action is the spec-aligned field name (see US-4.3 acceptance criteria);
@@ -76,8 +107,10 @@ type CheckpointResult struct {
 
 // HeartbeatResult is returned by loom_heartbeat.
 type HeartbeatResult struct {
-	State string `json:"state"`
-	Phase int    `json:"phase"`
+	State          string `json:"state"`
+	Phase          int    `json:"phase"`
+	Wait           bool   `json:"wait"`
+	RetryInSeconds int    `json:"retry_in_seconds,omitempty"`
 }
 
 // GetStateResult is returned by loom_get_state.
@@ -191,6 +224,7 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 
 	s.mu.Lock()
 	previousState := s.machine.State()
+	s.lastActivity = s.clock.Now() // Record activity time; resets the stall timer.
 	slog.InfoContext(ctx, "tool called", "tool", toolName, "state", string(previousState))
 	newState, transErr := s.machine.Transition(fsm.Event(actionStr))
 	s.mu.Unlock()
@@ -232,9 +266,17 @@ func (s *Server) handleHeartbeat(ctx context.Context, req mcplib.CallToolRequest
 	slog.InfoContext(ctx, "tool called", "tool", toolName, "state", string(currentState))
 
 	cp := s.readCheckpoint(ctx, toolName)
+
+	gate := isGateState(currentState)
+	retry := 0
+	if gate {
+		retry = retryInSeconds
+	}
 	result := HeartbeatResult{
-		State: string(currentState),
-		Phase: cp.Phase,
+		State:          string(currentState),
+		Phase:          cp.Phase,
+		Wait:           gate,
+		RetryInSeconds: retry,
 	}
 
 	slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(currentState), "duration_ms", time.Since(start).Milliseconds())
@@ -344,8 +386,10 @@ func (s *Server) MCPServer() *mcpserver.MCPServer {
 }
 
 // Serve starts the MCP stdio server, blocking until ctx is cancelled or an
-// error is encountered on stdin/stdout.
+// error is encountered on stdin/stdout. It also starts the session monitor
+// goroutine (heartbeat + stall detection) before beginning to handle messages.
 func (s *Server) Serve(ctx context.Context, stdin io.Reader, stdout io.Writer) error {
+	s.startMonitor(ctx)
 	mcpSvr := s.MCPServer()
 	stdioSvr := mcpserver.NewStdioServer(mcpSvr)
 	return stdioSvr.Listen(ctx, stdin, stdout)
