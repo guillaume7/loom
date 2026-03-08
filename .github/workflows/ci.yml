@@ -28,6 +28,13 @@ jobs:
       - uses: golangci/golangci-lint-action@v6
         with:
           version: latest
+          # Build golangci-lint from source so the linter binary is compiled
+          # with the installed Go toolchain (currently 1.26). The default
+          # pre-compiled binary is built with an older Go version and cannot
+          # handle the FIPS 140 crypto files added to the Go 1.26 stdlib
+          # (fips140only_go1.26.go) or resolve types that depend on Go 1.26
+          # net/http changes.
+          install-mode: goinstall
 
   test:
     runs-on: ubuntu-latest

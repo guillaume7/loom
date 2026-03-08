@@ -6,7 +6,7 @@ package tools
 
 import (
 	// GitHub REST API client used by internal/github.
-	_ "github.com/google/go-github/v62/github"
+	_ "github.com/google/go-github/v68/github"
 	// MCP stdio server toolkit used by internal/mcp.
 	_ "github.com/mark3labs/mcp-go/mcp"
 	// TOML config parser used by internal/config.
