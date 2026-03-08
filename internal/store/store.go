@@ -23,4 +23,7 @@ type Store interface {
 
 	// WriteCheckpoint persists cp, overwriting any existing checkpoint.
 	WriteCheckpoint(ctx context.Context, cp Checkpoint) error
+
+	// DeleteAll removes all persisted checkpoints from the store.
+	DeleteAll(ctx context.Context) error
 }

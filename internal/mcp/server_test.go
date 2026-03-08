@@ -47,6 +47,14 @@ func (s *memStore) WriteCheckpoint(_ context.Context, cp store.Checkpoint) error
 	return nil
 }
 
+func (s *memStore) DeleteAll(_ context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.cp = store.Checkpoint{}
+	s.empty = true
+	return nil
+}
+
 // failingStore is a Store that always returns an error on WriteCheckpoint.
 type failingStore struct {
 	memStore

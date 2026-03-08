@@ -22,28 +22,14 @@ func newRootCmd() *cobra.Command {
 		SilenceErrors: true,
 		SilenceUsage:  true,
 	}
-	root.AddCommand(newStartCmd(), newMCPCmd())
+	root.AddCommand(
+		newMCPCmd(),
+		newStartCmd(),
+		newStatusCmd(),
+		newPauseCmd(),
+		newResumeCmd(),
+		newResetCmd(),
+		newLogCmd(),
+	)
 	return root
-}
-
-func newStartCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "start",
-		Short: "Start the Loom workflow",
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			fmt.Fprintln(cmd.OutOrStdout(), "starting loom")
-			return nil
-		},
-	}
-}
-
-func newMCPCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "mcp",
-		Short: "Start the Loom MCP stdio server",
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			fmt.Fprintln(cmd.OutOrStdout(), "starting mcp server")
-			return nil
-		},
-	}
 }

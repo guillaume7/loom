@@ -1,10 +1,78 @@
 // Package config loads and validates Loom runtime configuration.
 package config
 
+import (
+	"os"
+	"path/filepath"
+
+	"github.com/pelletier/go-toml/v2"
+)
+
 // Config holds the runtime configuration for Loom.
 type Config struct {
-	// RepoOwner is the GitHub organisation or user that owns the target repository.
-	RepoOwner string
-	// RepoName is the name of the target GitHub repository.
-	RepoName string
+	// Owner is the GitHub organisation or user that owns the target repository.
+	Owner string `toml:"owner"`
+	// Repo is the name of the target GitHub repository.
+	Repo string `toml:"repo"`
+	// Token is the GitHub personal access token used for API calls.
+	// Never logged.
+	Token string `toml:"token"`
+	// DBPath is the path to the SQLite checkpoint database.
+	// Defaults to ".loom/state.db" if unset.
+	DBPath string `toml:"db_path"`
+
+	// RepoOwner and RepoName are legacy aliases kept for backward compatibility.
+	RepoOwner string `toml:"repo_owner"`
+	RepoName  string `toml:"repo_name"`
+}
+
+// Load reads configuration from ~/.loom/config.toml and then applies
+// field-level overrides from environment variables:
+//
+//	LOOM_OWNER    → cfg.Owner
+//	LOOM_REPO     → cfg.Repo
+//	LOOM_TOKEN    → cfg.Token
+//	LOOM_DB_PATH  → cfg.DBPath
+//
+// A missing config file is not an error; Load returns a zero-value Config.
+// DBPath defaults to ".loom/state.db" when it is still empty after loading.
+func Load() (Config, error) {
+	var cfg Config
+
+	path := filepath.Join(os.Getenv("HOME"), ".loom", "config.toml")
+	data, err := os.ReadFile(path)
+	if err == nil {
+		if err2 := toml.Unmarshal(data, &cfg); err2 != nil {
+			return cfg, err2
+		}
+	}
+
+	// Environment variable overrides.
+	if v := os.Getenv("LOOM_OWNER"); v != "" {
+		cfg.Owner = v
+	}
+	if v := os.Getenv("LOOM_REPO"); v != "" {
+		cfg.Repo = v
+	}
+	if v := os.Getenv("LOOM_TOKEN"); v != "" {
+		cfg.Token = v
+	}
+	if v := os.Getenv("LOOM_DB_PATH"); v != "" {
+		cfg.DBPath = v
+	}
+
+	// Default DBPath.
+	if cfg.DBPath == "" {
+		cfg.DBPath = ".loom/state.db"
+	}
+
+	// Populate legacy aliases if not already set by file.
+	if cfg.RepoOwner == "" {
+		cfg.RepoOwner = cfg.Owner
+	}
+	if cfg.RepoName == "" {
+		cfg.RepoName = cfg.Repo
+	}
+
+	return cfg, nil
 }
