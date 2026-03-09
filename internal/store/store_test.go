@@ -72,14 +72,16 @@ func TestMemStore_DeleteAll_ClearsCheckpoint(t *testing.T) {
 }
 
 // --------------------------------------------------------------------------
-// SQLite integration tests — all use ":memory:" (no filesystem access)
+// SQLite checkpoint read/write/delete tests using ":memory:" (no filesystem access)
 // --------------------------------------------------------------------------
 
 func newMemDB(t *testing.T) store.Store {
 	t.Helper()
 	st, err := store.New(":memory:")
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = st.Close() })
+	t.Cleanup(func() {
+		require.NoError(t, st.Close())
+	})
 	return st
 }
 
@@ -142,6 +144,10 @@ func TestSQLiteStore_DeleteAll_ClearsCheckpoint(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, store.Checkpoint{}, cp)
 }
+
+// --------------------------------------------------------------------------
+// SQLite filesystem tests
+// --------------------------------------------------------------------------
 
 func TestNew_CreatesParentDirectory(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "nested", "dir")

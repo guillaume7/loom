@@ -29,7 +29,25 @@ func New(dbPath string) (Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS checkpoint (
+	if dbPath == memoryPath {
+		// database/sql may open multiple connections; each ":memory:" connection
+		// gets its own independent database. Pin to one connection so all
+		// operations share the same in-memory database.
+		db.SetMaxOpenConns(1)
+		db.SetMaxIdleConns(1)
+	}
+	if err := migrate(db); err != nil {
+		db.Close()
+		return nil, err
+	}
+	return &sqliteStore{db: db}, nil
+}
+
+// migrate creates the checkpoint table when it does not exist and adds any
+// columns that are present in the current schema but absent from an existing
+// table (forward-compatible, zero-downtime migration).
+func migrate(db *sql.DB) error {
+	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS checkpoint (
 		id           INTEGER PRIMARY KEY,
 		state        TEXT    NOT NULL,
 		phase        INTEGER NOT NULL DEFAULT 0,
@@ -39,10 +57,50 @@ func New(dbPath string) (Store, error) {
 		updated_at   TEXT    NOT NULL DEFAULT ''
 	)`)
 	if err != nil {
-		db.Close()
-		return nil, err
+		return err
 	}
-	return &sqliteStore{db: db}, nil
+
+	// Collect existing column names.
+	rows, err := db.Query("PRAGMA table_info(checkpoint)")
+	if err != nil {
+		return err
+	}
+	existing := make(map[string]struct{})
+	for rows.Next() {
+		var cid int
+		var name, colType string
+		var notNull int
+		var dfltValue sql.NullString
+		var pk int
+		if err := rows.Scan(&cid, &name, &colType, &notNull, &dfltValue, &pk); err != nil {
+			rows.Close()
+			return err
+		}
+		existing[name] = struct{}{}
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+
+	// Add any columns that the current schema requires but the table lacks.
+	additions := []struct {
+		col string
+		ddl string
+	}{
+		{"pr_number", "ALTER TABLE checkpoint ADD COLUMN pr_number    INTEGER NOT NULL DEFAULT 0"},
+		{"issue_number", "ALTER TABLE checkpoint ADD COLUMN issue_number INTEGER NOT NULL DEFAULT 0"},
+		{"retry_count", "ALTER TABLE checkpoint ADD COLUMN retry_count  INTEGER NOT NULL DEFAULT 0"},
+		{"updated_at", "ALTER TABLE checkpoint ADD COLUMN updated_at   TEXT    NOT NULL DEFAULT ''"},
+	}
+	for _, a := range additions {
+		if _, ok := existing[a.col]; ok {
+			continue
+		}
+		if _, err := db.Exec(a.ddl); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *sqliteStore) ReadCheckpoint(ctx context.Context) (Checkpoint, error) {
