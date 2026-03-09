@@ -4,7 +4,10 @@
 // restarts (i.e. write to durable storage).
 package store
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // Checkpoint is a point-in-time snapshot of the Loom workflow that is written
 // to durable storage after every state transition.
@@ -13,6 +16,17 @@ type Checkpoint struct {
 	State string
 	// Phase is the current epic phase number being processed.
 	Phase int
+	// PRNumber is the GitHub pull-request number associated with the current
+	// phase, or zero if no PR has been opened yet.
+	PRNumber int
+	// IssueNumber is the GitHub issue number associated with the current
+	// phase, or zero if no issue has been created yet.
+	IssueNumber int
+	// RetryCount is the number of times the current step has been retried.
+	RetryCount int
+	// UpdatedAt is the wall-clock time at which the checkpoint was last written.
+	// WriteCheckpoint sets this to time.Now() when the caller leaves it zero.
+	UpdatedAt time.Time
 }
 
 // Store persists and retrieves Loom workflow checkpoints.

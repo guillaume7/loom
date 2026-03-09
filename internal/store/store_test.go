@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/guillaume7/loom/internal/store"
 	"github.com/stretchr/testify/assert"
@@ -71,23 +72,37 @@ func TestMemStore_DeleteAll_ClearsCheckpoint(t *testing.T) {
 }
 
 // --------------------------------------------------------------------------
-// SQLite integration tests
+// SQLite checkpoint read/write/delete tests using ":memory:" (no filesystem access)
 // --------------------------------------------------------------------------
 
-func TestSQLiteStore_ReadCheckpoint_ReturnsZeroValue_WhenEmpty(t *testing.T) {
-	st, err := store.New(filepath.Join(t.TempDir(), "test.db"))
+func newMemDB(t *testing.T) store.Store {
+	t.Helper()
+	st, err := store.New(":memory:")
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, st.Close())
+	})
+	return st
+}
 
-	cp, err := st.ReadCheckpoint(context.Background())
+func TestSQLiteStore_ReadCheckpoint_ReturnsZeroValue_WhenEmpty(t *testing.T) {
+	cp, err := newMemDB(t).ReadCheckpoint(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, store.Checkpoint{}, cp)
 }
 
 func TestSQLiteStore_WriteAndReadCheckpoint_RoundTrip(t *testing.T) {
-	st, err := store.New(filepath.Join(t.TempDir(), "test.db"))
-	require.NoError(t, err)
+	st := newMemDB(t)
 
-	want := store.Checkpoint{State: "AWAITING_CI", Phase: 3}
+	ts := time.Date(2026, 3, 9, 12, 0, 0, 0, time.UTC)
+	want := store.Checkpoint{
+		State:       "AWAITING_CI",
+		Phase:       3,
+		PRNumber:    42,
+		IssueNumber: 7,
+		RetryCount:  2,
+		UpdatedAt:   ts,
+	}
 	require.NoError(t, st.WriteCheckpoint(context.Background(), want))
 
 	got, err := st.ReadCheckpoint(context.Background())
@@ -96,20 +111,31 @@ func TestSQLiteStore_WriteAndReadCheckpoint_RoundTrip(t *testing.T) {
 }
 
 func TestSQLiteStore_WriteCheckpoint_Idempotent(t *testing.T) {
-	st, err := store.New(filepath.Join(t.TempDir(), "test.db"))
-	require.NoError(t, err)
+	st := newMemDB(t)
 
 	require.NoError(t, st.WriteCheckpoint(context.Background(), store.Checkpoint{State: "SCANNING", Phase: 1}))
 	require.NoError(t, st.WriteCheckpoint(context.Background(), store.Checkpoint{State: "REVIEWING", Phase: 2}))
 
 	got, err := st.ReadCheckpoint(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, store.Checkpoint{State: "REVIEWING", Phase: 2}, got)
+	assert.Equal(t, "REVIEWING", got.State)
+	assert.Equal(t, 2, got.Phase)
+}
+
+func TestSQLiteStore_WriteCheckpoint_AutoSetsUpdatedAt(t *testing.T) {
+	st := newMemDB(t)
+
+	before := time.Now().UTC().Truncate(time.Second)
+	require.NoError(t, st.WriteCheckpoint(context.Background(), store.Checkpoint{State: "SCANNING", Phase: 1}))
+
+	got, err := st.ReadCheckpoint(context.Background())
+	require.NoError(t, err)
+	assert.False(t, got.UpdatedAt.IsZero(), "UpdatedAt should be set automatically")
+	assert.True(t, !got.UpdatedAt.Before(before), "UpdatedAt should be >= write time")
 }
 
 func TestSQLiteStore_DeleteAll_ClearsCheckpoint(t *testing.T) {
-	st, err := store.New(filepath.Join(t.TempDir(), "test.db"))
-	require.NoError(t, err)
+	st := newMemDB(t)
 
 	require.NoError(t, st.WriteCheckpoint(context.Background(), store.Checkpoint{State: "MERGING", Phase: 4}))
 	require.NoError(t, st.DeleteAll(context.Background()))
@@ -119,10 +145,15 @@ func TestSQLiteStore_DeleteAll_ClearsCheckpoint(t *testing.T) {
 	assert.Equal(t, store.Checkpoint{}, cp)
 }
 
+// --------------------------------------------------------------------------
+// SQLite filesystem tests
+// --------------------------------------------------------------------------
+
 func TestNew_CreatesParentDirectory(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "nested", "dir")
-	_, err := store.New(filepath.Join(dir, "test.db"))
+	st, err := store.New(filepath.Join(dir, "test.db"))
 	require.NoError(t, err)
+	require.NoError(t, st.Close())
 	_, err = os.Stat(dir)
 	assert.NoError(t, err, "parent directory should have been created")
 }
