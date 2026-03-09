@@ -100,6 +100,9 @@ func (s *Server) RunStallCheck(ctx context.Context) bool {
 	}
 
 	// Stall detected: log, transition to PAUSED, persist checkpoint.
+	// Re-check lastActivity under the write lock to close the TOCTOU window:
+	// handleCheckpoint may have updated lastActivity between our RLock read
+	// above and the Lock acquisition below.
 	slog.WarnContext(ctx, "session stall detected",
 		"state", string(currentState),
 		"elapsed", elapsed,
@@ -107,10 +110,15 @@ func (s *Server) RunStallCheck(ctx context.Context) bool {
 	)
 
 	s.mu.Lock()
+	// Re-verify that no checkpoint arrived while we were waiting for the lock.
+	if s.clock.Now().Sub(s.lastActivity) < s.monCfg.StallTimeout {
+		s.mu.Unlock()
+		return false
+	}
 	_, _ = s.machine.Transition(fsm.EventAbort)
 	s.mu.Unlock()
 
-	cp, _ := s.st.ReadCheckpoint(ctx)
+	cp := s.readCheckpoint(ctx, "stall_check")
 	if err := s.st.WriteCheckpoint(ctx, store.Checkpoint{
 		State: string(fsm.StatePaused),
 		Phase: cp.Phase,

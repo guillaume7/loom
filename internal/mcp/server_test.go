@@ -570,3 +570,39 @@ func TestRunStallCheck_CheckpointResetsStallTimer(t *testing.T) {
 	stalled := s.RunStallCheck(context.Background())
 	assert.False(t, stalled, "expected no stall: checkpoint refreshed the stall timer")
 }
+
+func TestRunStallCheck_TOCTOU_CheckpointArrivesBeforeLock_ReturnsFalse(t *testing.T) {
+	// Regression test for the TOCTOU race: verify that RunStallCheck does not
+	// abort when lastActivity is refreshed after the initial RLock read but
+	// before the write lock is acquired.
+	//
+	// We simulate this by: advancing the clock past the stall timeout, then
+	// calling a checkpoint (which updates lastActivity to "now"), and only
+	// then calling RunStallCheck. Because RunStallCheck re-verifies lastActivity
+	// under the write lock, it must not abort when the activity timestamp is fresh.
+	clk := newFakeClock()
+	s, mcpSvr := newTestServerWithClock(t, clk)
+
+	// Advance FSM to gate state.
+	callTool(t, mcpSvr, "loom_checkpoint", map[string]interface{}{"action": "start"})
+	callTool(t, mcpSvr, "loom_checkpoint", map[string]interface{}{"action": "phase_identified"})
+	callTool(t, mcpSvr, "loom_checkpoint", map[string]interface{}{"action": "copilot_assigned"})
+
+	// Advance clock past stall timeout.
+	clk.Advance(6 * time.Minute)
+
+	// A checkpoint arrives (timeout keeps us in AWAITING_PR) — this resets
+	// lastActivity to the current fake-clock time (6 minutes in).
+	callTool(t, mcpSvr, "loom_checkpoint", map[string]interface{}{"action": "timeout"})
+
+	// RunStallCheck now reads lastActivity = clock-now (elapsed since last
+	// activity = 0), so no stall should fire even though 6 minutes have passed
+	// since the initial gate entry.
+	stalled := s.RunStallCheck(context.Background())
+	assert.False(t, stalled, "expected no stall after checkpoint reset lastActivity")
+
+	// FSM must still be AWAITING_PR, not PAUSED.
+	cp, err := s.Store().ReadCheckpoint(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "AWAITING_PR", cp.State)
+}
