@@ -179,12 +179,23 @@ func (s *Server) readCheckpoint(ctx context.Context, toolName string) store.Chec
 	return cp
 }
 
+// checkCtx checks whether the context has been cancelled. If so, it returns
+// a tool-error result and true; otherwise it returns nil and false.
+// Callers should return immediately when the second return value is true.
+func checkCtx(ctx context.Context, toolName string) (*mcplib.CallToolResult, bool) {
+	if err := ctx.Err(); err != nil {
+		slog.WarnContext(ctx, "request cancelled", "tool", toolName, "error", err)
+		return mcplib.NewToolResultError(fmt.Sprintf("request cancelled: %v", err)), true
+	}
+	return nil, false
+}
+
 func (s *Server) handleNextStep(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 	const toolName = "loom_next_step"
 	start := time.Now()
 
-	if err := ctx.Err(); err != nil {
-		return mcplib.NewToolResultError(fmt.Sprintf("request cancelled: %v", err)), nil
+	if res, cancelled := checkCtx(ctx, toolName); cancelled {
+		return res, nil
 	}
 
 	s.mu.RLock()
@@ -207,8 +218,8 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 	start := time.Now()
 
 	// Guard against cancelled context before acquiring any locks or mutating state.
-	if err := ctx.Err(); err != nil {
-		return mcplib.NewToolResultError(fmt.Sprintf("request cancelled: %v", err)), nil
+	if res, cancelled := checkCtx(ctx, toolName); cancelled {
+		return res, nil
 	}
 
 	// Decode the typed checkpoint request from generic MCP arguments using
@@ -255,8 +266,8 @@ func (s *Server) handleHeartbeat(ctx context.Context, req mcplib.CallToolRequest
 	const toolName = "loom_heartbeat"
 	start := time.Now()
 
-	if err := ctx.Err(); err != nil {
-		return mcplib.NewToolResultError(fmt.Sprintf("request cancelled: %v", err)), nil
+	if res, cancelled := checkCtx(ctx, toolName); cancelled {
+		return res, nil
 	}
 
 	s.mu.RLock()
@@ -287,8 +298,8 @@ func (s *Server) handleGetState(ctx context.Context, req mcplib.CallToolRequest)
 	const toolName = "loom_get_state"
 	start := time.Now()
 
-	if err := ctx.Err(); err != nil {
-		return mcplib.NewToolResultError(fmt.Sprintf("request cancelled: %v", err)), nil
+	if res, cancelled := checkCtx(ctx, toolName); cancelled {
+		return res, nil
 	}
 
 	s.mu.RLock()
@@ -312,8 +323,8 @@ func (s *Server) handleAbort(ctx context.Context, req mcplib.CallToolRequest) (*
 	start := time.Now()
 
 	// Guard against cancelled context before acquiring any locks or mutating state.
-	if err := ctx.Err(); err != nil {
-		return mcplib.NewToolResultError(fmt.Sprintf("request cancelled: %v", err)), nil
+	if res, cancelled := checkCtx(ctx, toolName); cancelled {
+		return res, nil
 	}
 
 	s.mu.Lock()

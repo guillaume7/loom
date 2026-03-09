@@ -26,7 +26,11 @@ func newPauseCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			defer st.Close()
+			defer func() {
+				if cerr := st.Close(); cerr != nil {
+					slog.Error("store close", "error", cerr)
+				}
+			}()
 
 			ctx := context.Background()
 			cp, err := st.ReadCheckpoint(ctx)

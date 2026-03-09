@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"os"
 	"path/filepath"
 	"time"
@@ -109,7 +110,7 @@ func (s *sqliteStore) ReadCheckpoint(ctx context.Context) (Checkpoint, error) {
 	err := s.db.QueryRowContext(ctx,
 		"SELECT state, phase, pr_number, issue_number, retry_count, updated_at FROM checkpoint WHERE id = 1",
 	).Scan(&cp.State, &cp.Phase, &cp.PRNumber, &cp.IssueNumber, &cp.RetryCount, &updatedAt)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return Checkpoint{}, nil
 	}
 	if err != nil {

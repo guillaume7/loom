@@ -55,21 +55,19 @@ func DefaultMonitorConfig() MonitorConfig {
 	}
 }
 
-// gateStates is the set of FSM states where the workflow is waiting for an
-// external event and the Copilot session must be kept alive via heartbeats.
-var gateStates = map[fsm.State]bool{
-	fsm.StateAwaitingPR:         true,
-	fsm.StateAwaitingReady:      true,
-	fsm.StateAwaitingCI:         true,
-	fsm.StateDebugging:          true,
-	fsm.StateAddressingFeedback: true,
-	fsm.StateRefactoring:        true,
-}
-
 // isGateState reports whether s is a gate state — one where the session is
 // expected to wait for an extended period and heartbeats must be emitted.
 func isGateState(s fsm.State) bool {
-	return gateStates[s]
+	switch s {
+	case fsm.StateAwaitingPR,
+		fsm.StateAwaitingReady,
+		fsm.StateAwaitingCI,
+		fsm.StateDebugging,
+		fsm.StateAddressingFeedback,
+		fsm.StateRefactoring:
+		return true
+	}
+	return false
 }
 
 // retryInSeconds is the fixed retry delay returned by loom_heartbeat when the

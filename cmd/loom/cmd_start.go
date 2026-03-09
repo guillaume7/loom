@@ -28,7 +28,11 @@ func newStartCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			defer st.Close()
+			defer func() {
+				if cerr := st.Close(); cerr != nil {
+					slog.Error("store close", "error", cerr)
+				}
+			}()
 
 			ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 			defer stop()

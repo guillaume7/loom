@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/guillaume7/loom/internal/config"
 	"github.com/guillaume7/loom/internal/fsm"
@@ -25,7 +26,11 @@ func newResumeCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			defer st.Close()
+			defer func() {
+				if cerr := st.Close(); cerr != nil {
+					slog.Error("store close", "error", cerr)
+				}
+			}()
 
 			cp, err := st.ReadCheckpoint(context.Background())
 			if err != nil {
