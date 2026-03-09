@@ -1,0 +1,207 @@
+// Package integration contains end-to-end integration tests for the Loom
+// workflow engine, exercising the full FSM + MCP server + GitHub client +
+// SQLite store stack together.
+package integration_test
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	loomgh "github.com/guillaume7/loom/internal/github"
+	"github.com/guillaume7/loom/internal/mcp"
+	"github.com/guillaume7/loom/internal/store"
+	mcplib "github.com/mark3labs/mcp-go/mcp"
+	mcpserver "github.com/mark3labs/mcp-go/server"
+	"github.com/stretchr/testify/require"
+)
+
+// --------------------------------------------------------------------------
+// Session counter — unique session IDs prevent collisions in parallel tests
+// --------------------------------------------------------------------------
+
+var sessionIDCounter atomic.Int64
+
+func nextSessionID() string {
+	return fmt.Sprintf("integ-session-%d", sessionIDCounter.Add(1))
+}
+
+// --------------------------------------------------------------------------
+// testSession implements mcpserver.ClientSession
+// --------------------------------------------------------------------------
+
+type testSession struct {
+	id            string
+	notifications chan mcplib.JSONRPCNotification
+}
+
+func newTestSession(id string) *testSession {
+	return &testSession{
+		id:            id,
+		notifications: make(chan mcplib.JSONRPCNotification, 16),
+	}
+}
+
+func (s *testSession) Initialize()                                            {}
+func (s *testSession) Initialized() bool                                      { return true }
+func (s *testSession) NotificationChannel() chan<- mcplib.JSONRPCNotification { return s.notifications }
+func (s *testSession) SessionID() string                                      { return s.id }
+
+var _ mcpserver.ClientSession = (*testSession)(nil)
+
+// --------------------------------------------------------------------------
+// callTool — drives a single MCP tool call
+// --------------------------------------------------------------------------
+
+// callTool sends a tools/call request to mcpSvr and returns the result.
+func callTool(t *testing.T, mcpSvr *mcpserver.MCPServer, toolName string, args map[string]interface{}) *mcplib.CallToolResult {
+	t.Helper()
+	if args == nil {
+		args = map[string]interface{}{}
+	}
+
+	ctx := context.Background()
+	sess := newTestSession(nextSessionID())
+	require.NoError(t, mcpSvr.RegisterSession(ctx, sess))
+	ctx = mcpSvr.WithContext(ctx, sess)
+
+	msg, err := json.Marshal(map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "tools/call",
+		"params": map[string]interface{}{
+			"name":      toolName,
+			"arguments": args,
+		},
+	})
+	require.NoError(t, err)
+
+	raw := mcpSvr.HandleMessage(ctx, msg)
+	require.NotNil(t, raw, "HandleMessage returned nil for tool %q", toolName)
+
+	resp, ok := raw.(mcplib.JSONRPCResponse)
+	require.True(t, ok, "expected JSONRPCResponse, got %T", raw)
+
+	result, ok := resp.Result.(mcplib.CallToolResult)
+	require.True(t, ok, "expected CallToolResult in response.Result, got %T", resp.Result)
+
+	return &result
+}
+
+// checkpoint calls loom_checkpoint with the given action and returns the result.
+func checkpoint(t *testing.T, mcpSvr *mcpserver.MCPServer, action string) *mcp.CheckpointResult {
+	t.Helper()
+	r := callTool(t, mcpSvr, "loom_checkpoint", map[string]interface{}{"action": action})
+	if r.IsError {
+		t.Fatalf("loom_checkpoint(%q) returned error: %v", action, toolText(t, r))
+	}
+	var result mcp.CheckpointResult
+	require.NoError(t, json.Unmarshal([]byte(toolText(t, r)), &result))
+	return &result
+}
+
+// nextStep calls loom_next_step and returns the result.
+func nextStep(t *testing.T, mcpSvr *mcpserver.MCPServer) *mcp.NextStepResult {
+	t.Helper()
+	r := callTool(t, mcpSvr, "loom_next_step", nil)
+	require.False(t, r.IsError)
+	var result mcp.NextStepResult
+	require.NoError(t, json.Unmarshal([]byte(toolText(t, r)), &result))
+	return &result
+}
+
+// toolText returns the first text content item from a CallToolResult.
+func toolText(t *testing.T, result *mcplib.CallToolResult) string {
+	t.Helper()
+	require.NotEmpty(t, result.Content, "CallToolResult has no content")
+	tc, ok := result.Content[0].(mcplib.TextContent)
+	require.True(t, ok, "expected TextContent, got %T", result.Content[0])
+	return tc.Text
+}
+
+// --------------------------------------------------------------------------
+// memStore — in-memory Store implementation for tests that do not need SQLite
+// --------------------------------------------------------------------------
+
+type memStore struct {
+	mu    sync.Mutex
+	cp    store.Checkpoint
+	empty bool
+}
+
+func newMemStore() *memStore { return &memStore{empty: true} }
+
+func (s *memStore) ReadCheckpoint(_ context.Context) (store.Checkpoint, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.empty {
+		return store.Checkpoint{}, nil
+	}
+	return s.cp, nil
+}
+
+func (s *memStore) WriteCheckpoint(_ context.Context, cp store.Checkpoint) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.cp = cp
+	s.empty = false
+	return nil
+}
+
+func (s *memStore) DeleteAll(_ context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.cp = store.Checkpoint{}
+	s.empty = true
+	return nil
+}
+
+func (s *memStore) Close() error { return nil }
+
+var _ store.Store = (*memStore)(nil)
+
+// --------------------------------------------------------------------------
+// newGHClient — GitHub client pointed at an httptest server
+// --------------------------------------------------------------------------
+
+func newGHClient(baseURL string) *loomgh.HTTPClient {
+	return loomgh.NewHTTPClient(
+		baseURL,
+		"test-token",
+		"owner",
+		"repo",
+		loomgh.WithRetryBase(1*time.Millisecond),
+	)
+}
+
+// --------------------------------------------------------------------------
+// fakeClock — controllable Clock for stall-detection tests
+// --------------------------------------------------------------------------
+
+type fakeClock struct {
+	mu  sync.Mutex
+	now time.Time
+}
+
+func newFakeClock() *fakeClock {
+	return &fakeClock{now: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)}
+}
+
+func (c *fakeClock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.now
+}
+
+// Advance moves the fake clock forward by d.
+func (c *fakeClock) Advance(d time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.now = c.now.Add(d)
+}
+
+var _ mcp.Clock = (*fakeClock)(nil)

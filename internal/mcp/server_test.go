@@ -1,10 +1,12 @@
 package mcp_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -605,4 +607,139 @@ func TestRunStallCheck_TOCTOU_CheckpointArrivesBeforeLock_ReturnsFalse(t *testin
 	cp, err := s.Store().ReadCheckpoint(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, "AWAITING_PR", cp.State)
+}
+
+// --------------------------------------------------------------------------
+// E8: Coverage — stateInstruction all-states and WithMonitorConfig
+// --------------------------------------------------------------------------
+
+// TestLoomNextStep_AllStates drives the FSM through all reachable states and
+// asserts that loom_next_step returns a non-empty instruction for each one.
+// This covers the stateInstruction switch in server.go.
+func TestLoomNextStep_AllStates(t *testing.T) {
+	// Helper: advance FSM to a specific state, then call loom_next_step.
+	checkInstruction := func(t *testing.T, transitions []string, wantState string) {
+		t.Helper()
+		_, mcpSvr := newTestServer(t)
+		for _, action := range transitions {
+			r := callTool(t, mcpSvr, "loom_checkpoint", map[string]interface{}{"action": action})
+			assert.False(t, r.IsError, "unexpected error on action %q: %s", action, toolText(t, r))
+		}
+		result := callTool(t, mcpSvr, "loom_next_step", nil)
+		assert.False(t, result.IsError)
+		var got NextStepResult
+		require.NoError(t, json.Unmarshal([]byte(toolText(t, result)), &got))
+		assert.Equal(t, wantState, got.State)
+		assert.NotEmpty(t, got.Instruction, "instruction must be non-empty for state %s", wantState)
+	}
+
+	// Advance to each state using the minimal transition sequence.
+	checkInstruction(t, nil, "IDLE")
+	checkInstruction(t, []string{"start"}, "SCANNING")
+	checkInstruction(t, []string{"start", "phase_identified"}, "ISSUE_CREATED")
+	checkInstruction(t, []string{"start", "phase_identified", "copilot_assigned"}, "AWAITING_PR")
+	checkInstruction(t,
+		[]string{"start", "phase_identified", "copilot_assigned", "pr_opened"}, "AWAITING_READY")
+	checkInstruction(t,
+		[]string{"start", "phase_identified", "copilot_assigned", "pr_opened", "pr_ready"}, "AWAITING_CI")
+	checkInstruction(t,
+		[]string{"start", "phase_identified", "copilot_assigned", "pr_opened", "pr_ready", "ci_green"}, "REVIEWING")
+	checkInstruction(t,
+		[]string{"start", "phase_identified", "copilot_assigned", "pr_opened", "pr_ready", "ci_red"}, "DEBUGGING")
+	checkInstruction(t,
+		[]string{
+			"start", "phase_identified", "copilot_assigned", "pr_opened", "pr_ready",
+			"ci_green", "review_changes_requested",
+		}, "ADDRESSING_FEEDBACK")
+	checkInstruction(t,
+		[]string{
+			"start", "phase_identified", "copilot_assigned", "pr_opened", "pr_ready",
+			"ci_green", "review_approved",
+		}, "MERGING")
+	checkInstruction(t,
+		[]string{
+			"start", "phase_identified", "copilot_assigned", "pr_opened", "pr_ready",
+			"ci_green", "review_approved", "merged_epic_boundary",
+		}, "REFACTORING")
+	checkInstruction(t, []string{"start", "all_phases_done"}, "COMPLETE")
+	checkInstruction(t, []string{"abort"}, "PAUSED")
+}
+
+// NextStepResult mirrors mcp.NextStepResult for JSON unmarshalling in tests
+// without importing the production type.
+type NextStepResult = mcp.NextStepResult
+
+// TestWithMonitorConfig_AppliesConfig verifies that WithMonitorConfig sets
+// the monitor configuration on the Server (covering the option function).
+func TestWithMonitorConfig_AppliesConfig(t *testing.T) {
+	clk := newFakeClock()
+	cfg := mcp.MonitorConfig{
+		StallTimeout:      1 * time.Second,
+		HeartbeatInterval: 2 * time.Second,
+		TickInterval:      500 * time.Millisecond,
+	}
+	machine := fsm.NewMachine(fsm.DefaultConfig())
+	st := newMemStore()
+	s := mcp.NewServer(machine, st, nil, mcp.WithClock(clk), mcp.WithMonitorConfig(cfg))
+	mcpSvr := s.MCPServer()
+
+	// Drive to gate state.
+	callTool(t, mcpSvr, "loom_checkpoint", map[string]interface{}{"action": "start"})
+	callTool(t, mcpSvr, "loom_checkpoint", map[string]interface{}{"action": "phase_identified"})
+	callTool(t, mcpSvr, "loom_checkpoint", map[string]interface{}{"action": "copilot_assigned"})
+
+	// Custom stall timeout is 1 second; advance 2 seconds — must stall.
+	clk.Advance(2 * time.Second)
+	stalled := s.RunStallCheck(context.Background())
+	assert.True(t, stalled, "expected stall with custom 1-second StallTimeout")
+}
+
+// --------------------------------------------------------------------------
+// E8: Coverage — handleAbort store failure, startMonitor goroutine, Serve
+// --------------------------------------------------------------------------
+
+// failingAbortStore fails on all writes, used to test handleAbort error path.
+type failingAbortStore struct {
+	memStore
+}
+
+func (s *failingAbortStore) WriteCheckpoint(_ context.Context, _ store.Checkpoint) error {
+	return errors.New("simulated abort store failure")
+}
+
+func (s *failingAbortStore) Close() error { return nil }
+
+func TestLoomAbort_StoreWriteFailure_ReturnsError(t *testing.T) {
+	machine := fsm.NewMachine(fsm.DefaultConfig())
+	st := &failingAbortStore{}
+	s := mcp.NewServer(machine, st, nil)
+	mcpSvr := s.MCPServer()
+
+	result := callTool(t, mcpSvr, "loom_abort", nil)
+	assert.True(t, result.IsError, "expected tool error when abort store write fails")
+}
+
+// TestServe_CancelledContext verifies that Serve returns without error when
+// the provided context is already cancelled. This exercises the Serve method
+// and the startMonitor goroutine startup.
+func TestServe_CancelledContext(t *testing.T) {
+	machine := fsm.NewMachine(fsm.DefaultConfig())
+	st := newMemStore()
+	s := mcp.NewServer(machine, st, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately
+
+	// Use a pipe so Serve has valid I/O but the context is already done.
+	pr, pw := io.Pipe()
+	defer pr.Close()
+	defer pw.Close()
+
+	var buf bytes.Buffer
+	// Serve should return quickly because ctx is already cancelled.
+	err := s.Serve(ctx, pr, &buf)
+	// Accept either nil or a context error.
+	if err != nil {
+		assert.ErrorIs(t, err, context.Canceled)
+	}
 }
