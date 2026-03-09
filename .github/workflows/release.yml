@@ -1,0 +1,41 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+          cache: true
+
+      - name: Build binaries
+        run: |
+          CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags="-s -w" -o loom-linux-amd64      ./cmd/loom
+          CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -ldflags="-s -w" -o loom-linux-arm64      ./cmd/loom
+          CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -ldflags="-s -w" -o loom-darwin-amd64     ./cmd/loom
+          CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -ldflags="-s -w" -o loom-darwin-arm64     ./cmd/loom
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o loom-windows-amd64.exe ./cmd/loom
+
+      - name: Generate checksums
+        run: sha256sum loom-linux-amd64 loom-linux-arm64 loom-darwin-amd64 loom-darwin-arm64 loom-windows-amd64.exe > checksums.txt
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            loom-linux-amd64
+            loom-linux-arm64
+            loom-darwin-amd64
+            loom-darwin-arm64
+            loom-windows-amd64.exe
+            checksums.txt

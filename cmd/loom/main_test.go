@@ -2,9 +2,12 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"os"
 	"strings"
 	"testing"
 
+	"github.com/guillaume7/loom/internal/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -98,5 +101,90 @@ func TestLogCmd_EmptyFile_ExitsOK(t *testing.T) {
 	err := cmd.Execute()
 	require.NoError(t, err)
 	assert.Empty(t, buf.String())
+}
+
+func TestLogCmd_WithContent_PrintsLines(t *testing.T) {
+	dir := t.TempDir()
+	logPath := dir + "/loom.log"
+	t.Setenv("LOOM_LOG_PATH", logPath)
+	t.Setenv("LOOM_DB_PATH", dir+"/state.db")
+
+	// Write two log lines.
+	require.NoError(t, os.WriteFile(logPath, []byte(`{"level":"INFO","msg":"first"}
+{"level":"INFO","msg":"second"}
+`), 0o600))
+
+	var buf bytes.Buffer
+	cmd := newRootCmd()
+	cmd.SetOut(&buf)
+	cmd.SetArgs([]string{"log"})
+	require.NoError(t, cmd.Execute())
+	assert.Contains(t, buf.String(), "first")
+	assert.Contains(t, buf.String(), "second")
+}
+
+func TestLogCmd_Tail_LimitsOutput(t *testing.T) {
+	dir := t.TempDir()
+	logPath := dir + "/loom.log"
+	t.Setenv("LOOM_LOG_PATH", logPath)
+	t.Setenv("LOOM_DB_PATH", dir+"/state.db")
+
+	require.NoError(t, os.WriteFile(logPath, []byte("line1\nline2\nline3\n"), 0o600))
+
+	var buf bytes.Buffer
+	cmd := newRootCmd()
+	cmd.SetOut(&buf)
+	cmd.SetArgs([]string{"log", "-n", "1"})
+	require.NoError(t, cmd.Execute())
+	out := buf.String()
+	assert.Contains(t, out, "line3")
+	assert.NotContains(t, out, "line1")
+}
+
+func TestStatusCmd_WithActiveCheckpoint_PrintsStateAndPhase(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := dir + "/state.db"
+	t.Setenv("LOOM_DB_PATH", dbPath)
+
+	// Write a checkpoint directly to the store.
+	st, err := store.New(dbPath)
+	require.NoError(t, err)
+	require.NoError(t, st.WriteCheckpoint(context.Background(), store.Checkpoint{
+		State: "SCANNING",
+		Phase: 2,
+	}))
+	require.NoError(t, st.Close())
+
+	var buf bytes.Buffer
+	cmd := newRootCmd()
+	cmd.SetOut(&buf)
+	cmd.SetArgs([]string{"status"})
+	require.NoError(t, cmd.Execute())
+
+	out := buf.String()
+	assert.Contains(t, out, "SCANNING")
+	assert.Contains(t, out, "2")
+}
+
+func TestResumeCmd_WithPausedCheckpoint_PrintsResuming(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := dir + "/state.db"
+	t.Setenv("LOOM_DB_PATH", dbPath)
+
+	// Write a PAUSED checkpoint.
+	st, err := store.New(dbPath)
+	require.NoError(t, err)
+	require.NoError(t, st.WriteCheckpoint(context.Background(), store.Checkpoint{
+		State: "PAUSED",
+		Phase: 1,
+	}))
+	require.NoError(t, st.Close())
+
+	var buf bytes.Buffer
+	cmd := newRootCmd()
+	cmd.SetOut(&buf)
+	cmd.SetArgs([]string{"resume"})
+	require.NoError(t, cmd.Execute())
+	assert.Contains(t, buf.String(), "Resuming")
 }
 
