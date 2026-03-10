@@ -9,6 +9,7 @@ This directory contains the **agent definitions** and **shared skills** for the 
 | Agent | File | Primary Responsibility |
 |---|---|---|
 | **Orchestrator** | [`agents/orchestrator.md`](agents/orchestrator.md) | Coordinates work, enforces implementation order, tracks progress |
+| **Loom MCP Operator** | [`agents/loom-mcp-operator.md`](agents/loom-mcp-operator.md) | Drives the persistent local master session via Loom MCP tools |
 | **Product Manager** | [`agents/product-manager.md`](agents/product-manager.md) | Owns backlog, acceptance criteria, scope decisions |
 | **Architect** | [`agents/architect.md`](agents/architect.md) | Module boundaries, Go interfaces, ADRs, MCP protocol design |
 | **Backend Developer** | [`agents/backend-developer.md`](agents/backend-developer.md) | Go implementation: FSM, GitHub client, MCP server, store |
@@ -31,6 +32,7 @@ This directory contains the **agent definitions** and **shared skills** for the 
 | Review Checklist | [`skills/review-checklist.md`](skills/review-checklist.md) | Reviewer, Refactoring Agent |
 | Epic & Story Breakdown | [`skills/epic-story-breakdown.md`](skills/epic-story-breakdown.md) | Orchestrator, Product Manager |
 | GitHub Phase Loop | [`skills/github-phase-loop.md`](skills/github-phase-loop.md) | Orchestrator — drives issue→PR→review→CI→merge loop |
+| Loom MCP Loop | [`skills/loom-mcp-loop.md`](skills/loom-mcp-loop.md) | Loom MCP Operator — drives `loom_next_step` → GitHub action → `loom_checkpoint` |
 
 ---
 

@@ -74,6 +74,21 @@ Full diagram and transition table: `docs/loom/analysis.md § 5`
 | `loom_get_state` | Returns full state for debugging |
 | `loom_abort` | Emergency stop → PAUSED state |
 
+## Master Session Operating Contract
+
+When a Copilot session is operating Loom itself rather than implementing Loom,
+it should behave as the **Loom MCP Operator** defined in
+`.github/agents/loom-mcp-operator.md` and apply the
+`loom-mcp-loop` skill from `.github/skills/loom-mcp-loop.md`.
+
+That contract is strict:
+
+- ask Loom for the next step before acting
+- execute one GitHub-side workflow step at a time
+- checkpoint with the canonical action name immediately after the step completes
+- use `loom_heartbeat` during waits
+- use `loom_get_state` for diagnosis and `loom_abort` when the session cannot proceed safely
+
 ## When Writing or Editing Docs
 
 - Maintain the existing Markdown style: H2 sections, tables for comparisons, blockquotes for key insights

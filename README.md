@@ -145,6 +145,11 @@ Loom registers itself as an MCP server and opens a Copilot Agent session. The
 Session calls `loom_next_step` → executes the task → calls `loom_checkpoint` →
 advances the state machine → loops until complete.
 
+For that master session, use the workspace agent
+`.github/agents/loom-mcp-operator.md` together with the skill
+`.github/skills/loom-mcp-loop.md` so the session follows the exact Loom MCP
+contract instead of improvising workflow steps.
+
 If you built from source and kept the binary in the repository root rather than
 installing it globally, run `./loom start` instead.
 
