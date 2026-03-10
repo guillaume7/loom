@@ -1,0 +1,14 @@
+{
+  "servers": {
+    "loom": {
+      "type": "stdio",
+      "command": "go",
+      "args": ["run", "${workspaceFolder}/cmd/loom", "mcp"]
+    },
+    "context7": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp@latest"]
+    }
+  }
+}

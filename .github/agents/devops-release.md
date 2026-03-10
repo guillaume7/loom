@@ -96,7 +96,7 @@ Follow [Semantic Versioning](https://semver.org/):
 - [ ] All CI jobs pass on `main`
 - [ ] `go build ./cmd/loom` produces a clean binary
 - [ ] Cross-compilation succeeds for linux/darwin/windows × amd64/arm64
-- [ ] `CHANGELOG.md` updated
-- [ ] Version bumped in `cmd/loom/main.go` version constant
+- [ ] Generated release notes are reviewed for the tagged release
+- [ ] `loom version` reports the expected release version and build metadata
 - [ ] Git tag created: `v0.X.Y`
 - [ ] GitHub Release created with binaries attached

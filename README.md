@@ -55,11 +55,54 @@ See [docs/loom/analysis.md](docs/loom/analysis.md) for the full architecture.
 
 ### Prerequisites
 
-- Go 1.22+
 - VS Code with GitHub Copilot extension
 - GitHub personal access token with `repo` scope
 
-### Install
+If you want to build Loom from source instead of installing a release binary,
+you also need Go 1.23+.
+
+### Install From A Release
+
+Each GitHub release publishes these assets:
+
+- `loom-linux-amd64`
+- `loom-linux-arm64`
+- `loom-darwin-amd64`
+- `loom-darwin-arm64`
+- `loom-windows-amd64.exe`
+- `checksums.txt`
+
+Pick the asset that matches your OS and CPU architecture, download it from the
+[GitHub Releases](https://github.com/guillaume7/loom/releases) page, verify the
+checksum, and place it on your `PATH` as `loom`.
+
+Example for Linux/macOS:
+
+```bash
+VERSION=v1.0.0
+OS=linux
+ARCH=amd64
+
+curl -L -o loom "https://github.com/guillaume7/loom/releases/download/${VERSION}/loom-${OS}-${ARCH}"
+curl -L -o checksums.txt "https://github.com/guillaume7/loom/releases/download/${VERSION}/checksums.txt"
+grep "  loom-${OS}-${ARCH}$" checksums.txt | sha256sum -c -
+install -m 0755 loom /usr/local/bin/loom
+loom --version
+```
+
+Example for Windows PowerShell:
+
+```powershell
+$Version = "v1.0.0"
+Invoke-WebRequest -Uri "https://github.com/guillaume7/loom/releases/download/$Version/loom-windows-amd64.exe" -OutFile "loom.exe"
+Invoke-WebRequest -Uri "https://github.com/guillaume7/loom/releases/download/$Version/checksums.txt" -OutFile "checksums.txt"
+Get-FileHash .\loom.exe -Algorithm SHA256
+```
+
+Compare the SHA-256 hash from `Get-FileHash` with the `loom-windows-amd64.exe`
+entry in `checksums.txt`, then move `loom.exe` somewhere on your `PATH`.
+
+### Build From Source
 
 ```bash
 git clone https://github.com/guillaume7/loom
@@ -75,15 +118,79 @@ export LOOM_REPO=your-target-repo
 export LOOM_TOKEN=ghp_xxxxxxxxxxxx
 ```
 
+### Configure As An MCP Server
+
+Once `loom` is on your `PATH`, register it in your VS Code or Copilot MCP
+configuration:
+
+```json
+{
+  "mcpServers": {
+    "loom": {
+      "type": "stdio",
+      "command": "loom",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
 ### Run
 
 ```bash
-./loom start
+loom start
 ```
 
 Loom registers itself as an MCP server and opens a Copilot Agent session. The
 Session calls `loom_next_step` → executes the task → calls `loom_checkpoint` →
 advances the state machine → loops until complete.
+
+If you built from source and kept the binary in the repository root rather than
+installing it globally, run `./loom start` instead.
+
+### Dev Container
+
+If you want to keep your host Go toolchain untouched, open the repo in the dev
+container instead:
+
+```bash
+code .
+```
+
+Then run `Dev Containers: Reopen in Container` in VS Code. The container uses
+Go 1.23 and includes `nodejs`/`npm`, so the workspace MCP tools in
+`.vscode/mcp.json` can start `go run ./cmd/loom mcp` and `npx
+@upstash/context7-mcp@latest` without installing anything on the host.
+
+---
+
+## Release Process
+
+To publish a new Loom release such as `v1.0.0`:
+
+1. Ensure `main` is releasable.
+2. Run `go test ./...`, `go test -race ./...`, and `go build ./cmd/loom`.
+3. Confirm `loom --version` reports the expected build metadata in a tagged build.
+4. Create and push an annotated tag:
+
+```bash
+git checkout main
+git pull --ff-only
+git tag -a v1.0.0 -m "Release v1.0.0"
+git push origin v1.0.0
+```
+
+The release workflow in `.github/workflows/release.yml` then runs GoReleaser,
+which:
+
+- cross-compiles the supported binaries
+- injects version, commit, and build date metadata
+- generates `checksums.txt`
+- generates Git-based release notes
+- publishes all artifacts to the GitHub Release for that tag
+
+Users then install Loom by downloading the matching release asset from GitHub
+Releases and placing it on their `PATH`.
 
 ---
 
@@ -97,7 +204,10 @@ advances the state machine → loops until complete.
 | `loom resume` | Continue from PAUSED state |
 | `loom reset` | Clear all state (with confirmation) |
 | `loom log` | Stream structured JSON log output |
+| `loom version` | Print the Loom version, commit, and build date |
 | `loom mcp` | Start MCP stdio server (called by VS Code) |
+
+You can also print build metadata directly with `loom --version`.
 
 ---
 

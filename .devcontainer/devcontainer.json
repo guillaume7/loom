@@ -1,0 +1,21 @@
+{
+  "name": "loom-go123",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.Go",
+        "GitHub.copilot",
+        "GitHub.copilot-chat"
+      ]
+    }
+  },
+  "postCreateCommand": "go mod download",
+  "remoteEnv": {
+    "GOTOOLCHAIN": "auto"
+  }
+}

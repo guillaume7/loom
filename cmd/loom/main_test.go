@@ -20,9 +20,47 @@ func TestRootCmd_Help_ListsAllSubcommands(t *testing.T) {
 	cmd.SetArgs([]string{"--help"})
 	_ = cmd.Execute()
 	out := buf.String()
-	for _, sub := range []string{"mcp", "start", "status", "pause", "resume", "reset", "log"} {
+	for _, sub := range []string{"version", "mcp", "start", "status", "pause", "resume", "reset", "log"} {
 		assert.True(t, strings.Contains(out, sub), "expected %q in help output", sub)
 	}
+}
+
+func TestVersionCmd_PrintsBuildMetadata(t *testing.T) {
+	oldVersion, oldCommit, oldDate := version, commit, date
+	version, commit, date = "v1.0.0", "abc1234", "2026-03-10T00:00:00Z"
+	t.Cleanup(func() {
+		version, commit, date = oldVersion, oldCommit, oldDate
+	})
+
+	var buf bytes.Buffer
+	cmd := newRootCmd()
+	cmd.SetOut(&buf)
+	cmd.SetArgs([]string{"version"})
+	require.NoError(t, cmd.Execute())
+
+	out := buf.String()
+	assert.Contains(t, out, "loom v1.0.0")
+	assert.Contains(t, out, "commit: abc1234")
+	assert.Contains(t, out, "built: 2026-03-10T00:00:00Z")
+}
+
+func TestRootCmd_VersionFlag_PrintsBuildMetadata(t *testing.T) {
+	oldVersion, oldCommit, oldDate := version, commit, date
+	version, commit, date = "v1.0.0", "abc1234", "2026-03-10T00:00:00Z"
+	t.Cleanup(func() {
+		version, commit, date = oldVersion, oldCommit, oldDate
+	})
+
+	var buf bytes.Buffer
+	cmd := newRootCmd()
+	cmd.SetOut(&buf)
+	cmd.SetArgs([]string{"--version"})
+	require.NoError(t, cmd.Execute())
+
+	out := buf.String()
+	assert.Contains(t, out, "loom v1.0.0")
+	assert.Contains(t, out, "commit: abc1234")
+	assert.Contains(t, out, "built: 2026-03-10T00:00:00Z")
 }
 
 func TestStatusCmd_NoCheckpoint_PrintsNoActiveSession(t *testing.T) {
@@ -187,4 +225,3 @@ func TestResumeCmd_WithPausedCheckpoint_PrintsResuming(t *testing.T) {
 	require.NoError(t, cmd.Execute())
 	assert.Contains(t, buf.String(), "Resuming")
 }
-

@@ -9,7 +9,7 @@ E8: Integration & Hardening
 
 
 ## Goal
-Add a GitHub Actions release workflow that triggers on `v*` tag pushes, cross-compiles all 5 binaries, and uploads them as assets to a GitHub Release — making Loom installable without building from source.
+Add a GitHub Actions release workflow that triggers on `v*` tag pushes, delegates cross-compilation to GoReleaser, and uploads all 5 binaries as GitHub Release assets — making Loom installable without building from source.
 
 ## Acceptance Criteria
 
@@ -39,9 +39,9 @@ Then the release workflow does NOT trigger
 
 1. [ ] Write a workflow-validation test that parses `release.yml` and asserts the trigger is `tags: ['v*']` (write test first)
 2. [ ] Create `.github/workflows/release.yml` with `on: push: tags: ['v*']`
-3. [ ] Add cross-compile matrix steps for all 5 platforms with `CGO_ENABLED=0`
-4. [ ] Generate `checksums.txt` using `sha256sum` on all binaries
-5. [ ] Use `softprops/action-gh-release` to create the release and upload assets
+3. [ ] Add `.goreleaser.yml` for all 5 platforms with `CGO_ENABLED=0`
+4. [ ] Configure GoReleaser to generate `checksums.txt` for all binaries
+5. [ ] Use `goreleaser/goreleaser-action` to create the release and upload assets
 6. [ ] Create and push a test tag `v0.0.1-test` pointing at a commit on `main` and confirm the workflow produces all 5 binary assets
 
 ## Dependencies
