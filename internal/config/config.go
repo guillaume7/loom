@@ -24,9 +24,10 @@ type Config struct {
 	// Defaults to ~/.loom/loom.log if unset.
 	LogPath string `toml:"log_path"`
 
-	// RepoOwner and RepoName are legacy aliases kept for backward compatibility.
+	// Deprecated: Use Owner instead.
 	RepoOwner string `toml:"repo_owner"`
-	RepoName  string `toml:"repo_name"`
+	// Deprecated: Use Repo instead.
+	RepoName string `toml:"repo_name"`
 }
 
 // Load reads configuration from ~/.loom/config.toml and then applies
@@ -44,7 +45,10 @@ type Config struct {
 func Load() (Config, error) {
 	var cfg Config
 
-	homeDir, _ := os.UserHomeDir()
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		homeDir = ""
+	}
 	if homeDir != "" {
 		path := filepath.Join(homeDir, ".loom", "config.toml")
 		data, err := os.ReadFile(path)

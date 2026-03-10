@@ -27,22 +27,22 @@ func TestDebugLoop(t *testing.T) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/repos/owner/repo":
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]interface{}{"full_name": "owner/repo"})
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"full_name": "owner/repo"})
 
 		case r.Method == http.MethodPost && r.URL.Path == "/repos/owner/repo/issues":
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(loomgh.Issue{Number: 1, Title: "Debug issue", State: "open"})
+			_ = json.NewEncoder(w).Encode(loomgh.Issue{Number: 1, Title: "Debug issue", State: "open"})
 
 		case r.Method == http.MethodGet && r.URL.Path == "/repos/owner/repo/pulls":
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode([]map[string]interface{}{
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
 				{"number": 1, "title": "PR 1", "draft": false, "state": "open",
 					"head": map[string]interface{}{"sha": "deadbeef"}},
 			})
 
 		case r.Method == http.MethodGet && r.URL.Path == "/repos/owner/repo/pulls/1":
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"number": 1, "draft": false, "state": "open",
 				"head": map[string]interface{}{"sha": "deadbeef"},
 			})
@@ -52,14 +52,14 @@ func TestDebugLoop(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 			if n == 1 {
 				// First call: CI failure
-				json.NewEncoder(w).Encode(map[string]interface{}{
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{
 					"check_runs": []map[string]interface{}{
 						{"name": "CI", "status": "completed", "conclusion": "failure"},
 					},
 				})
 			} else {
 				// Subsequent calls: CI success
-				json.NewEncoder(w).Encode(map[string]interface{}{
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{
 					"check_runs": []map[string]interface{}{
 						{"name": "CI", "status": "completed", "conclusion": "success"},
 					},
@@ -68,17 +68,17 @@ func TestDebugLoop(t *testing.T) {
 
 		case r.Method == http.MethodPost && r.URL.Path == "/repos/owner/repo/pulls/1/requested_reviewers":
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]interface{}{})
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{})
 
 		case r.Method == http.MethodGet && r.URL.Path == "/repos/owner/repo/pulls/1/reviews":
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode([]map[string]interface{}{
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
 				{"state": "APPROVED", "body": "LGTM"},
 			})
 
 		case r.Method == http.MethodPut && r.URL.Path == "/repos/owner/repo/pulls/1/merge":
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]interface{}{"merged": true})
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"merged": true})
 
 		default:
 			t.Logf("unhandled request: %s %s", r.Method, r.URL.Path)

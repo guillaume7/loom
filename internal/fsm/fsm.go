@@ -127,6 +127,12 @@ func (m *Machine) State() State {
 	return m.state
 }
 
+// invalidTransition returns a descriptive error for an event that is not valid
+// in the machine's current state.
+func (m *Machine) invalidTransition(event Event) error {
+	return fmt.Errorf("invalid transition: no transition from state %q on event %q", m.state, event)
+}
+
 // Transition fires event on the machine, mutates state, and returns the new
 // state. It returns a descriptive error when the event is not valid in the
 // current state. Transition never panics.
@@ -149,7 +155,7 @@ func (m *Machine) Transition(event Event) (State, error) {
 		case EventStart:
 			newState = StateScanning
 		default:
-			return m.state, fmt.Errorf("invalid transition: no transition from state %q on event %q", m.state, event)
+			return m.state, m.invalidTransition(event)
 		}
 
 	case StateScanning:
@@ -159,7 +165,7 @@ func (m *Machine) Transition(event Event) (State, error) {
 		case EventAllPhasesDone:
 			newState = StateComplete
 		default:
-			return m.state, fmt.Errorf("invalid transition: no transition from state %q on event %q", m.state, event)
+			return m.state, m.invalidTransition(event)
 		}
 
 	case StateIssueCreated:
@@ -167,7 +173,7 @@ func (m *Machine) Transition(event Event) (State, error) {
 		case EventCopilotAssigned:
 			newState = StateAwaitingPR
 		default:
-			return m.state, fmt.Errorf("invalid transition: no transition from state %q on event %q", m.state, event)
+			return m.state, m.invalidTransition(event)
 		}
 
 	case StateAwaitingPR:
@@ -182,7 +188,7 @@ func (m *Machine) Transition(event Event) (State, error) {
 				newState = StateAwaitingPR
 			}
 		default:
-			return m.state, fmt.Errorf("invalid transition: no transition from state %q on event %q", m.state, event)
+			return m.state, m.invalidTransition(event)
 		}
 
 	case StateAwaitingReady:
@@ -198,7 +204,7 @@ func (m *Machine) Transition(event Event) (State, error) {
 				newState = StateAwaitingReady
 			}
 		default:
-			return m.state, fmt.Errorf("invalid transition: no transition from state %q on event %q", m.state, event)
+			return m.state, m.invalidTransition(event)
 		}
 
 	case StateAwaitingCI:
@@ -220,7 +226,7 @@ func (m *Machine) Transition(event Event) (State, error) {
 				newState = StateAwaitingCI
 			}
 		default:
-			return m.state, fmt.Errorf("invalid transition: no transition from state %q on event %q", m.state, event)
+			return m.state, m.invalidTransition(event)
 		}
 
 	case StateReviewing:
@@ -235,7 +241,7 @@ func (m *Machine) Transition(event Event) (State, error) {
 				newState = StateAddressingFeedback
 			}
 		default:
-			return m.state, fmt.Errorf("invalid transition: no transition from state %q on event %q", m.state, event)
+			return m.state, m.invalidTransition(event)
 		}
 
 	case StateDebugging:
@@ -243,7 +249,7 @@ func (m *Machine) Transition(event Event) (State, error) {
 		case EventFixPushed:
 			newState = StateAwaitingCI
 		default:
-			return m.state, fmt.Errorf("invalid transition: no transition from state %q on event %q", m.state, event)
+			return m.state, m.invalidTransition(event)
 		}
 
 	case StateAddressingFeedback:
@@ -251,7 +257,7 @@ func (m *Machine) Transition(event Event) (State, error) {
 		case EventFeedbackAddressed:
 			newState = StateAwaitingCI
 		default:
-			return m.state, fmt.Errorf("invalid transition: no transition from state %q on event %q", m.state, event)
+			return m.state, m.invalidTransition(event)
 		}
 
 	case StateMerging:
@@ -261,7 +267,7 @@ func (m *Machine) Transition(event Event) (State, error) {
 		case EventMergedEpicBoundary:
 			newState = StateRefactoring
 		default:
-			return m.state, fmt.Errorf("invalid transition: no transition from state %q on event %q", m.state, event)
+			return m.state, m.invalidTransition(event)
 		}
 
 	case StateRefactoring:
@@ -269,14 +275,14 @@ func (m *Machine) Transition(event Event) (State, error) {
 		case EventRefactorMerged:
 			newState = StateScanning
 		default:
-			return m.state, fmt.Errorf("invalid transition: no transition from state %q on event %q", m.state, event)
+			return m.state, m.invalidTransition(event)
 		}
 
 	case StateComplete:
-		return m.state, fmt.Errorf("invalid transition: no transition from state %q on event %q", m.state, event)
+		return m.state, m.invalidTransition(event)
 
 	case StatePaused:
-		return m.state, fmt.Errorf("invalid transition: no transition from state %q on event %q", m.state, event)
+		return m.state, m.invalidTransition(event)
 	}
 
 	// Reset per-state counters when entering a new state, so budgets are fresh

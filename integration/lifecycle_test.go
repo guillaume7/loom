@@ -31,26 +31,26 @@ func TestFullLifecycle_ThreePhases(t *testing.T) {
 		// Repository ping
 		case r.Method == http.MethodGet && r.URL.Path == "/repos/owner/repo":
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]interface{}{"full_name": "owner/repo"})
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"full_name": "owner/repo"})
 
 		// Create issue
 		case r.Method == http.MethodPost && r.URL.Path == "/repos/owner/repo/issues":
 			n := issueCount.Add(1)
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(loomgh.Issue{Number: int(n), Title: "Phase issue", State: "open"})
+			_ = json.NewEncoder(w).Encode(loomgh.Issue{Number: int(n), Title: "Phase issue", State: "open"})
 
 		// List PRs
 		case r.Method == http.MethodGet && r.URL.Path == "/repos/owner/repo/pulls":
 			prListCount.Add(1)
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode([]map[string]interface{}{
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
 				{"number": 1, "title": "PR 1", "draft": false, "state": "open", "head": map[string]interface{}{"sha": "abc123"}},
 			})
 
 		// Get single PR
 		case r.Method == http.MethodGet && r.URL.Path == "/repos/owner/repo/pulls/1":
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"number": 1, "title": "PR 1", "draft": false, "state": "open",
 				"head": map[string]interface{}{"sha": "abc123"},
 			})
@@ -59,7 +59,7 @@ func TestFullLifecycle_ThreePhases(t *testing.T) {
 		case r.Method == http.MethodGet && r.URL.Path == "/repos/owner/repo/commits/abc123/check-runs":
 			checkRunCount.Add(1)
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"check_runs": []map[string]interface{}{
 					{"name": "CI", "status": "completed", "conclusion": "success"},
 				},
@@ -68,25 +68,25 @@ func TestFullLifecycle_ThreePhases(t *testing.T) {
 		// Request review
 		case r.Method == http.MethodPost && r.URL.Path == "/repos/owner/repo/pulls/1/requested_reviewers":
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]interface{}{})
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{})
 
 		// Get reviews
 		case r.Method == http.MethodGet && r.URL.Path == "/repos/owner/repo/pulls/1/reviews":
 			reviewCount.Add(1)
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode([]map[string]interface{}{
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
 				{"state": "APPROVED", "body": "LGTM"},
 			})
 
 		// Merge PR
 		case r.Method == http.MethodPut && r.URL.Path == "/repos/owner/repo/pulls/1/merge":
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]interface{}{"merged": true})
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"merged": true})
 
 		// Create tag
 		case r.Method == http.MethodPost && r.URL.Path == "/repos/owner/repo/git/refs":
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"ref": "refs/tags/v1.0.0",
 				"object": map[string]interface{}{"sha": "abc123"},
 			})
@@ -94,12 +94,12 @@ func TestFullLifecycle_ThreePhases(t *testing.T) {
 		// Create release
 		case r.Method == http.MethodPost && r.URL.Path == "/repos/owner/repo/releases":
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(loomgh.Release{ID: 1, TagName: "v1.0.0", Name: "Release v1.0.0"})
+			_ = json.NewEncoder(w).Encode(loomgh.Release{ID: 1, TagName: "v1.0.0", Name: "Release v1.0.0"})
 
 		default:
 			t.Logf("unhandled request: %s %s", r.Method, r.URL.Path)
 			w.WriteHeader(http.StatusNotFound)
-			json.NewEncoder(w).Encode(map[string]string{"error": "not found"})
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "not found"})
 		}
 	}))
 	defer srv.Close()

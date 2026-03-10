@@ -274,8 +274,8 @@ func (c *HTTPClient) AddComment(ctx context.Context, issueNumber int, body strin
 		Body string `json:"body"`
 	}{Body: body}
 
-	url := fmt.Sprintf("%s/issues/%d/comments", c.repoBase(), issueNumber)
-	if err := c.doRequest(ctx, http.MethodPost, url, reqBody, nil); err != nil {
+	endpoint := fmt.Sprintf("%s/issues/%d/comments", c.repoBase(), issueNumber)
+	if err := c.doRequest(ctx, http.MethodPost, endpoint, reqBody, nil); err != nil {
 		return fmt.Errorf("adding comment: %w", err)
 	}
 	return nil
@@ -287,8 +287,8 @@ func (c *HTTPClient) CloseIssue(ctx context.Context, issueNumber int) error {
 		State string `json:"state"`
 	}{State: "closed"}
 
-	url := fmt.Sprintf("%s/issues/%d", c.repoBase(), issueNumber)
-	if err := c.doRequest(ctx, http.MethodPatch, url, reqBody, nil); err != nil {
+	endpoint := fmt.Sprintf("%s/issues/%d", c.repoBase(), issueNumber)
+	if err := c.doRequest(ctx, http.MethodPatch, endpoint, reqBody, nil); err != nil {
 		return fmt.Errorf("closing issue: %w", err)
 	}
 	return nil
@@ -317,10 +317,10 @@ func (c *HTTPClient) ListPRs(ctx context.Context, branch string) ([]*PR, error) 
 
 // GetPR fetches a single pull request by number.
 func (c *HTTPClient) GetPR(ctx context.Context, prNumber int) (*PR, error) {
-	url := fmt.Sprintf("%s/pulls/%d", c.repoBase(), prNumber)
+	endpoint := fmt.Sprintf("%s/pulls/%d", c.repoBase(), prNumber)
 
 	var raw prAPIResponse
-	if err := c.doRequest(ctx, http.MethodGet, url, nil, &raw); err != nil {
+	if err := c.doRequest(ctx, http.MethodGet, endpoint, nil, &raw); err != nil {
 		return nil, fmt.Errorf("getting PR: %w", err)
 	}
 	return raw.toPR(), nil
@@ -328,10 +328,10 @@ func (c *HTTPClient) GetPR(ctx context.Context, prNumber int) (*PR, error) {
 
 // GetCheckRuns returns all check runs for a given commit SHA.
 func (c *HTTPClient) GetCheckRuns(ctx context.Context, sha string) ([]*CheckRun, error) {
-	url := fmt.Sprintf("%s/commits/%s/check-runs", c.repoBase(), sha)
+	endpoint := fmt.Sprintf("%s/commits/%s/check-runs", c.repoBase(), sha)
 
 	var envelope checkRunsEnvelope
-	if err := c.doRequest(ctx, http.MethodGet, url, nil, &envelope); err != nil {
+	if err := c.doRequest(ctx, http.MethodGet, endpoint, nil, &envelope); err != nil {
 		return nil, fmt.Errorf("getting check runs: %w", err)
 	}
 	return envelope.CheckRuns, nil
@@ -343,8 +343,8 @@ func (c *HTTPClient) MergePR(ctx context.Context, prNumber int, commitMessage st
 		CommitMessage string `json:"commit_message"`
 	}{CommitMessage: commitMessage}
 
-	url := fmt.Sprintf("%s/pulls/%d/merge", c.repoBase(), prNumber)
-	if err := c.doRequest(ctx, http.MethodPut, url, reqBody, nil); err != nil {
+	endpoint := fmt.Sprintf("%s/pulls/%d/merge", c.repoBase(), prNumber)
+	if err := c.doRequest(ctx, http.MethodPut, endpoint, reqBody, nil); err != nil {
 		return fmt.Errorf("merging PR: %w", err)
 	}
 	return nil
@@ -358,8 +358,8 @@ func (c *HTTPClient) RequestReview(ctx context.Context, prNumber int, reviewer s
 		Reviewers []string `json:"reviewers"`
 	}{Reviewers: []string{reviewer}}
 
-	url := fmt.Sprintf("%s/pulls/%d/requested_reviewers", c.repoBase(), prNumber)
-	if err := c.doRequest(ctx, http.MethodPost, url, reqBody, nil); err != nil {
+	endpoint := fmt.Sprintf("%s/pulls/%d/requested_reviewers", c.repoBase(), prNumber)
+	if err := c.doRequest(ctx, http.MethodPost, endpoint, reqBody, nil); err != nil {
 		return fmt.Errorf("requesting review: %w", err)
 	}
 	return nil
@@ -368,10 +368,10 @@ func (c *HTTPClient) RequestReview(ctx context.Context, prNumber int, reviewer s
 // GetReviewStatus returns the aggregated review state for a PR.
 // CHANGES_REQUESTED beats APPROVED beats PENDING.
 func (c *HTTPClient) GetReviewStatus(ctx context.Context, prNumber int) (string, error) {
-	url := fmt.Sprintf("%s/pulls/%d/reviews", c.repoBase(), prNumber)
+	endpoint := fmt.Sprintf("%s/pulls/%d/reviews", c.repoBase(), prNumber)
 
 	var reviews []Review
-	if err := c.doRequest(ctx, http.MethodGet, url, nil, &reviews); err != nil {
+	if err := c.doRequest(ctx, http.MethodGet, endpoint, nil, &reviews); err != nil {
 		return "", fmt.Errorf("getting review status: %w", err)
 	}
 

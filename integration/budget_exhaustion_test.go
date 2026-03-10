@@ -28,21 +28,21 @@ func TestRetryBudgetExhaustion(t *testing.T) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/repos/owner/repo":
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]interface{}{"full_name": "owner/repo"})
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"full_name": "owner/repo"})
 
 		case r.Method == http.MethodPost && r.URL.Path == "/repos/owner/repo/issues":
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(loomgh.Issue{Number: 1, Title: "Budget test", State: "open"})
+			_ = json.NewEncoder(w).Encode(loomgh.Issue{Number: 1, Title: "Budget test", State: "open"})
 
 		case r.Method == http.MethodGet && r.URL.Path == "/repos/owner/repo/pulls":
 			w.WriteHeader(http.StatusOK)
 			if returnPR.Load() {
-				json.NewEncoder(w).Encode([]map[string]interface{}{
+				_ = json.NewEncoder(w).Encode([]map[string]interface{}{
 					{"number": 1, "title": "PR 1", "draft": false, "state": "open",
 						"head": map[string]interface{}{"sha": "abc"}},
 				})
 			} else {
-				json.NewEncoder(w).Encode([]map[string]interface{}{}) // no PR yet
+				_ = json.NewEncoder(w).Encode([]map[string]interface{}{}) // no PR yet
 			}
 
 		default:

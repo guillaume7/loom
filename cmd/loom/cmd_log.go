@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"time"
 
@@ -34,11 +35,13 @@ func newLogCmd() *cobra.Command {
 						return nil
 					}
 					// Wait for the file to appear when following.
+					waitTicker := time.NewTicker(500 * time.Millisecond)
+					defer waitTicker.Stop()
 					for {
 						select {
 						case <-cmd.Context().Done():
 							return nil
-						case <-time.After(500 * time.Millisecond):
+						case <-waitTicker.C:
 						}
 						f, err = os.Open(logPath)
 						if err == nil {
@@ -49,7 +52,11 @@ func newLogCmd() *cobra.Command {
 					return err
 				}
 			}
-			defer f.Close()
+			defer func() {
+				if cerr := f.Close(); cerr != nil {
+					slog.Error("log file close", "error", cerr)
+				}
+			}()
 
 			// Collect all existing lines.
 			var lines []string
@@ -79,11 +86,13 @@ func newLogCmd() *cobra.Command {
 				return err
 			}
 
+			followTicker := time.NewTicker(500 * time.Millisecond)
+			defer followTicker.Stop()
 			for {
 				select {
 				case <-cmd.Context().Done():
 					return nil
-				case <-time.After(500 * time.Millisecond):
+				case <-followTicker.C:
 				}
 
 				if _, err := f.Seek(offset, io.SeekStart); err != nil {

@@ -30,7 +30,11 @@ func newMCPCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			defer st.Close()
+			defer func() {
+				if cerr := st.Close(); cerr != nil {
+					slog.Error("store close", "error", cerr)
+				}
+			}()
 
 			machine := fsm.NewMachine(fsm.DefaultConfig())
 

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/guillaume7/loom/internal/config"
@@ -28,7 +29,11 @@ func newResetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			defer st.Close()
+			defer func() {
+				if cerr := st.Close(); cerr != nil {
+					slog.Error("store close", "error", cerr)
+				}
+			}()
 
 			if !force {
 				fmt.Fprint(cmd.OutOrStdout(), "Are you sure? [y/N] ")
