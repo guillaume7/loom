@@ -30,6 +30,110 @@ type Story struct {
 	DependsOn []string `yaml:"depends_on"`
 }
 
+// Unblocked returns deterministic story IDs eligible for execution:
+// stories that are not done, whose story dependencies are done,
+// and whose epic-level dependencies are satisfied.
+func (g Graph) Unblocked(done []string) []string {
+	doneSet := make(map[string]struct{}, len(done))
+	for _, id := range done {
+		doneSet[id] = struct{}{}
+	}
+
+	epicsByID, storyByID, storyEpic := g.indexes()
+
+	ids := make([]string, 0)
+	for id := range storyByID {
+		if _, alreadyDone := doneSet[id]; alreadyDone {
+			continue
+		}
+
+		blocked, err := g.isBlockedWithIndex(id, doneSet, epicsByID, storyByID, storyEpic)
+		if err != nil {
+			// Indexes come from a validated graph; unknown IDs are not expected here.
+			continue
+		}
+
+		if !blocked {
+			ids = append(ids, id)
+		}
+	}
+
+	sort.Strings(ids)
+	return ids
+}
+
+// IsBlocked reports whether a story is blocked given the done set.
+// Returns an error when the story ID does not exist in the graph.
+func (g Graph) IsBlocked(id string, done []string) (bool, error) {
+	doneSet := make(map[string]struct{}, len(done))
+	for _, doneID := range done {
+		doneSet[doneID] = struct{}{}
+	}
+
+	epicsByID, storyByID, storyEpic := g.indexes()
+	return g.isBlockedWithIndex(id, doneSet, epicsByID, storyByID, storyEpic)
+}
+
+func (g Graph) isBlockedWithIndex(
+	id string,
+	doneSet map[string]struct{},
+	epicsByID map[string]Epic,
+	storyByID map[string]Story,
+	storyEpic map[string]string,
+) (bool, error) {
+	story, ok := storyByID[id]
+	if !ok {
+		return false, fmt.Errorf("unknown story id %q", id)
+	}
+
+	for _, dep := range story.DependsOn {
+		if _, done := doneSet[dep]; !done {
+			return true, nil
+		}
+	}
+
+	epicID := storyEpic[id]
+	epic := epicsByID[epicID]
+	for _, depEpicID := range epic.DependsOn {
+		if !epicComplete(depEpicID, doneSet, epicsByID) {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+func epicComplete(epicID string, doneSet map[string]struct{}, epicsByID map[string]Epic) bool {
+	epic, ok := epicsByID[epicID]
+	if !ok {
+		return false
+	}
+
+	for _, s := range epic.Stories {
+		if _, done := doneSet[s.ID]; !done {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (g Graph) indexes() (map[string]Epic, map[string]Story, map[string]string) {
+	epicsByID := make(map[string]Epic, len(g.Epics))
+	storyByID := make(map[string]Story)
+	storyEpic := make(map[string]string)
+
+	for _, epic := range g.Epics {
+		epicsByID[epic.ID] = epic
+		for _, story := range epic.Stories {
+			storyByID[story.ID] = story
+			storyEpic[story.ID] = epic.ID
+		}
+	}
+
+	return epicsByID, storyByID, storyEpic
+}
+
 // Load parses a .loom/dependencies.yaml file into a typed Graph.
 func Load(path string) (Graph, error) {
 	data, err := os.ReadFile(path)

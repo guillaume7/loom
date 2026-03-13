@@ -25,9 +25,23 @@
 ### 2026-03-13T20:40:36Z
 - status-change: TH2.E1.US2 -> done
 - Context: DAG validation implementation approved and tests verified.
+
+### 2026-03-13T20:41:10Z
+- status-change: TH2.E1.US3 -> in-progress
+- Context: Continuing E1 with unblocked/blocked evaluation implementation.
+
+### 2026-03-13T20:44:59Z
+- status-change: TH2.E1.US3 -> done
+- Context: Eligibility evaluation APIs implemented, reviewed, and full tests passed.
+
+### 2026-03-13T20:44:59Z
+- status-change: TH2.E1 -> done
+- Context: Small epic completion workflow finished with full test suite and changelog update.
 2026-03-13T20:33:22Z | Subagent completed
 2026-03-13T20:34:10Z | Subagent completed
 2026-03-13T20:35:23Z | Subagent completed
 2026-03-13T20:36:11Z | Subagent completed
 2026-03-13T20:38:52Z | Subagent completed
 2026-03-13T20:40:23Z | Subagent completed
+2026-03-13T20:43:42Z | Subagent completed
+2026-03-13T20:44:48Z | Subagent completed

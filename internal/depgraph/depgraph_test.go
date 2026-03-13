@@ -246,3 +246,177 @@ epics:
 	assert.Contains(t, err.Error(), "duplicate")
 	assert.Contains(t, err.Error(), "US-1.1")
 }
+
+func TestUnblocked_AllRootStoriesAreUnblockedInitially(t *testing.T) {
+	graph := depgraph.Graph{
+		Version: 1,
+		Epics: []depgraph.Epic{
+			{
+				ID:        "E1",
+				DependsOn: nil,
+				Stories: []depgraph.Story{
+					{ID: "US-1.1", DependsOn: nil},
+					{ID: "US-1.2", DependsOn: []string{"US-1.1"}},
+				},
+			},
+		},
+	}
+
+	unblocked := graph.Unblocked(nil)
+	assert.Equal(t, []string{"US-1.1"}, unblocked)
+}
+
+func TestUnblocked_CompletingDependencyUnblocksDependents(t *testing.T) {
+	graph := depgraph.Graph{
+		Version: 1,
+		Epics: []depgraph.Epic{
+			{
+				ID:        "E1",
+				DependsOn: nil,
+				Stories: []depgraph.Story{
+					{ID: "US-1.1", DependsOn: nil},
+					{ID: "US-2.1", DependsOn: []string{"US-1.1"}},
+				},
+			},
+		},
+	}
+
+	unblocked := graph.Unblocked([]string{"US-1.1"})
+	assert.Equal(t, []string{"US-2.1"}, unblocked)
+}
+
+func TestIsBlocked_EpicDependencyBlocksAllStoriesInEpic(t *testing.T) {
+	graph := depgraph.Graph{
+		Version: 1,
+		Epics: []depgraph.Epic{
+			{
+				ID:        "E1",
+				DependsOn: nil,
+				Stories: []depgraph.Story{
+					{ID: "US-1.1", DependsOn: nil},
+					{ID: "US-1.2", DependsOn: nil},
+				},
+			},
+			{
+				ID:        "E2",
+				DependsOn: []string{"E1"},
+				Stories: []depgraph.Story{
+					{ID: "US-2.1", DependsOn: nil},
+				},
+			},
+		},
+	}
+
+	blocked, err := graph.IsBlocked("US-2.1", nil)
+	require.NoError(t, err)
+	assert.True(t, blocked)
+}
+
+func TestIsBlocked_EpicDependencySatisfiedUnblocksEpicStories(t *testing.T) {
+	graph := depgraph.Graph{
+		Version: 1,
+		Epics: []depgraph.Epic{
+			{
+				ID:        "E1",
+				DependsOn: nil,
+				Stories: []depgraph.Story{
+					{ID: "US-1.1", DependsOn: nil},
+					{ID: "US-1.2", DependsOn: nil},
+				},
+			},
+			{
+				ID:        "E2",
+				DependsOn: []string{"E1"},
+				Stories: []depgraph.Story{
+					{ID: "US-2.1", DependsOn: nil},
+				},
+			},
+		},
+	}
+
+	blocked, err := graph.IsBlocked("US-2.1", []string{"US-1.1", "US-1.2"})
+	require.NoError(t, err)
+	assert.False(t, blocked)
+}
+
+func TestIsBlocked_MultipleDependenciesMustAllBeSatisfied(t *testing.T) {
+	graph := depgraph.Graph{
+		Version: 1,
+		Epics: []depgraph.Epic{
+			{
+				ID:        "E1",
+				DependsOn: nil,
+				Stories: []depgraph.Story{
+					{ID: "US-1.1", DependsOn: nil},
+				},
+			},
+			{
+				ID:        "E2",
+				DependsOn: nil,
+				Stories: []depgraph.Story{
+					{ID: "US-2.1", DependsOn: nil},
+				},
+			},
+			{
+				ID:        "E3",
+				DependsOn: nil,
+				Stories: []depgraph.Story{
+					{ID: "US-3.1", DependsOn: []string{"US-1.1", "US-2.1"}},
+				},
+			},
+		},
+	}
+
+	blocked, err := graph.IsBlocked("US-3.1", []string{"US-1.1"})
+	require.NoError(t, err)
+	assert.True(t, blocked)
+}
+
+func TestIsBlocked_UnknownIDReturnsError(t *testing.T) {
+	graph := depgraph.Graph{
+		Version: 1,
+		Epics: []depgraph.Epic{
+			{
+				ID:        "E1",
+				DependsOn: nil,
+				Stories: []depgraph.Story{
+					{ID: "US-1.1", DependsOn: nil},
+				},
+			},
+		},
+	}
+
+	_, err := graph.IsBlocked("US-99.99", []string{"US-1.1"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "US-99.99")
+}
+
+func TestUnblocked_RespectsEpicDependenciesAndReturnsDeterministicOrder(t *testing.T) {
+	graph := depgraph.Graph{
+		Version: 1,
+		Epics: []depgraph.Epic{
+			{
+				ID:        "E1",
+				DependsOn: nil,
+				Stories: []depgraph.Story{
+					{ID: "US-1.1", DependsOn: nil},
+					{ID: "US-1.2", DependsOn: nil},
+				},
+			},
+			{
+				ID:        "E2",
+				DependsOn: []string{"E1"},
+				Stories: []depgraph.Story{
+					{ID: "US-2.2", DependsOn: nil},
+					{ID: "US-2.1", DependsOn: nil},
+				},
+			},
+		},
+	}
+
+	initial := graph.Unblocked(nil)
+	assert.Equal(t, []string{"US-1.1", "US-1.2"}, initial)
+
+	afterEpicDone := graph.Unblocked([]string{"US-1.1", "US-1.2"})
+	assert.Equal(t, []string{"US-2.1", "US-2.2"}, afterEpicDone)
+}
