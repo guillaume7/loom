@@ -53,5 +53,18 @@
 ### 2026-03-13T23:30:35Z
 - status-change: TH2.E2.US1 -> done
 - Context: Action log migration implemented, approved, and verified with store tests.
+
+### 2026-03-13T23:30:51Z
+- status-change: TH2.E2.US2 -> in-progress
+- Context: Advancing Epic E2 to store read/write action log methods.
+
+### 2026-03-13T23:38:14Z
+- status-change: TH2.E2.US2 -> done
+- Context: Action log store methods approved after reset regression fix and verified locally.
 2026-03-13T23:29:21Z | Subagent completed
 2026-03-13T23:30:27Z | Subagent completed
+2026-03-13T23:33:48Z | Subagent completed
+2026-03-13T23:35:10Z | Subagent completed
+2026-03-13T23:35:28Z | Subagent completed
+2026-03-13T23:36:52Z | Subagent completed
+2026-03-13T23:38:07Z | Subagent completed

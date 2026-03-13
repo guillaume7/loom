@@ -6,8 +6,13 @@ package store
 
 import (
 	"context"
+	"errors"
 	"time"
 )
+
+// ErrDuplicateOperationKey indicates an action write attempted to reuse an
+// existing idempotency key.
+var ErrDuplicateOperationKey = errors.New("duplicate operation key")
 
 // Checkpoint is a point-in-time snapshot of the Loom workflow that is written
 // to durable storage after every state transition.
@@ -29,6 +34,18 @@ type Checkpoint struct {
 	UpdatedAt time.Time
 }
 
+// Action is a single append-only action log entry.
+type Action struct {
+	ID           int64
+	SessionID    string
+	OperationKey string
+	StateBefore  string
+	StateAfter   string
+	Event        string
+	Detail       string
+	CreatedAt    time.Time
+}
+
 // Store persists and retrieves Loom workflow checkpoints.
 type Store interface {
 	// ReadCheckpoint returns the most recent persisted Checkpoint.
@@ -38,7 +55,15 @@ type Store interface {
 	// WriteCheckpoint persists cp, overwriting any existing checkpoint.
 	WriteCheckpoint(ctx context.Context, cp Checkpoint) error
 
-	// DeleteAll removes all persisted checkpoints from the store.
+	// WriteAction appends an action log entry.
+	WriteAction(ctx context.Context, action Action) error
+
+	// ReadActions returns the most recent action log entries, ordered newest
+	// first. A limit of zero returns an empty, non-nil slice.
+	ReadActions(ctx context.Context, limit int) ([]Action, error)
+
+	// DeleteAll removes all persisted workflow state from the store, including
+	// checkpoints and action log entries.
 	DeleteAll(ctx context.Context) error
 
 	// Close releases any resources held by the store (e.g. the database

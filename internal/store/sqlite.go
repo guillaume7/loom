@@ -9,6 +9,8 @@ import (
 	"time"
 
 	_ "modernc.org/sqlite" // register sqlite driver
+	sqlite3 "modernc.org/sqlite"
+	sqlite3lib "modernc.org/sqlite/lib"
 )
 
 const memoryPath = ":memory:"
@@ -158,8 +160,104 @@ func (s *sqliteStore) WriteCheckpoint(ctx context.Context, cp Checkpoint) error 
 	return err
 }
 
+func (s *sqliteStore) WriteAction(ctx context.Context, action Action) error {
+	if action.CreatedAt.IsZero() {
+		action.CreatedAt = time.Now()
+	}
+
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO action_log
+			(session_id, operation_key, state_before, state_after, event, detail, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		action.SessionID,
+		action.OperationKey,
+		action.StateBefore,
+		action.StateAfter,
+		action.Event,
+		action.Detail,
+		action.CreatedAt.UTC().Format(time.RFC3339Nano),
+	)
+	if isDuplicateOperationKeyError(err) {
+		return ErrDuplicateOperationKey
+	}
+	return err
+}
+
+func (s *sqliteStore) ReadActions(ctx context.Context, limit int) ([]Action, error) {
+	if limit <= 0 {
+		return []Action{}, nil
+	}
+
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, session_id, operation_key, state_before, state_after, event, detail, created_at
+		FROM action_log
+		ORDER BY created_at DESC, id DESC
+		LIMIT ?`,
+		limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	actions := make([]Action, 0, limit)
+	for rows.Next() {
+		var action Action
+		var createdAt string
+		if err := rows.Scan(
+			&action.ID,
+			&action.SessionID,
+			&action.OperationKey,
+			&action.StateBefore,
+			&action.StateAfter,
+			&action.Event,
+			&action.Detail,
+			&createdAt,
+		); err != nil {
+			return nil, err
+		}
+		action.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAt)
+		if err != nil {
+			return nil, err
+		}
+		actions = append(actions, action)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return actions, nil
+}
+
+func isDuplicateOperationKeyError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	var sqliteErr *sqlite3.Error
+	return errors.As(err, &sqliteErr) && sqliteErr.Code() == sqlite3lib.SQLITE_CONSTRAINT_UNIQUE
+}
+
 func (s *sqliteStore) DeleteAll(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, "DELETE FROM checkpoint")
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	if _, err = tx.ExecContext(ctx, "DELETE FROM action_log"); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, "DELETE FROM checkpoint"); err != nil {
+		return err
+	}
+
+	err = tx.Commit()
 	return err
 }
 

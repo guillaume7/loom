@@ -1,7 +1,7 @@
 # Backlog — Core State File
 backlog:
   project: "loom"
-  last-updated: "2026-03-13T23:30:35Z"
+  last-updated: "2026-03-13T23:38:14Z"
   themes:
     # ── TH1: Loom v1 Core ────────────────────────────────────────────
     - id: TH1
@@ -94,7 +94,7 @@ backlog:
               depends-on: []
             - id: TH2.E2.US2
               title: "WriteAction and ReadActions store methods"
-              status: todo
+              status: done
               file: docs/themes/TH2-agent-platform/epics/E2-action-log/user-stories/US2-store-methods.md
               depends-on: [TH2.E2.US1]
             - id: TH2.E2.US3

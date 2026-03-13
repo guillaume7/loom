@@ -128,9 +128,10 @@ func toolText(t *testing.T, result *mcplib.CallToolResult) string {
 // --------------------------------------------------------------------------
 
 type memStore struct {
-	mu    sync.Mutex
-	cp    store.Checkpoint
-	empty bool
+	mu      sync.Mutex
+	cp      store.Checkpoint
+	actions []store.Action
+	empty   bool
 }
 
 func newMemStore() *memStore { return &memStore{empty: true} }
@@ -152,10 +153,43 @@ func (s *memStore) WriteCheckpoint(_ context.Context, cp store.Checkpoint) error
 	return nil
 }
 
+func (s *memStore) WriteAction(_ context.Context, action store.Action) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, existing := range s.actions {
+		if existing.OperationKey == action.OperationKey {
+			return store.ErrDuplicateOperationKey
+		}
+	}
+	if action.CreatedAt.IsZero() {
+		action.CreatedAt = time.Now().UTC()
+	}
+	action.ID = int64(len(s.actions) + 1)
+	s.actions = append(s.actions, action)
+	return nil
+}
+
+func (s *memStore) ReadActions(_ context.Context, limit int) ([]store.Action, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if limit <= 0 || len(s.actions) == 0 {
+		return []store.Action{}, nil
+	}
+	if limit > len(s.actions) {
+		limit = len(s.actions)
+	}
+	actions := make([]store.Action, 0, limit)
+	for index := len(s.actions) - 1; index >= len(s.actions)-limit; index-- {
+		actions = append(actions, s.actions[index])
+	}
+	return actions, nil
+}
+
 func (s *memStore) DeleteAll(_ context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.cp = store.Checkpoint{}
+	s.actions = nil
 	s.empty = true
 	return nil
 }
