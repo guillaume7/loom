@@ -1,0 +1,261 @@
+# Backlog — Core State File
+backlog:
+  project: "loom"
+  last-updated: "2026-03-13T20:36:40Z"
+  themes:
+    # ── TH1: Loom v1 Core ────────────────────────────────────────────
+    - id: TH1
+      name: "Loom v1 Core"
+      status: done
+      vision-ref: docs/vision_of_product/VP1-vision/
+      depends-on: []
+      epics:
+        - id: E1
+          name: "Project Foundation"
+          status: done
+          depends-on: []
+          stories: []
+        - id: E2
+          name: "State Machine"
+          status: done
+          depends-on: [E1]
+          stories: []
+        - id: E3
+          name: "GitHub Client"
+          status: done
+          depends-on: [E1]
+          stories: []
+        - id: E4
+          name: "MCP Server"
+          status: done
+          depends-on: [E2, E3]
+          stories: []
+        - id: E5
+          name: "CLI"
+          status: done
+          depends-on: [E4]
+          stories: []
+        - id: E6
+          name: "Session Management"
+          status: done
+          depends-on: [E4, E5]
+          stories: []
+        - id: E7
+          name: "Checkpointing"
+          status: done
+          depends-on: [E4]
+          stories: []
+        - id: E8
+          name: "Integration & Hardening"
+          status: done
+          depends-on: [E2, E3, E4, E5, E6, E7]
+          stories: []
+
+    # ── TH2: Native Agent Platform ───────────────────────────────────
+    - id: TH2
+      name: "Native Agent Platform"
+      status: in-progress
+      vision-ref: docs/vision_of_product/VP2-agent-platform/
+      depends-on: [TH1]
+      epics:
+
+        # E1 — Dependency Graph Engine (P0)
+        - id: E1
+          name: "Dependency Graph Engine"
+          status: in-progress
+          depends-on: []
+          stories:
+            - id: TH2.E1.US1
+              title: "YAML schema definition and parser"
+              status: done
+              file: docs/themes/TH2-agent-platform/epics/E1-dependency-graph/user-stories/US1-yaml-schema-parser.md
+              depends-on: []
+            - id: TH2.E1.US2
+              title: "DAG validation — cycle detection and ID reference validation"
+              status: todo
+              file: docs/themes/TH2-agent-platform/epics/E1-dependency-graph/user-stories/US2-dag-validation.md
+              depends-on: [TH2.E1.US1]
+            - id: TH2.E1.US3
+              title: "Unblocked and blocked evaluation functions"
+              status: todo
+              file: docs/themes/TH2-agent-platform/epics/E1-dependency-graph/user-stories/US3-unblocked-evaluation.md
+              depends-on: [TH2.E1.US2]
+
+        # E2 — Action Log & Idempotency (P0)
+        - id: E2
+          name: "Action Log & Idempotency"
+          status: todo
+          depends-on: []
+          stories:
+            - id: TH2.E2.US1
+              title: "Action log table migration"
+              status: todo
+              file: docs/themes/TH2-agent-platform/epics/E2-action-log/user-stories/US1-action-log-migration.md
+              depends-on: []
+            - id: TH2.E2.US2
+              title: "WriteAction and ReadActions store methods"
+              status: todo
+              file: docs/themes/TH2-agent-platform/epics/E2-action-log/user-stories/US2-store-methods.md
+              depends-on: [TH2.E2.US1]
+            - id: TH2.E2.US3
+              title: "Idempotency check in MCP tool handlers"
+              status: todo
+              file: docs/themes/TH2-agent-platform/epics/E2-action-log/user-stories/US3-idempotency-check.md
+              depends-on: [TH2.E2.US2]
+            - id: TH2.E2.US4
+              title: "loom log CLI shows action history"
+              status: todo
+              file: docs/themes/TH2-agent-platform/epics/E2-action-log/user-stories/US4-cli-action-history.md
+              depends-on: [TH2.E2.US2]
+
+        # E3 — MCP Resources (P2)
+        - id: E3
+          name: "MCP Resources"
+          status: todo
+          depends-on: [E1, E2]
+          stories:
+            - id: TH2.E3.US1
+              title: "MCP resource registration framework"
+              status: todo
+              file: docs/themes/TH2-agent-platform/epics/E3-mcp-resources/user-stories/US1-resource-framework.md
+              depends-on: []
+            - id: TH2.E3.US2
+              title: "loom://dependencies MCP resource"
+              status: todo
+              file: docs/themes/TH2-agent-platform/epics/E3-mcp-resources/user-stories/US2-dependencies-resource.md
+              depends-on: [TH2.E3.US1]
+            - id: TH2.E3.US3
+              title: "loom://state MCP resource"
+              status: todo
+              file: docs/themes/TH2-agent-platform/epics/E3-mcp-resources/user-stories/US3-state-resource.md
+              depends-on: [TH2.E3.US1]
+            - id: TH2.E3.US4
+              title: "loom://log MCP resource"
+              status: todo
+              file: docs/themes/TH2-agent-platform/epics/E3-mcp-resources/user-stories/US4-log-resource.md
+              depends-on: [TH2.E3.US1]
+            - id: TH2.E3.US5
+              title: "MCP server instructions with phase summary and dependency digest"
+              status: todo
+              file: docs/themes/TH2-agent-platform/epics/E3-mcp-resources/user-stories/US5-server-instructions.md
+              depends-on: [TH2.E3.US1]
+
+        # E4 — Agent Definitions (P0/P1)
+        - id: E4
+          name: "Agent Definitions"
+          status: todo
+          depends-on: []
+          stories:
+            - id: TH2.E4.US1
+              title: "Orchestrator agent definition"
+              status: todo
+              file: docs/themes/TH2-agent-platform/epics/E4-agent-definitions/user-stories/US1-orchestrator-agent.md
+              depends-on: []
+            - id: TH2.E4.US2
+              title: "Gate agent definition"
+              status: todo
+              file: docs/themes/TH2-agent-platform/epics/E4-agent-definitions/user-stories/US2-gate-agent.md
+              depends-on: []
+            - id: TH2.E4.US3
+              title: "Debug agent definition"
+              status: todo
+              file: docs/themes/TH2-agent-platform/epics/E4-agent-definitions/user-stories/US3-debug-agent.md
+              depends-on: []
+            - id: TH2.E4.US4
+              title: "Merge agent definition"
+              status: todo
+              file: docs/themes/TH2-agent-platform/epics/E4-agent-definitions/user-stories/US4-merge-agent.md
+              depends-on: []
+
+        # E5 — MCP Tasks (P1)
+        - id: E5
+          name: "MCP Tasks"
+          status: todo
+          depends-on: []
+          stories:
+            - id: TH2.E5.US1
+              title: "MCP Task lifecycle event emission"
+              status: todo
+              file: docs/themes/TH2-agent-platform/epics/E5-mcp-tasks/user-stories/US1-task-lifecycle.md
+              depends-on: []
+            - id: TH2.E5.US2
+              title: "Heartbeat polling wrapped as MCP Task"
+              status: todo
+              file: docs/themes/TH2-agent-platform/epics/E5-mcp-tasks/user-stories/US2-heartbeat-task.md
+              depends-on: [TH2.E5.US1]
+            - id: TH2.E5.US3
+              title: "Client capability negotiation and fallback"
+              status: todo
+              file: docs/themes/TH2-agent-platform/epics/E5-mcp-tasks/user-stories/US3-capability-negotiation.md
+              depends-on: [TH2.E5.US1]
+
+        # E6 — MCP Elicitation (P2)
+        - id: E6
+          name: "MCP Elicitation"
+          status: todo
+          depends-on: [E5]
+          stories:
+            - id: TH2.E6.US1
+              title: "Elicitation schema definition and emission"
+              status: todo
+              file: docs/themes/TH2-agent-platform/epics/E6-mcp-elicitation/user-stories/US1-elicitation-schema.md
+              depends-on: []
+            - id: TH2.E6.US2
+              title: "skip_story FSM event and transition"
+              status: todo
+              file: docs/themes/TH2-agent-platform/epics/E6-mcp-elicitation/user-stories/US2-skip-story-event.md
+              depends-on: []
+            - id: TH2.E6.US3
+              title: "Elicitation response handler with fallback"
+              status: todo
+              file: docs/themes/TH2-agent-platform/epics/E6-mcp-elicitation/user-stories/US3-response-handler.md
+              depends-on: [TH2.E6.US1, TH2.E6.US2]
+
+        # E7 — Security Hardening (P2)
+        - id: E7
+          name: "Security Hardening"
+          status: todo
+          depends-on: []
+          stories:
+            - id: TH2.E7.US1
+              title: "GitHub token scope validation on startup"
+              status: todo
+              file: docs/themes/TH2-agent-platform/epics/E7-security-hardening/user-stories/US1-token-validation.md
+              depends-on: []
+            - id: TH2.E7.US2
+              title: "MCP tool readOnlyHint annotations"
+              status: todo
+              file: docs/themes/TH2-agent-platform/epics/E7-security-hardening/user-stories/US2-tool-annotations.md
+              depends-on: []
+            - id: TH2.E7.US3
+              title: "Config file permission warning"
+              status: todo
+              file: docs/themes/TH2-agent-platform/epics/E7-security-hardening/user-stories/US3-config-permissions.md
+              depends-on: []
+
+        # E8 — Parallel Execution (P3)
+        - id: E8
+          name: "Parallel Execution"
+          status: todo
+          depends-on: [E1, E4, E6]
+          stories:
+            - id: TH2.E8.US1
+              title: "Checkpoint table story_id column extension"
+              status: todo
+              file: docs/themes/TH2-agent-platform/epics/E8-parallel-execution/user-stories/US1-checkpoint-story-id.md
+              depends-on: []
+            - id: TH2.E8.US2
+              title: "Background agent spawning via code chat CLI"
+              status: todo
+              file: docs/themes/TH2-agent-platform/epics/E8-parallel-execution/user-stories/US2-background-agent-spawn.md
+              depends-on: [TH2.E8.US1]
+            - id: TH2.E8.US3
+              title: "Git worktree lifecycle management"
+              status: todo
+              file: docs/themes/TH2-agent-platform/epics/E8-parallel-execution/user-stories/US3-worktree-lifecycle.md
+              depends-on: [TH2.E8.US2]
+            - id: TH2.E8.US4
+              title: "DAG-aware parallel scheduling with concurrency limits"
+              status: todo
+              file: docs/themes/TH2-agent-platform/epics/E8-parallel-execution/user-stories/US4-dag-scheduling.md
+              depends-on: [TH2.E8.US1, TH2.E8.US3]
