@@ -108,3 +108,141 @@ func TestLoad_EmptyFileReturnsClearError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "is empty")
 }
+
+func TestLoad_RejectsDirectEpicCycle(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "dependencies.yaml")
+
+	content := `version: 1
+epics:
+  - id: E1
+    depends_on: [E2]
+    stories:
+      - id: US-1.1
+        depends_on: []
+  - id: E2
+    depends_on: [E1]
+    stories:
+      - id: US-2.1
+        depends_on: []
+`
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+
+	_, err := depgraph.Load(path)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "circular dependency")
+	assert.Contains(t, err.Error(), "E1")
+	assert.Contains(t, err.Error(), "E2")
+	assert.Contains(t, err.Error(), "E1 -> E2 -> E1")
+}
+
+func TestLoad_RejectsTransitiveStoryCycle(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "dependencies.yaml")
+
+	content := `version: 1
+epics:
+  - id: E1
+    depends_on: []
+    stories:
+      - id: US-1.1
+        depends_on: [US-1.2]
+      - id: US-1.2
+        depends_on: [US-1.3]
+      - id: US-1.3
+        depends_on: [US-1.1]
+`
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+
+	_, err := depgraph.Load(path)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "circular dependency")
+	assert.Contains(t, err.Error(), "US-1.1 -> US-1.2 -> US-1.3 -> US-1.1")
+}
+
+func TestLoad_RejectsUnknownStoryDependency(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "dependencies.yaml")
+
+	content := `version: 1
+epics:
+  - id: E1
+    depends_on: []
+    stories:
+      - id: US-2.1
+        depends_on: [US-99.1]
+`
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+
+	_, err := depgraph.Load(path)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown dependency")
+	assert.Contains(t, err.Error(), "US-99.1")
+}
+
+func TestLoad_RejectsUnknownEpicDependency(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "dependencies.yaml")
+
+	content := `version: 1
+epics:
+  - id: E1
+    depends_on: [E999]
+    stories:
+      - id: US-1.1
+        depends_on: []
+`
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+
+	_, err := depgraph.Load(path)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown dependency")
+	assert.Contains(t, err.Error(), "E999")
+}
+
+func TestLoad_RejectsDuplicateEpicIDs(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "dependencies.yaml")
+
+	content := `version: 1
+epics:
+  - id: E1
+    depends_on: []
+    stories:
+      - id: US-1.1
+        depends_on: []
+  - id: E1
+    depends_on: []
+    stories:
+      - id: US-1.2
+        depends_on: []
+`
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+
+	_, err := depgraph.Load(path)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "duplicate")
+	assert.Contains(t, err.Error(), "E1")
+}
+
+func TestLoad_RejectsDuplicateStoryIDs(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "dependencies.yaml")
+
+	content := `version: 1
+epics:
+  - id: E1
+    depends_on: []
+    stories:
+      - id: US-1.1
+        depends_on: []
+      - id: US-1.1
+        depends_on: []
+`
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+
+	_, err := depgraph.Load(path)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "duplicate")
+	assert.Contains(t, err.Error(), "US-1.1")
+}

@@ -3,6 +3,7 @@ package depgraph
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -49,5 +50,117 @@ func Load(path string) (Graph, error) {
 		return Graph{}, fmt.Errorf("unsupported version %d in %q (expected %d)", graph.Version, path, supportedVersion)
 	}
 
+	if err := graph.validate(); err != nil {
+		return Graph{}, err
+	}
+
 	return graph, nil
+}
+
+func (g Graph) validate() error {
+	epicIDs := make(map[string]struct{}, len(g.Epics))
+	storyIDs := make(map[string]struct{})
+
+	epicAdj := make(map[string][]string, len(g.Epics))
+	storyAdj := make(map[string][]string)
+
+	for _, epic := range g.Epics {
+		if _, exists := epicIDs[epic.ID]; exists {
+			return fmt.Errorf("duplicate epic id %q", epic.ID)
+		}
+		epicIDs[epic.ID] = struct{}{}
+		epicAdj[epic.ID] = append([]string(nil), epic.DependsOn...)
+
+		for _, story := range epic.Stories {
+			if _, exists := storyIDs[story.ID]; exists {
+				return fmt.Errorf("duplicate story id %q", story.ID)
+			}
+			storyIDs[story.ID] = struct{}{}
+			storyAdj[story.ID] = append([]string(nil), story.DependsOn...)
+		}
+	}
+
+	for node, deps := range epicAdj {
+		for _, dep := range deps {
+			if _, exists := epicIDs[dep]; !exists {
+				return fmt.Errorf("unknown dependency %q referenced by epic %q", dep, node)
+			}
+		}
+	}
+
+	for node, deps := range storyAdj {
+		for _, dep := range deps {
+			if _, exists := storyIDs[dep]; !exists {
+				return fmt.Errorf("unknown dependency %q referenced by story %q", dep, node)
+			}
+		}
+	}
+
+	if cyclePath, hasCycle := findCycle(epicAdj); hasCycle {
+		return fmt.Errorf("circular dependency detected: %s", strings.Join(cyclePath, " -> "))
+	}
+
+	if cyclePath, hasCycle := findCycle(storyAdj); hasCycle {
+		return fmt.Errorf("circular dependency detected: %s", strings.Join(cyclePath, " -> "))
+	}
+
+	return nil
+}
+
+func findCycle(adj map[string][]string) ([]string, bool) {
+	const (
+		stateUnvisited = iota
+		stateVisiting
+		stateVisited
+	)
+
+	state := make(map[string]int, len(adj))
+	stack := make([]string, 0, len(adj))
+	indexByNode := make(map[string]int, len(adj))
+
+	var visit func(node string) ([]string, bool)
+	visit = func(node string) ([]string, bool) {
+		state[node] = stateVisiting
+		indexByNode[node] = len(stack)
+		stack = append(stack, node)
+
+		for _, dep := range adj[node] {
+			if state[dep] == stateUnvisited {
+				if cycle, ok := visit(dep); ok {
+					return cycle, true
+				}
+				continue
+			}
+
+			if state[dep] == stateVisiting {
+				start := indexByNode[dep]
+				cycle := append([]string(nil), stack[start:]...)
+				cycle = append(cycle, dep)
+				return cycle, true
+			}
+		}
+
+		stack = stack[:len(stack)-1]
+		delete(indexByNode, node)
+		state[node] = stateVisited
+		return nil, false
+	}
+
+	nodes := make([]string, 0, len(adj))
+	for node := range adj {
+		nodes = append(nodes, node)
+	}
+	sort.Strings(nodes)
+
+	for _, node := range nodes {
+		if state[node] != stateUnvisited {
+			continue
+		}
+
+		if cycle, ok := visit(node); ok {
+			return cycle, true
+		}
+	}
+
+	return nil, false
 }

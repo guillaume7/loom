@@ -17,7 +17,17 @@
 ### 2026-03-13T20:36:40Z
 - status-change: TH2.E1.US1 -> done
 - Context: Developer implementation and reviewer approval complete; tests passing.
+
+### 2026-03-13T20:37:01Z
+- status-change: TH2.E1.US2 -> in-progress
+- Context: Next eligible TH2 story selected after TH2.E1.US1 completion.
+
+### 2026-03-13T20:40:36Z
+- status-change: TH2.E1.US2 -> done
+- Context: DAG validation implementation approved and tests verified.
 2026-03-13T20:33:22Z | Subagent completed
 2026-03-13T20:34:10Z | Subagent completed
 2026-03-13T20:35:23Z | Subagent completed
 2026-03-13T20:36:11Z | Subagent completed
+2026-03-13T20:38:52Z | Subagent completed
+2026-03-13T20:40:23Z | Subagent completed

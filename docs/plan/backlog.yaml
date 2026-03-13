@@ -1,7 +1,7 @@
 # Backlog — Core State File
 backlog:
   project: "loom"
-  last-updated: "2026-03-13T20:36:40Z"
+  last-updated: "2026-03-13T20:40:36Z"
   themes:
     # ── TH1: Loom v1 Core ────────────────────────────────────────────
     - id: TH1
@@ -72,7 +72,7 @@ backlog:
               depends-on: []
             - id: TH2.E1.US2
               title: "DAG validation — cycle detection and ID reference validation"
-              status: todo
+              status: done
               file: docs/themes/TH2-agent-platform/epics/E1-dependency-graph/user-stories/US2-dag-validation.md
               depends-on: [TH2.E1.US1]
             - id: TH2.E1.US3
