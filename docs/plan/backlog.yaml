@@ -1,7 +1,7 @@
 # Backlog — Core State File
 backlog:
   project: "loom"
-  last-updated: "2026-03-13T20:44:59Z"
+  last-updated: "2026-03-13T23:30:35Z"
   themes:
     # ── TH1: Loom v1 Core ────────────────────────────────────────────
     - id: TH1
@@ -84,12 +84,12 @@ backlog:
         # E2 — Action Log & Idempotency (P0)
         - id: E2
           name: "Action Log & Idempotency"
-          status: todo
+          status: in-progress
           depends-on: []
           stories:
             - id: TH2.E2.US1
               title: "Action log table migration"
-              status: todo
+              status: done
               file: docs/themes/TH2-agent-platform/epics/E2-action-log/user-stories/US1-action-log-migration.md
               depends-on: []
             - id: TH2.E2.US2

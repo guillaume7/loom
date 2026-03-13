@@ -61,6 +61,25 @@ func migrate(db *sql.DB) error {
 		return err
 	}
 
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS action_log (
+		id            INTEGER PRIMARY KEY AUTOINCREMENT,
+		session_id    TEXT    NOT NULL,
+		operation_key TEXT    NOT NULL,
+		state_before  TEXT    NOT NULL,
+		state_after   TEXT    NOT NULL,
+		event         TEXT    NOT NULL,
+		detail        TEXT    NOT NULL DEFAULT '',
+		created_at    TEXT    NOT NULL
+	)`)
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_operation_key ON action_log(operation_key)`)
+	if err != nil {
+		return err
+	}
+
 	// Collect existing column names.
 	rows, err := db.Query("PRAGMA table_info(checkpoint)")
 	if err != nil {
