@@ -162,11 +162,16 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 		emitPRNumber := 0
 
 		if isBudgetExhaustionPause(previousState, event, newState) {
-			s.machine.Rollback(snap)
-			newState = previousState
+			supportsElicitation := s.sessionElicitationSupport[sessionIDFromContext(ctx)]
+			if supportsElicitation {
+				s.machine.Rollback(snap)
+				newState = previousState
 
-			emitBudgetExhaustion = true
-			emitPRNumber = s.readCheckpoint(ctx, toolName).PRNumber
+				emitBudgetExhaustion = true
+				emitPRNumber = s.readCheckpoint(ctx, toolName).PRNumber
+			} else {
+				slog.InfoContext(ctx, "elicitation unsupported by client; using v1 pause fallback", "tool", toolName, "state", string(previousState), "event", string(event))
+			}
 		}
 
 		cp := s.readCheckpoint(ctx, toolName)
@@ -238,6 +243,14 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 			if emitErr := emitter.BudgetExhaustion(ctx, emitPRNumber, previousState, fsm.Event(actionStr)); emitErr != nil {
 				return mcplib.NewToolResultError(fmt.Sprintf("failed to emit elicitation: %v", emitErr)), nil
 			}
+			s.activeElicitation = elicitationContext{
+				Active:   true,
+				PRNumber: emitPRNumber,
+				State:    previousState,
+				Event:    event,
+			}
+		} else {
+			s.activeElicitation = elicitationContext{}
 		}
 
 		slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(newState), "duration_ms", time.Since(start).Milliseconds())
@@ -263,11 +276,16 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 	emitPRNumber := 0
 
 	if isBudgetExhaustionPause(previousState, event, newState) {
-		s.machine.Rollback(snap)
-		newState = previousState
+		supportsElicitation := s.sessionElicitationSupport[sessionIDFromContext(ctx)]
+		if supportsElicitation {
+			s.machine.Rollback(snap)
+			newState = previousState
 
-		emitBudgetExhaustion = true
-		emitPRNumber = s.readCheckpoint(ctx, toolName).PRNumber
+			emitBudgetExhaustion = true
+			emitPRNumber = s.readCheckpoint(ctx, toolName).PRNumber
+		} else {
+			slog.InfoContext(ctx, "elicitation unsupported by client; using v1 pause fallback", "tool", toolName, "state", string(previousState), "event", string(event))
+		}
 	}
 
 	cp := s.readCheckpoint(ctx, toolName)
@@ -297,6 +315,18 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 		if emitErr := emitter.BudgetExhaustion(ctx, emitPRNumber, previousState, fsm.Event(actionStr)); emitErr != nil {
 			return mcplib.NewToolResultError(fmt.Sprintf("failed to emit elicitation: %v", emitErr)), nil
 		}
+		s.mu.Lock()
+		s.activeElicitation = elicitationContext{
+			Active:   true,
+			PRNumber: emitPRNumber,
+			State:    previousState,
+			Event:    event,
+		}
+		s.mu.Unlock()
+	} else {
+		s.mu.Lock()
+		s.activeElicitation = elicitationContext{}
+		s.mu.Unlock()
 	}
 
 	result := CheckpointResult{
@@ -368,7 +398,7 @@ func (s *Server) handleAbort(ctx context.Context, req mcplib.CallToolRequest) (*
 	return toolResultJSON(result), nil
 }
 
-// MCPServer builds and returns a configured *server.MCPServer with all five
+// MCPServer builds and returns a configured *server.MCPServer with all
 // Loom tools registered. Each call returns a fresh MCPServer instance sharing
 // the same underlying FSM and store.
 func (s *Server) MCPServer() *mcpserver.MCPServer {
@@ -423,6 +453,16 @@ func (s *Server) MCPServer() *mcpserver.MCPServer {
 			),
 		),
 		s.handleHeartbeat,
+	)
+	srv.AddTool(
+		mcplib.NewTool("loom_elicitation_response",
+			mcplib.WithDescription("Handles an operator action for an active Loom elicitation prompt"),
+			mcplib.WithString("action",
+				mcplib.Required(),
+				mcplib.Description("Operator action to apply: skip, reassign, or pause_epic"),
+			),
+		),
+		s.handleElicitationResponse,
 	)
 	srv.AddTool(
 		mcplib.NewTool("loom_get_state",

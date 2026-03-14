@@ -83,6 +83,11 @@ func TestRetryBudgetExhaustion(t *testing.T) {
 
 	// Fire timeout events until budget is exhausted (budget=2, need 3 timeouts).
 	timeoutSession := newRegisteredSession(t, mcpSvr)
+	initializeSessionWithCapabilities(t, mcpSvr, timeoutSession, map[string]interface{}{
+		"experimental": map[string]interface{}{
+			"elicitation": true,
+		},
+	})
 	for i := 0; i <= cfg.MaxRetriesAwaitingPR; i++ {
 		step := nextStep(t, mcpSvr)
 		require.Equal(t, "AWAITING_PR", step.State,

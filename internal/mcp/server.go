@@ -1,11 +1,12 @@
 // Package mcp implements the Loom MCP stdio server.
 //
-// The Server struct exposes five MCP tools to VS Code Copilot master sessions:
+// The Server struct exposes MCP tools to VS Code Copilot master sessions:
 //   - loom_next_step:   returns the current workflow state and the next action
 //   - loom_checkpoint:  fires an FSM event and persists the new state
 //   - loom_heartbeat:   health-check returning current state, phase, and wait guidance
 //   - loom_get_state:   read-only view of the current state and phase
 //   - loom_abort:       universally transitions the FSM to PAUSED
+//   - loom_elicitation_response: handles operator response when elicitation is active
 //
 // Session management (E6) is handled by monitor.go: Clock interface,
 // MonitorConfig, heartbeat log emission, and stall detection via RunStallCheck.
@@ -50,17 +51,26 @@ type resourceEntry struct {
 	handler  mcpserver.ResourceHandlerFunc
 }
 
+type elicitationContext struct {
+	Active   bool
+	PRNumber int
+	State    fsm.State
+	Event    fsm.Event
+}
+
 // Server is the Loom MCP server that exposes workflow tools.
 type Server struct {
-	mu      sync.RWMutex // guards all access to machine and lastActivity
-	machine FSM
-	st      store.Store
-	gh      loomgh.Client
-	emitter *TaskEmitter
+	mu                 sync.RWMutex // guards all access to machine and lastActivity
+	machine            FSM
+	st                 store.Store
+	gh                 loomgh.Client
+	emitter            *TaskEmitter
 	elicitationEmitter *ElicitationEmitter
 
 	// Session-scoped cache populated during initialize capability negotiation.
-	sessionTaskSupport map[string]bool
+	sessionTaskSupport        map[string]bool
+	sessionElicitationSupport map[string]bool
+	activeElicitation         elicitationContext
 
 	// Session management (E6).
 	clock        Clock
@@ -86,12 +96,13 @@ func WithMonitorConfig(cfg MonitorConfig) Option { return func(s *Server) { s.mo
 // Optional Option values can be passed to override the clock or monitor config.
 func NewServer(machine FSM, st store.Store, gh loomgh.Client, opts ...Option) *Server {
 	s := &Server{
-		machine:            machine,
-		st:                 st,
-		gh:                 gh,
-		clock:              RealClock,
-		monCfg:             DefaultMonitorConfig(),
-		sessionTaskSupport: make(map[string]bool),
+		machine:                   machine,
+		st:                        st,
+		gh:                        gh,
+		clock:                     RealClock,
+		monCfg:                    DefaultMonitorConfig(),
+		sessionTaskSupport:        make(map[string]bool),
+		sessionElicitationSupport: make(map[string]bool),
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -257,6 +268,15 @@ func (s *Server) setSessionTaskSupport(sessionID string, supported bool) {
 	s.sessionTaskSupport[sessionID] = supported
 }
 
+func (s *Server) setSessionElicitationSupport(sessionID string, supported bool) {
+	if sessionID == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.sessionElicitationSupport[sessionID] = supported
+}
+
 func (s *Server) sessionSupportsTasks(ctx context.Context) bool {
 	sessionID := sessionIDFromContext(ctx)
 	if sessionID == "" {
@@ -266,6 +286,17 @@ func (s *Server) sessionSupportsTasks(ctx context.Context) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.sessionTaskSupport[sessionID]
+}
+
+func (s *Server) sessionSupportsElicitation(ctx context.Context) bool {
+	sessionID := sessionIDFromContext(ctx)
+	if sessionID == "" {
+		return false
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.sessionElicitationSupport[sessionID]
 }
 
 func (s *Server) readActionByOperationKey(ctx context.Context, toolName, operationKey string) (store.Action, bool, *mcplib.CallToolResult) {

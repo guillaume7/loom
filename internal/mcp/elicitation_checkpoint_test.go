@@ -31,7 +31,14 @@ func TestLoomCheckpoint_BudgetExhaustion_EmitsElicitationAndDoesNotPause(t *test
 		PRNumber: 42,
 	}))
 
-	checkpointRes, sess := callToolWithSession(t, mcpSvr, "loom_checkpoint", map[string]interface{}{
+	sess := newTestSession(nextSessionID())
+	require.NoError(t, mcpSvr.RegisterSession(context.Background(), sess))
+	initializeSessionWithCapabilities(t, mcpSvr, sess, map[string]interface{}{
+		"experimental": map[string]interface{}{
+			"elicitation": true,
+		},
+	})
+	checkpointRes := callToolOnSession(t, mcpSvr, sess, "loom_checkpoint", map[string]interface{}{
 		"action": "timeout",
 	})
 	require.False(t, checkpointRes.IsError)

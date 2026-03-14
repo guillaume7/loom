@@ -196,7 +196,15 @@ func TestLoomCheckpoint_BudgetExhaustion_RetryAfterPersistFailure_EmitsOnce(t *t
 		"operation_key": "checkpoint:AWAITING_PR->AWAITING_PR:budget-exhaustion",
 	}
 
-	first, sess := callToolWithSession(t, mcpSvr, "loom_checkpoint", args)
+	sess := newTestSession(nextSessionID())
+	require.NoError(t, mcpSvr.RegisterSession(context.Background(), sess))
+	initializeSessionWithCapabilities(t, mcpSvr, sess, map[string]interface{}{
+		"experimental": map[string]interface{}{
+			"elicitation": true,
+		},
+	})
+
+	first := callToolOnSession(t, mcpSvr, sess, "loom_checkpoint", args)
 	assert.True(t, first.IsError, "expected first attempt to fail due to transient persistence failure")
 	assert.Empty(t, drainNotifications(sess), "elicitation must not emit before persistence succeeds")
 

@@ -54,6 +54,7 @@ const (
 	EventMergedEpicBoundary     Event = "merged_epic_boundary"
 	EventRefactorMerged         Event = "refactor_merged"
 	EventSkipStory              Event = "skip_story"
+	EventReassign               Event = "reassign"
 	EventAbort                  Event = "abort"
 )
 
@@ -181,6 +182,10 @@ func (m *Machine) Transition(event Event) (State, error) {
 		switch event {
 		case EventPROpened:
 			newState = StateAwaitingReady
+		case EventReassign:
+			newState = StateIssueCreated
+		case EventSkipStory:
+			newState = StateScanning
 		case EventTimeout:
 			m.awaitingPRRetries++
 			if m.awaitingPRRetries > m.cfg.MaxRetriesAwaitingPR {
@@ -212,6 +217,8 @@ func (m *Machine) Transition(event Event) (State, error) {
 		switch event {
 		case EventCIGreen:
 			newState = StateReviewing
+		case EventReassign:
+			newState = StateIssueCreated
 		case EventCIRed:
 			m.debugCycles++
 			if m.debugCycles > m.cfg.MaxDebugCycles {
@@ -236,6 +243,10 @@ func (m *Machine) Transition(event Event) (State, error) {
 		switch event {
 		case EventReviewApproved:
 			newState = StateMerging
+		case EventReassign:
+			newState = StateIssueCreated
+		case EventSkipStory:
+			newState = StateScanning
 		case EventReviewChangesRequested:
 			m.feedbackCycles++
 			if m.feedbackCycles > m.cfg.MaxFeedbackCycles {
@@ -251,6 +262,8 @@ func (m *Machine) Transition(event Event) (State, error) {
 		switch event {
 		case EventFixPushed:
 			newState = StateAwaitingCI
+		case EventReassign:
+			newState = StateIssueCreated
 		case EventSkipStory:
 			newState = StateScanning
 		default:
@@ -261,6 +274,8 @@ func (m *Machine) Transition(event Event) (State, error) {
 		switch event {
 		case EventFeedbackAddressed:
 			newState = StateAwaitingCI
+		case EventReassign:
+			newState = StateIssueCreated
 		default:
 			return m.state, m.invalidTransition(event)
 		}

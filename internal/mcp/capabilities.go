@@ -11,14 +11,24 @@ import (
 func (s *Server) capabilityHooks() *mcpserver.Hooks {
 	hooks := &mcpserver.Hooks{}
 	hooks.AddBeforeInitialize(func(ctx context.Context, _ any, request *mcplib.InitializeRequest) {
-		s.setSessionTaskSupport(sessionIDFromContext(ctx), clientSupportsTasks(request.Params.Capabilities))
+		sessionID := sessionIDFromContext(ctx)
+		s.setSessionTaskSupport(sessionID, clientSupportsTasks(request.Params.Capabilities))
+		s.setSessionElicitationSupport(sessionID, clientSupportsElicitation(request.Params.Capabilities))
 	})
 	return hooks
 }
 
 func clientSupportsTasks(capabilities mcplib.ClientCapabilities) bool {
+	return clientSupportsExperimentalCapability(capabilities, "tasks")
+}
+
+func clientSupportsElicitation(capabilities mcplib.ClientCapabilities) bool {
+	return clientSupportsExperimentalCapability(capabilities, "elicitation")
+}
+
+func clientSupportsExperimentalCapability(capabilities mcplib.ClientCapabilities, capabilityKey string) bool {
 	for key, value := range capabilities.Experimental {
-		if !strings.EqualFold(strings.TrimSpace(key), "tasks") {
+		if !strings.EqualFold(strings.TrimSpace(key), capabilityKey) {
 			continue
 		}
 		if capabilityValueEnabled(value) {

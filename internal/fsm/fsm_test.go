@@ -142,6 +142,7 @@ func TestMachine_ValidTransitions(t *testing.T) {
 
 		// AWAITING_PR
 		{"AWAITING_PR+pr_opened→AWAITING_READY", setupAwaitingPR, fsm.EventPROpened, fsm.StateAwaitingReady},
+		{"AWAITING_PR+skip_story→SCANNING", setupAwaitingPR, fsm.EventSkipStory, fsm.StateScanning},
 
 		// AWAITING_READY
 		{"AWAITING_READY+pr_ready→AWAITING_CI", setupAwaitingReady, fsm.EventPRReady, fsm.StateAwaitingCI},
@@ -154,6 +155,7 @@ func TestMachine_ValidTransitions(t *testing.T) {
 		// REVIEWING
 		{"REVIEWING+review_approved→MERGING", setupReviewing, fsm.EventReviewApproved, fsm.StateMerging},
 		{"REVIEWING+review_changes_requested→ADDRESSING_FEEDBACK", setupReviewing, fsm.EventReviewChangesRequested, fsm.StateAddressingFeedback},
+		{"REVIEWING+skip_story→SCANNING", setupReviewing, fsm.EventSkipStory, fsm.StateScanning},
 
 		// DEBUGGING
 		{"DEBUGGING+fix_pushed→AWAITING_CI", setupDebugging, fsm.EventFixPushed, fsm.StateAwaitingCI},

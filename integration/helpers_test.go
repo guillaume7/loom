@@ -133,6 +133,39 @@ func callToolOnSession(t *testing.T, mcpSvr *mcpserver.MCPServer, sess *testSess
 	return &result
 }
 
+// initializeSessionWithCapabilities sends an initialize request for an
+// already-registered session so capability-gated behavior can be tested.
+func initializeSessionWithCapabilities(t *testing.T, mcpSvr *mcpserver.MCPServer, sess *testSession, capabilities map[string]interface{}) {
+	t.Helper()
+
+	if capabilities == nil {
+		capabilities = map[string]interface{}{}
+	}
+
+	ctx := mcpSvr.WithContext(context.Background(), sess)
+	msg, err := json.Marshal(map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "initialize",
+		"params": map[string]interface{}{
+			"protocolVersion": mcplib.LATEST_PROTOCOL_VERSION,
+			"capabilities":    capabilities,
+			"clientInfo": map[string]interface{}{
+				"name":    "loom-integration-test-client",
+				"version": "0.0.0",
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	raw := mcpSvr.HandleMessage(ctx, msg)
+	require.NotNil(t, raw)
+
+	resp, ok := raw.(mcplib.JSONRPCResponse)
+	require.True(t, ok, "expected JSONRPCResponse, got %T", raw)
+	require.NotNil(t, resp.Result, "initialize returned empty result")
+}
+
 func drainNotifications(session *testSession) []mcplib.JSONRPCNotification {
 	notifications := make([]mcplib.JSONRPCNotification, 0)
 	for {
