@@ -171,6 +171,14 @@
 ### 2026-03-14T15:59:06Z
 - status-change: TH2.E6.US1 -> done
 - Context: Elicitation schema/emission implemented and reviewed with persistence-ordering fix.
+
+### 2026-03-14T16:00:02Z
+- status-change: TH2.E6.US2 -> in-progress
+- Context: Started skip_story FSM transition and checkpoint tracking story.
+
+### 2026-03-14T16:07:07Z
+- status-change: TH2.E6.US2 -> done
+- Context: skip_story FSM transition and checkpoint detail tracking implemented and approved.
 2026-03-14T15:31:57Z | Subagent completed
 2026-03-14T15:33:34Z | Subagent completed
 2026-03-14T15:40:58Z | Subagent completed
@@ -179,3 +187,5 @@
 2026-03-14T15:53:51Z | Subagent completed
 2026-03-14T15:57:18Z | Subagent completed
 2026-03-14T15:58:46Z | Subagent completed
+2026-03-14T16:04:35Z | Subagent completed
+2026-03-14T16:06:50Z | Subagent completed

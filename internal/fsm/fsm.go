@@ -53,6 +53,7 @@ const (
 	EventMerged                 Event = "merged"
 	EventMergedEpicBoundary     Event = "merged_epic_boundary"
 	EventRefactorMerged         Event = "refactor_merged"
+	EventSkipStory              Event = "skip_story"
 	EventAbort                  Event = "abort"
 )
 
@@ -218,6 +219,8 @@ func (m *Machine) Transition(event Event) (State, error) {
 			} else {
 				newState = StateDebugging
 			}
+		case EventSkipStory:
+			newState = StateScanning
 		case EventTimeout:
 			m.awaitingCIRetries++
 			if m.awaitingCIRetries > m.cfg.MaxRetriesAwaitingCI {
@@ -248,6 +251,8 @@ func (m *Machine) Transition(event Event) (State, error) {
 		switch event {
 		case EventFixPushed:
 			newState = StateAwaitingCI
+		case EventSkipStory:
+			newState = StateScanning
 		default:
 			return m.state, m.invalidTransition(event)
 		}
@@ -296,6 +301,9 @@ func (m *Machine) Transition(event Event) (State, error) {
 		case StateAwaitingCI:
 			m.awaitingCIRetries = 0
 		case StateScanning:
+			m.awaitingPRRetries = 0
+			m.awaitingReadyRetries = 0
+			m.awaitingCIRetries = 0
 			m.debugCycles = 0
 			m.feedbackCycles = 0
 		}

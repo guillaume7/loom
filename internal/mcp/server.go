@@ -132,6 +132,7 @@ type CheckpointResult struct {
 	PreviousState string `json:"previous_state"`
 	NewState      string `json:"new_state"`
 	Phase         int    `json:"phase"`
+	Detail        string `json:"detail,omitempty"`
 }
 
 // HeartbeatResult is returned by loom_heartbeat.

@@ -134,6 +134,7 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 		defer s.mu.Unlock()
 
 		previousState := s.machine.State()
+		event := fsm.Event(actionStr)
 		s.lastActivity = s.clock.Now()
 		slog.InfoContext(ctx, "tool called", "tool", toolName, "state", string(previousState))
 
@@ -151,7 +152,7 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 		// same operation_key fires the event from the correct starting state.
 		snap := s.machine.TakeSnapshot()
 
-		newState, transErr := s.machine.Transition(fsm.Event(actionStr))
+		newState, transErr := s.machine.Transition(event)
 		if transErr != nil {
 			slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(previousState), "duration_ms", time.Since(start).Milliseconds())
 			return mcplib.NewToolResultError(transErr.Error()), nil
@@ -160,7 +161,7 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 		emitBudgetExhaustion := false
 		emitPRNumber := 0
 
-		if isBudgetExhaustionPause(previousState, fsm.Event(actionStr), newState) {
+		if isBudgetExhaustionPause(previousState, event, newState) {
 			s.machine.Rollback(snap)
 			newState = previousState
 
@@ -169,10 +170,20 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 		}
 
 		cp := s.readCheckpoint(ctx, toolName)
+		nextPhase := cp.Phase
+		nextRetryCount := cp.RetryCount
+		detail := ""
+		if event == fsm.EventSkipStory {
+			nextPhase = cp.Phase + 1
+			nextRetryCount = 0
+			detail = fmt.Sprintf("skipped story at phase %d", cp.Phase)
+		}
+
 		result := CheckpointResult{
 			PreviousState: string(previousState),
 			NewState:      string(newState),
-			Phase:         cp.Phase,
+			Phase:         nextPhase,
+			Detail:        detail,
 		}
 		detail, marshalErr := marshalResultText(result)
 		if marshalErr != nil {
@@ -184,7 +195,7 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 		// written but the action log entry is absent. Either both are committed
 		// or neither is, making a retry with the same operation_key safe.
 		writeErr := s.st.WriteCheckpointAndAction(ctx,
-			store.Checkpoint{State: string(newState), Phase: cp.Phase},
+			store.Checkpoint{State: string(newState), Phase: nextPhase, RetryCount: nextRetryCount},
 			store.Action{
 				SessionID:    sessionIDFromContext(ctx),
 				OperationKey: operationKey,
@@ -235,12 +246,13 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 
 	s.mu.Lock()
 	previousState := s.machine.State()
+	event := fsm.Event(actionStr)
 	s.lastActivity = s.clock.Now() // Record activity time; resets the stall timer.
 	slog.InfoContext(ctx, "tool called", "tool", toolName, "state", string(previousState))
 	// Snapshot the FSM before transitioning so the in-memory state can be
 	// rolled back if the subsequent non-idempotent checkpoint write fails.
 	snap := s.machine.TakeSnapshot()
-	newState, transErr := s.machine.Transition(fsm.Event(actionStr))
+	newState, transErr := s.machine.Transition(event)
 	if transErr != nil {
 		s.mu.Unlock()
 		slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(previousState), "duration_ms", time.Since(start).Milliseconds())
@@ -250,7 +262,7 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 	emitBudgetExhaustion := false
 	emitPRNumber := 0
 
-	if isBudgetExhaustionPause(previousState, fsm.Event(actionStr), newState) {
+	if isBudgetExhaustionPause(previousState, event, newState) {
 		s.machine.Rollback(snap)
 		newState = previousState
 
@@ -259,7 +271,16 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 	}
 
 	cp := s.readCheckpoint(ctx, toolName)
-	if writeErr := s.st.WriteCheckpoint(ctx, store.Checkpoint{State: string(newState), Phase: cp.Phase}); writeErr != nil {
+	nextPhase := cp.Phase
+	nextRetryCount := cp.RetryCount
+	detail := ""
+	if event == fsm.EventSkipStory {
+		nextPhase = cp.Phase + 1
+		nextRetryCount = 0
+		detail = fmt.Sprintf("skipped story at phase %d", cp.Phase)
+	}
+
+	if writeErr := s.st.WriteCheckpoint(ctx, store.Checkpoint{State: string(newState), Phase: nextPhase, RetryCount: nextRetryCount}); writeErr != nil {
 		s.machine.Rollback(snap)
 		s.mu.Unlock()
 		slog.ErrorContext(ctx, "store write error", "tool", toolName, "state", string(newState), "error", writeErr)
@@ -281,7 +302,8 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 	result := CheckpointResult{
 		PreviousState: string(previousState),
 		NewState:      string(newState),
-		Phase:         cp.Phase,
+		Phase:         nextPhase,
+		Detail:        detail,
 	}
 
 	slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(newState), "duration_ms", time.Since(start).Milliseconds())

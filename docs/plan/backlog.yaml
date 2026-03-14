@@ -1,7 +1,7 @@
 # Backlog — Core State File
 backlog:
   project: "loom"
-  last-updated: "2026-03-14T15:59:06Z"
+  last-updated: "2026-03-14T16:07:07Z"
   themes:
     # ── TH1: Loom v1 Core ────────────────────────────────────────────
     - id: TH1
@@ -202,7 +202,7 @@ backlog:
               depends-on: []
             - id: TH2.E6.US2
               title: "skip_story FSM event and transition"
-              status: todo
+              status: done
               file: docs/themes/TH2-agent-platform/epics/E6-mcp-elicitation/user-stories/US2-skip-story-event.md
               depends-on: []
             - id: TH2.E6.US3
