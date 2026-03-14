@@ -413,9 +413,11 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 				// cached result.
 				cached, found, lookupErr := s.readActionByOperationKey(ctx, toolName, operationKey)
 				if lookupErr != nil {
+					s.machine.Rollback(snap)
 					return lookupErr, nil
 				}
 				if !found {
+					s.machine.Rollback(snap)
 					return mcplib.NewToolResultError(fmt.Sprintf("duplicate operation key without cached result: %s", operationKey)), nil
 				}
 				slog.InfoContext(ctx, "returning cached tool result", "tool", toolName, "operation_key", operationKey)
@@ -438,20 +440,25 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 	previousState := s.machine.State()
 	s.lastActivity = s.clock.Now() // Record activity time; resets the stall timer.
 	slog.InfoContext(ctx, "tool called", "tool", toolName, "state", string(previousState))
+	// Snapshot the FSM before transitioning so the in-memory state can be
+	// rolled back if the subsequent non-idempotent checkpoint write fails.
+	snap := s.machine.TakeSnapshot()
 	newState, transErr := s.machine.Transition(fsm.Event(actionStr))
-	s.mu.Unlock()
-
 	if transErr != nil {
+		s.mu.Unlock()
 		slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(previousState), "duration_ms", time.Since(start).Milliseconds())
 		return mcplib.NewToolResultError(transErr.Error()), nil
 	}
 
 	cp := s.readCheckpoint(ctx, toolName)
 	if writeErr := s.st.WriteCheckpoint(ctx, store.Checkpoint{State: string(newState), Phase: cp.Phase}); writeErr != nil {
+		s.machine.Rollback(snap)
+		s.mu.Unlock()
 		slog.ErrorContext(ctx, "store write error", "tool", toolName, "state", string(newState), "error", writeErr)
-		slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(newState), "duration_ms", time.Since(start).Milliseconds(), "error", writeErr)
+		slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(previousState), "duration_ms", time.Since(start).Milliseconds(), "error", writeErr)
 		return mcplib.NewToolResultError(fmt.Sprintf("failed to persist checkpoint: %v", writeErr)), nil
 	}
+	s.mu.Unlock()
 
 	result := CheckpointResult{
 		PreviousState: string(previousState),

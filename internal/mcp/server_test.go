@@ -142,6 +142,24 @@ func (s *failingStore) WriteCheckpointAndAction(_ context.Context, _ store.Check
 
 func (s *failingStore) Close() error { return nil }
 
+// duplicateWithoutCachedResultStore reports duplicate operation keys for
+// idempotent checkpoint writes but never returns a cached action.
+type duplicateWithoutCachedResultStore struct {
+	memStore
+}
+
+func newDuplicateWithoutCachedResultStore() *duplicateWithoutCachedResultStore {
+	return &duplicateWithoutCachedResultStore{memStore: memStore{empty: true}}
+}
+
+func (s *duplicateWithoutCachedResultStore) WriteCheckpointAndAction(_ context.Context, _ store.Checkpoint, _ store.Action) error {
+	return store.ErrDuplicateOperationKey
+}
+
+func (s *duplicateWithoutCachedResultStore) ReadActionByOperationKey(_ context.Context, _ string) (store.Action, error) {
+	return store.Action{}, store.ErrActionNotFound
+}
+
 // --------------------------------------------------------------------------
 // Minimal ClientSession for test context wiring
 // --------------------------------------------------------------------------
@@ -398,6 +416,25 @@ func TestLoomCheckpoint_StoreWriteFailure_ReturnsError(t *testing.T) {
 		"action": "start",
 	})
 	assert.True(t, result.IsError, "expected tool error when store write fails")
+}
+
+func TestLoomCheckpoint_NonIdempotentStoreWriteFailure_RollsBackFSM(t *testing.T) {
+	machine := fsm.NewMachine(fsm.DefaultConfig())
+	st := newFailingStore()
+	s := mcp.NewServer(machine, st, nil)
+	mcpSvr := s.MCPServer()
+
+	result := callTool(t, mcpSvr, "loom_checkpoint", map[string]interface{}{
+		"action": "start",
+	})
+	assert.True(t, result.IsError, "expected tool error when store write fails")
+
+	next := callTool(t, mcpSvr, "loom_next_step", nil)
+	assert.False(t, next.IsError)
+
+	var got mcp.NextStepResult
+	require.NoError(t, json.Unmarshal([]byte(toolText(t, next)), &got))
+	assert.Equal(t, "IDLE", got.State, "FSM must remain at pre-transition state after non-idempotent write failure")
 }
 
 func TestLoomNextStep_Idempotency_RetryReturnsCachedResult(t *testing.T) {
@@ -716,6 +753,27 @@ func TestLoomCheckpoint_AtomicDuplicateOnWrite_ReturnsCachedResult(t *testing.T)
 	})
 	require.False(t, second.IsError, "second call must succeed via ErrDuplicateOperationKey replay")
 	assert.Equal(t, toolText(t, first), toolText(t, second), "replayed result must match original")
+}
+
+func TestLoomCheckpoint_IdempotentDuplicateWithoutCachedResult_RollsBackFSM(t *testing.T) {
+	machine := fsm.NewMachine(fsm.DefaultConfig())
+	st := newDuplicateWithoutCachedResultStore()
+	s := mcp.NewServer(machine, st, nil)
+	mcpSvr := s.MCPServer()
+
+	result := callTool(t, mcpSvr, "loom_checkpoint", map[string]interface{}{
+		"action":        "start",
+		"operation_key": "checkpoint:IDLE->SCANNING",
+	})
+	assert.True(t, result.IsError, "expected tool error for duplicate without cached result")
+	assert.Contains(t, toolText(t, result), "duplicate operation key without cached result")
+
+	next := callTool(t, mcpSvr, "loom_next_step", nil)
+	assert.False(t, next.IsError)
+
+	var got mcp.NextStepResult
+	require.NoError(t, json.Unmarshal([]byte(toolText(t, next)), &got))
+	assert.Equal(t, "IDLE", got.State, "FSM must be rolled back when duplicate branch cannot return cached result")
 }
 
 func TestReadOnlyTools_SkipIdempotencyLookup(t *testing.T) {
