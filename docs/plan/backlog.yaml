@@ -111,7 +111,7 @@ backlog:
         # E3 — MCP Resources (P2)
         - id: E3
           name: "MCP Resources"
-          status: in-progress
+            status: done
           depends-on: [E1, E2]
           stories:
             - id: TH2.E3.US1
