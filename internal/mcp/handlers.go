@@ -325,6 +325,10 @@ func (s *Server) handleAbort(ctx context.Context, req mcplib.CallToolRequest) (*
 func (s *Server) MCPServer() *mcpserver.MCPServer {
 	srv := mcpserver.NewMCPServer("loom", "0.1.0", mcpserver.WithInstructions(s.buildServerInstructions(context.Background())))
 
+	s.mu.Lock()
+	s.emitter = NewTaskEmitter(srv)
+	s.mu.Unlock()
+
 	srv.AddTool(
 		mcplib.NewTool("loom_next_step",
 			mcplib.WithDescription("Returns the current workflow state and the next action the agent should take"),
@@ -470,7 +474,9 @@ func (s *Server) MCPServer() *mcpserver.MCPServer {
 			for index := len(actions) - 1; index >= 0; index-- {
 				a := actions[index]
 				line, err := json.Marshal(map[string]any{"id": a.ID, "session_id": a.SessionID, "operation_key": a.OperationKey, "state_before": a.StateBefore, "state_after": a.StateAfter, "event": a.Event, "detail": a.Detail, "created_at": a.CreatedAt})
-				if err != nil { return nil, fmt.Errorf("loom://log: failed to marshal action %d: %w", a.ID, err) }
+				if err != nil {
+					return nil, fmt.Errorf("loom://log: failed to marshal action %d: %w", a.ID, err)
+				}
 				sb.Write(line)
 				sb.WriteByte('\n')
 			}

@@ -170,12 +170,12 @@ backlog:
         # E5 — MCP Tasks (P1)
         - id: E5
           name: "MCP Tasks"
-          status: todo
+            status: in-progress
           depends-on: []
           stories:
             - id: TH2.E5.US1
               title: "MCP Task lifecycle event emission"
-              status: todo
+                status: done
               file: docs/themes/TH2-agent-platform/epics/E5-mcp-tasks/user-stories/US1-task-lifecycle.md
               depends-on: []
             - id: TH2.E5.US2

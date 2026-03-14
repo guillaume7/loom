@@ -56,6 +56,7 @@ type Server struct {
 	machine FSM
 	st      store.Store
 	gh      loomgh.Client
+	emitter *TaskEmitter
 
 	// Session management (E6).
 	clock        Clock
