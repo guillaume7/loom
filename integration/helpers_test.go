@@ -92,6 +92,59 @@ func callTool(t *testing.T, mcpSvr *mcpserver.MCPServer, toolName string, args m
 	return &result
 }
 
+// newRegisteredSession registers and returns a reusable test session.
+func newRegisteredSession(t *testing.T, mcpSvr *mcpserver.MCPServer) *testSession {
+	t.Helper()
+
+	sess := newTestSession(nextSessionID())
+	require.NoError(t, mcpSvr.RegisterSession(context.Background(), sess))
+	return sess
+}
+
+// callToolOnSession sends a tools/call request on an already-registered session.
+func callToolOnSession(t *testing.T, mcpSvr *mcpserver.MCPServer, sess *testSession, toolName string, args map[string]interface{}) *mcplib.CallToolResult {
+	t.Helper()
+
+	if args == nil {
+		args = map[string]interface{}{}
+	}
+
+	ctx := mcpSvr.WithContext(context.Background(), sess)
+	msg, err := json.Marshal(map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "tools/call",
+		"params": map[string]interface{}{
+			"name":      toolName,
+			"arguments": args,
+		},
+	})
+	require.NoError(t, err)
+
+	raw := mcpSvr.HandleMessage(ctx, msg)
+	require.NotNil(t, raw, "HandleMessage returned nil for tool %q", toolName)
+
+	resp, ok := raw.(mcplib.JSONRPCResponse)
+	require.True(t, ok, "expected JSONRPCResponse, got %T", raw)
+
+	result, ok := resp.Result.(mcplib.CallToolResult)
+	require.True(t, ok, "expected CallToolResult in response.Result, got %T", resp.Result)
+
+	return &result
+}
+
+func drainNotifications(session *testSession) []mcplib.JSONRPCNotification {
+	notifications := make([]mcplib.JSONRPCNotification, 0)
+	for {
+		select {
+		case note := <-session.notifications:
+			notifications = append(notifications, note)
+		default:
+			return notifications
+		}
+	}
+}
+
 // checkpoint calls loom_checkpoint with the given action and returns the result.
 func checkpoint(t *testing.T, mcpSvr *mcpserver.MCPServer, action string) *mcp.CheckpointResult {
 	t.Helper()

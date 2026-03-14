@@ -1,7 +1,7 @@
 # Backlog — Core State File
 backlog:
   project: "loom"
-  last-updated: "2026-03-14T15:44:57Z"
+  last-updated: "2026-03-14T15:59:06Z"
   themes:
     # ── TH1: Loom v1 Core ────────────────────────────────────────────
     - id: TH1
@@ -192,12 +192,12 @@ backlog:
         # E6 — MCP Elicitation (P2)
         - id: E6
           name: "MCP Elicitation"
-          status: todo
+          status: in-progress
           depends-on: [E5]
           stories:
             - id: TH2.E6.US1
               title: "Elicitation schema definition and emission"
-              status: todo
+              status: done
               file: docs/themes/TH2-agent-platform/epics/E6-mcp-elicitation/user-stories/US1-elicitation-schema.md
               depends-on: []
             - id: TH2.E6.US2

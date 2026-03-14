@@ -18,6 +18,23 @@ import (
 	mcpserver "github.com/mark3labs/mcp-go/server"
 )
 
+func isBudgetExhaustionPause(previousState fsm.State, event fsm.Event, newState fsm.State) bool {
+	if newState != fsm.StatePaused {
+		return false
+	}
+
+	switch previousState {
+	case fsm.StateAwaitingPR:
+		return event == fsm.EventTimeout
+	case fsm.StateAwaitingCI:
+		return event == fsm.EventTimeout || event == fsm.EventCIRed
+	case fsm.StateReviewing:
+		return event == fsm.EventReviewChangesRequested
+	default:
+		return false
+	}
+}
+
 func (s *Server) handleNextStep(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 	const toolName = "loom_next_step"
 	start := time.Now()
@@ -140,6 +157,17 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 			return mcplib.NewToolResultError(transErr.Error()), nil
 		}
 
+		emitBudgetExhaustion := false
+		emitPRNumber := 0
+
+		if isBudgetExhaustionPause(previousState, fsm.Event(actionStr), newState) {
+			s.machine.Rollback(snap)
+			newState = previousState
+
+			emitBudgetExhaustion = true
+			emitPRNumber = s.readCheckpoint(ctx, toolName).PRNumber
+		}
+
 		cp := s.readCheckpoint(ctx, toolName)
 		result := CheckpointResult{
 			PreviousState: string(previousState),
@@ -191,6 +219,16 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 			return mcplib.NewToolResultError(fmt.Sprintf("failed to persist checkpoint: %v", writeErr)), nil
 		}
 
+		if emitBudgetExhaustion {
+			emitter := s.elicitationEmitter
+			if emitter == nil {
+				return mcplib.NewToolResultError("elicitation emitter is not initialized"), nil
+			}
+			if emitErr := emitter.BudgetExhaustion(ctx, emitPRNumber, previousState, fsm.Event(actionStr)); emitErr != nil {
+				return mcplib.NewToolResultError(fmt.Sprintf("failed to emit elicitation: %v", emitErr)), nil
+			}
+		}
+
 		slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(newState), "duration_ms", time.Since(start).Milliseconds())
 		return mcplib.NewToolResultText(detail), nil
 	}
@@ -209,6 +247,17 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 		return mcplib.NewToolResultError(transErr.Error()), nil
 	}
 
+	emitBudgetExhaustion := false
+	emitPRNumber := 0
+
+	if isBudgetExhaustionPause(previousState, fsm.Event(actionStr), newState) {
+		s.machine.Rollback(snap)
+		newState = previousState
+
+		emitBudgetExhaustion = true
+		emitPRNumber = s.readCheckpoint(ctx, toolName).PRNumber
+	}
+
 	cp := s.readCheckpoint(ctx, toolName)
 	if writeErr := s.st.WriteCheckpoint(ctx, store.Checkpoint{State: string(newState), Phase: cp.Phase}); writeErr != nil {
 		s.machine.Rollback(snap)
@@ -218,6 +267,16 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 		return mcplib.NewToolResultError(fmt.Sprintf("failed to persist checkpoint: %v", writeErr)), nil
 	}
 	s.mu.Unlock()
+
+	if emitBudgetExhaustion {
+		emitter := s.elicitationEmitter
+		if emitter == nil {
+			return mcplib.NewToolResultError("elicitation emitter is not initialized"), nil
+		}
+		if emitErr := emitter.BudgetExhaustion(ctx, emitPRNumber, previousState, fsm.Event(actionStr)); emitErr != nil {
+			return mcplib.NewToolResultError(fmt.Sprintf("failed to emit elicitation: %v", emitErr)), nil
+		}
+	}
 
 	result := CheckpointResult{
 		PreviousState: string(previousState),
@@ -300,6 +359,7 @@ func (s *Server) MCPServer() *mcpserver.MCPServer {
 
 	s.mu.Lock()
 	s.emitter = NewTaskEmitter(srv)
+	s.elicitationEmitter = NewElicitationEmitter(srv)
 	s.mu.Unlock()
 
 	srv.AddTool(

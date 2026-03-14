@@ -57,6 +57,7 @@ type Server struct {
 	st      store.Store
 	gh      loomgh.Client
 	emitter *TaskEmitter
+	elicitationEmitter *ElicitationEmitter
 
 	// Session-scoped cache populated during initialize capability negotiation.
 	sessionTaskSupport map[string]bool

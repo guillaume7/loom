@@ -16,8 +16,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestRetryBudgetExhaustion verifies that the FSM transitions to PAUSED when
-// the AWAITING_PR retry budget is exhausted, and that a resumed FSM can
+// TestRetryBudgetExhaustion verifies that AWAITING_PR budget exhaustion no
+// longer transitions immediately to PAUSED, and that a resumed FSM can still
 // advance past AWAITING_PR when a PR becomes available (US-8.3).
 func TestRetryBudgetExhaustion(t *testing.T) {
 	// returnPR controls whether the httptest server returns a PR.
@@ -51,7 +51,8 @@ func TestRetryBudgetExhaustion(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	// Budget of 2: after 3 timeout events the machine transitions to PAUSED.
+	// Budget of 2: after 3 timeout events the machine emits elicitation and
+	// remains in AWAITING_PR until operator response.
 	cfg := fsm.Config{
 		MaxRetriesAwaitingPR:    2,
 		MaxRetriesAwaitingReady: 60,
@@ -81,11 +82,9 @@ func TestRetryBudgetExhaustion(t *testing.T) {
 	checkpoint(t, mcpSvr, "copilot_assigned")
 
 	// Fire timeout events until budget is exhausted (budget=2, need 3 timeouts).
+	timeoutSession := newRegisteredSession(t, mcpSvr)
 	for i := 0; i <= cfg.MaxRetriesAwaitingPR; i++ {
 		step := nextStep(t, mcpSvr)
-		if step.State == "PAUSED" {
-			break
-		}
 		require.Equal(t, "AWAITING_PR", step.State,
 			"expected AWAITING_PR before budget exhausted at iteration %d", i)
 		// List PRs: server returns empty array.
@@ -93,17 +92,22 @@ func TestRetryBudgetExhaustion(t *testing.T) {
 		require.NoError(t, lErr)
 		require.Empty(t, prs, "expected no PR from server")
 
-		result := callTool(t, mcpSvr, "loom_checkpoint", map[string]interface{}{"action": "timeout"})
+		result := callToolOnSession(t, mcpSvr, timeoutSession, "loom_checkpoint", map[string]interface{}{"action": "timeout"})
 		require.NotNil(t, result)
 	}
 
-	// Assert PAUSED state.
+	notes := drainNotifications(timeoutSession)
+	require.Len(t, notes, 1, "expected one elicitation notification on AWAITING_PR budget exhaustion")
+	assert.Equal(t, "loom/elicitation", notes[0].Method)
+	assert.Equal(t, "elicitation", notes[0].Params.AdditionalFields["type"])
+
+	// Assert state remains AWAITING_PR while awaiting elicitation response.
 	step := nextStep(t, mcpSvr)
-	assert.Equal(t, "PAUSED", step.State, "expected PAUSED after budget exhaustion")
+	assert.Equal(t, "AWAITING_PR", step.State, "expected AWAITING_PR after budget exhaustion elicitation")
 
 	cp, err := st.ReadCheckpoint(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, "PAUSED", cp.State, "store checkpoint must be PAUSED")
+	assert.Equal(t, "AWAITING_PR", cp.State, "store checkpoint must remain at AWAITING_PR")
 
 	// ── Phase 2: resume — new FSM from AWAITING_PR; PR now available ──────
 

@@ -163,7 +163,19 @@
 ### 2026-03-14T15:44:57Z
 - status-change: TH2.E5 -> done
 - Context: Small epic closeout completed with full test suite pass.
+
+### 2026-03-14T15:46:25Z
+- status-change: TH2.E6.US1 -> in-progress
+- Context: Advanced to MCP elicitation schema and emission story after E5 completion.
+
+### 2026-03-14T15:59:06Z
+- status-change: TH2.E6.US1 -> done
+- Context: Elicitation schema/emission implemented and reviewed with persistence-ordering fix.
 2026-03-14T15:31:57Z | Subagent completed
 2026-03-14T15:33:34Z | Subagent completed
 2026-03-14T15:40:58Z | Subagent completed
 2026-03-14T15:43:27Z | Subagent completed
+2026-03-14T15:52:03Z | Subagent completed
+2026-03-14T15:53:51Z | Subagent completed
+2026-03-14T15:57:18Z | Subagent completed
+2026-03-14T15:58:46Z | Subagent completed
