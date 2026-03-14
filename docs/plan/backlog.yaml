@@ -1,7 +1,7 @@
 # Backlog — Core State File
 backlog:
   project: "loom"
-  last-updated: "2026-03-14T17:26:51Z"
+  last-updated: "2026-03-14T17:35:16Z"
   themes:
     # ── TH1: Loom v1 Core ────────────────────────────────────────────
     - id: TH1
@@ -229,7 +229,7 @@ backlog:
               depends-on: []
             - id: TH2.E7.US3
               title: "Config file permission warning"
-              status: todo
+              status: done
               file: docs/themes/TH2-agent-platform/epics/E7-security-hardening/user-stories/US3-config-permissions.md
               depends-on: []
 

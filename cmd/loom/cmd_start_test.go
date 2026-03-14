@@ -3,6 +3,9 @@ package main
 import (
 	"context"
 	"errors"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -73,4 +76,80 @@ func TestValidateTokenScopes_InvalidTokenFails(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, "GitHub token is invalid or expired", err.Error())
 	assert.Equal(t, 1, gh.calls)
+}
+
+func TestWarnIfConfigPermissionsTooOpen_0600_NoWarning(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	configDir := filepath.Join(homeDir, ".loom")
+	require.NoError(t, os.MkdirAll(configDir, 0o755))
+	configPath := filepath.Join(configDir, "config.toml")
+	require.NoError(t, os.WriteFile(configPath, []byte("token = \"x\"\n"), 0o600))
+	require.NoError(t, os.Chmod(configPath, 0o600))
+
+	var out strings.Builder
+	warnIfConfigPermissionsTooOpen(
+		&out,
+		"linux",
+		func() (string, error) { return homeDir, nil },
+		os.Stat,
+	)
+
+	assert.Empty(t, out.String())
+}
+
+func TestWarnIfConfigPermissionsTooOpen_0644_Warns(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	configDir := filepath.Join(homeDir, ".loom")
+	require.NoError(t, os.MkdirAll(configDir, 0o755))
+	configPath := filepath.Join(configDir, "config.toml")
+	require.NoError(t, os.WriteFile(configPath, []byte("token = \"x\"\n"), 0o644))
+	require.NoError(t, os.Chmod(configPath, 0o644))
+
+	var out strings.Builder
+	warnIfConfigPermissionsTooOpen(
+		&out,
+		"linux",
+		func() (string, error) { return homeDir, nil },
+		os.Stat,
+	)
+
+	assert.Contains(t, out.String(), "Warning: config.toml has permissions 0644, recommended 0600")
+}
+
+func TestWarnIfConfigPermissionsTooOpen_MissingFile_NoWarning(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	var out strings.Builder
+	warnIfConfigPermissionsTooOpen(
+		&out,
+		"linux",
+		func() (string, error) { return homeDir, nil },
+		os.Stat,
+	)
+
+	assert.Empty(t, out.String())
+}
+
+func TestWarnIfConfigPermissionsTooOpen_NonUnix_SkipsGracefully(t *testing.T) {
+	t.Parallel()
+
+	statCalled := false
+	var out strings.Builder
+	warnIfConfigPermissionsTooOpen(
+		&out,
+		"windows",
+		func() (string, error) { return "", nil },
+		func(_ string) (os.FileInfo, error) {
+			statCalled = true
+			return nil, fs.ErrNotExist
+		},
+	)
+
+	assert.False(t, statCalled)
+	assert.Empty(t, out.String())
 }

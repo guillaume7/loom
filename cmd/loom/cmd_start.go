@@ -2,10 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"os/signal"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -31,6 +35,8 @@ func newStartCmd() *cobra.Command {
 		Short: "Start or resume the Loom workflow from the last checkpoint",
 		Long:  "Begin the Loom workflow from IDLE, or resume from the last persisted checkpoint.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			warnIfConfigPermissionsTooOpen(cmd.OutOrStdout(), runtime.GOOS, os.UserHomeDir, os.Stat)
+
 			cfg, err := config.Load()
 			if err != nil {
 				return err
@@ -121,4 +127,43 @@ func validateTokenScopes(ctx context.Context, out io.Writer, gh tokenScopeClient
 	}
 
 	return nil
+}
+
+func warnIfConfigPermissionsTooOpen(
+	out io.Writer,
+	goos string,
+	userHomeDir func() (string, error),
+	statFn func(string) (os.FileInfo, error),
+) {
+	if !supportsUnixPermissions(goos) {
+		return
+	}
+
+	homeDir, err := userHomeDir()
+	if err != nil || strings.TrimSpace(homeDir) == "" {
+		return
+	}
+
+	configPath := filepath.Join(homeDir, ".loom", "config.toml")
+	info, err := statFn(configPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return
+		}
+		return
+	}
+
+	mode := info.Mode().Perm()
+	if mode&0o077 != 0 {
+		_, _ = fmt.Fprintf(out, "Warning: config.toml has permissions %04o, recommended 0600\n", mode)
+	}
+}
+
+func supportsUnixPermissions(goos string) bool {
+	switch goos {
+	case "windows", "plan9":
+		return false
+	default:
+		return true
+	}
 }
