@@ -18,10 +18,7 @@ func (s *Server) buildServerInstructions(ctx context.Context) string {
 	currentState := s.machine.State()
 	s.mu.RUnlock()
 
-	cp, err := s.st.ReadCheckpoint(ctx)
-	if err != nil {
-		slog.InfoContext(ctx, "mcp instructions checkpoint read failed", "error", err)
-	}
+	cp := s.readCheckpoint(ctx, "instructions")
 
 	instructions := fmt.Sprintf(
 		"Loom workflow assistant. Current state: %s (phase %d).\n\nPhase summary: %s\n\nDependency digest:\n",

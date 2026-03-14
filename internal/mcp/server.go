@@ -21,9 +21,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"sync"
 	"time"
 
+	"github.com/guillaume7/loom/internal/agentspawn"
 	"github.com/guillaume7/loom/internal/fsm"
 	loomgh "github.com/guillaume7/loom/internal/github"
 	"github.com/guillaume7/loom/internal/store"
@@ -61,6 +63,7 @@ type elicitationContext struct {
 // Server is the Loom MCP server that exposes workflow tools.
 type Server struct {
 	mu                 sync.RWMutex // guards all access to machine and lastActivity
+	schedulerMu        sync.Mutex
 	machine            FSM
 	st                 store.Store
 	gh                 loomgh.Client
@@ -79,6 +82,9 @@ type Server struct {
 
 	// Resources registered via AddResource (E3).
 	resources []resourceEntry
+	spawner   agentspawn.Runner
+	schedCfg  SchedulerConfig
+	storyID   string
 }
 
 // Option configures a Server.
@@ -90,6 +96,27 @@ func WithClock(c Clock) Option { return func(s *Server) { s.clock = c } }
 
 // WithMonitorConfig overrides the default MonitorConfig.
 func WithMonitorConfig(cfg MonitorConfig) Option { return func(s *Server) { s.monCfg = cfg } }
+
+// WithStoryID scopes checkpoint reads/writes to a specific story row.
+func WithStoryID(storyID string) Option {
+	return func(s *Server) { s.storyID = normalizeStoryID(storyID) }
+}
+
+// WithSpawner overrides the background agent spawner. Intended for tests.
+func WithSpawner(spawner agentspawn.Runner) Option {
+	return func(s *Server) {
+		if spawner != nil {
+			s.spawner = spawner
+		}
+	}
+}
+
+// WithSchedulerConfig overrides the parallel scheduling configuration.
+func WithSchedulerConfig(cfg SchedulerConfig) Option {
+	return func(s *Server) {
+		s.schedCfg = normalizeSchedulerConfig(cfg)
+	}
+}
 
 // NewServer constructs a Server with the provided dependencies.
 // gh may be nil when GitHub connectivity is not required by the active tools.
@@ -103,6 +130,9 @@ func NewServer(machine FSM, st store.Store, gh loomgh.Client, opts ...Option) *S
 		monCfg:                    DefaultMonitorConfig(),
 		sessionTaskSupport:        make(map[string]bool),
 		sessionElicitationSupport: make(map[string]bool),
+		spawner:                   agentspawn.New(),
+		schedCfg:                  DefaultSchedulerConfig(),
+		storyID:                   normalizeStoryID(os.Getenv(storyIDEnvVar)),
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -210,16 +240,6 @@ func toolResultJSON(v interface{}) *mcplib.CallToolResult {
 	return mcplib.NewToolResultText(string(b))
 }
 
-// readCheckpoint reads the store checkpoint, logging any error and falling
-// back to a zero Checkpoint value (store errors are non-fatal to tool calls).
-func (s *Server) readCheckpoint(ctx context.Context, toolName string) store.Checkpoint {
-	cp, err := s.st.ReadCheckpoint(ctx)
-	if err != nil {
-		slog.InfoContext(ctx, "store read error", "tool", toolName, "error", err)
-	}
-	return cp
-}
-
 // checkCtx checks whether the context has been cancelled. If so, it returns
 // a tool-error result and true; otherwise it returns nil and false.
 // Callers should return immediately when the second return value is true.
@@ -258,6 +278,13 @@ func sessionIDFromContext(ctx context.Context) string {
 		return ""
 	}
 	return session.SessionID()
+}
+
+func (s *Server) scopedOperationKey(operationKey string) string {
+	if s.storyID == "" || operationKey == "" {
+		return operationKey
+	}
+	return s.storyID + ":" + operationKey
 }
 
 func (s *Server) setSessionTaskSupport(sessionID string, supported bool) {
@@ -301,18 +328,20 @@ func (s *Server) sessionSupportsElicitation(ctx context.Context) bool {
 }
 
 func (s *Server) readActionByOperationKey(ctx context.Context, toolName, operationKey string) (store.Action, bool, *mcplib.CallToolResult) {
-	action, err := s.st.ReadActionByOperationKey(ctx, operationKey)
+	scopedOperationKey := s.scopedOperationKey(operationKey)
+	action, err := s.st.ReadActionByOperationKey(ctx, scopedOperationKey)
 	if errors.Is(err, store.ErrActionNotFound) {
 		return store.Action{}, false, nil
 	}
 	if err != nil {
-		slog.ErrorContext(ctx, "action log lookup error", "tool", toolName, "operation_key", operationKey, "error", err)
+		slog.ErrorContext(ctx, "action log lookup error", "tool", toolName, "operation_key", scopedOperationKey, "error", err)
 		return store.Action{}, false, mcplib.NewToolResultError(fmt.Sprintf("failed to read action log: %v", err))
 	}
 	return action, true, nil
 }
 
 func (s *Server) writeActionOrReturnCached(ctx context.Context, toolName string, action store.Action) (*mcplib.CallToolResult, bool) {
+	action.OperationKey = s.scopedOperationKey(action.OperationKey)
 	err := s.st.WriteAction(ctx, action)
 	if err == nil {
 		return nil, false

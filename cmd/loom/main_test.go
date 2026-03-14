@@ -77,6 +77,7 @@ func TestStatusCmd_NoCheckpoint_PrintsNoActiveSession(t *testing.T) {
 }
 
 func TestResetCmd_Force_ClearsState(t *testing.T) {
+	chdir(t, initGitRepo(t))
 	t.Setenv("LOOM_DB_PATH", t.TempDir()+"/state.db")
 	var buf bytes.Buffer
 	cmd := newRootCmd()
@@ -88,6 +89,7 @@ func TestResetCmd_Force_ClearsState(t *testing.T) {
 }
 
 func TestResetCmd_Abort_OnNo(t *testing.T) {
+	chdir(t, initGitRepo(t))
 	t.Setenv("LOOM_DB_PATH", t.TempDir()+"/state.db")
 	var buf bytes.Buffer
 	cmd := newRootCmd()

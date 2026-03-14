@@ -168,14 +168,21 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 				s.machine.Rollback(snap)
 				newState = previousState
 
+				cp, readErr := s.readCheckpointWithErr(ctx)
+				if readErr != nil {
+					return mcplib.NewToolResultError(fmt.Sprintf("failed to read checkpoint: %v", readErr)), nil
+				}
 				emitBudgetExhaustion = true
-				emitPRNumber = s.readCheckpoint(ctx, toolName).PRNumber
+				emitPRNumber = cp.PRNumber
 			} else {
 				slog.InfoContext(ctx, "elicitation unsupported by client; using v1 pause fallback", "tool", toolName, "state", string(previousState), "event", string(event))
 			}
 		}
 
-		cp := s.readCheckpoint(ctx, toolName)
+		cp, readErr := s.readCheckpointWithErr(ctx)
+		if readErr != nil {
+			return mcplib.NewToolResultError(fmt.Sprintf("failed to read checkpoint: %v", readErr)), nil
+		}
 		nextPhase := cp.Phase
 		nextRetryCount := cp.RetryCount
 		detail := ""
@@ -200,8 +207,12 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 		// failure can never leave the store in a state where the checkpoint is
 		// written but the action log entry is absent. Either both are committed
 		// or neither is, making a retry with the same operation_key safe.
-		writeErr := s.st.WriteCheckpointAndAction(ctx,
-			store.Checkpoint{State: string(newState), Phase: nextPhase, RetryCount: nextRetryCount},
+		nextCheckpoint := cp
+		nextCheckpoint.State = string(newState)
+		nextCheckpoint.Phase = nextPhase
+		nextCheckpoint.RetryCount = nextRetryCount
+		writeErr := s.writeCheckpointAndAction(ctx,
+			nextCheckpoint,
 			store.Action{
 				SessionID:    sessionIDFromContext(ctx),
 				OperationKey: operationKey,
@@ -282,14 +293,25 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 			s.machine.Rollback(snap)
 			newState = previousState
 
+			cp, readErr := s.readCheckpointWithErr(ctx)
+			if readErr != nil {
+				s.machine.Rollback(snap)
+				s.mu.Unlock()
+				return mcplib.NewToolResultError(fmt.Sprintf("failed to read checkpoint: %v", readErr)), nil
+			}
 			emitBudgetExhaustion = true
-			emitPRNumber = s.readCheckpoint(ctx, toolName).PRNumber
+			emitPRNumber = cp.PRNumber
 		} else {
 			slog.InfoContext(ctx, "elicitation unsupported by client; using v1 pause fallback", "tool", toolName, "state", string(previousState), "event", string(event))
 		}
 	}
 
-	cp := s.readCheckpoint(ctx, toolName)
+	cp, readErr := s.readCheckpointWithErr(ctx)
+	if readErr != nil {
+		s.machine.Rollback(snap)
+		s.mu.Unlock()
+		return mcplib.NewToolResultError(fmt.Sprintf("failed to read checkpoint: %v", readErr)), nil
+	}
 	nextPhase := cp.Phase
 	nextRetryCount := cp.RetryCount
 	detail := ""
@@ -299,7 +321,11 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 		detail = fmt.Sprintf("skipped story at phase %d", cp.Phase)
 	}
 
-	if writeErr := s.st.WriteCheckpoint(ctx, store.Checkpoint{State: string(newState), Phase: nextPhase, RetryCount: nextRetryCount}); writeErr != nil {
+	nextCheckpoint := cp
+	nextCheckpoint.State = string(newState)
+	nextCheckpoint.Phase = nextPhase
+	nextCheckpoint.RetryCount = nextRetryCount
+	if writeErr := s.writeCheckpoint(ctx, nextCheckpoint); writeErr != nil {
 		s.machine.Rollback(snap)
 		s.mu.Unlock()
 		slog.ErrorContext(ctx, "store write error", "tool", toolName, "state", string(newState), "error", writeErr)
@@ -377,6 +403,7 @@ func (s *Server) handleAbort(ctx context.Context, req mcplib.CallToolRequest) (*
 	s.mu.Lock()
 	currentState := s.machine.State()
 	slog.InfoContext(ctx, "tool called", "tool", toolName, "state", string(currentState))
+	snap := s.machine.TakeSnapshot()
 	newState, transErr := s.machine.Transition(fsm.EventAbort)
 	s.mu.Unlock()
 
@@ -386,8 +413,18 @@ func (s *Server) handleAbort(ctx context.Context, req mcplib.CallToolRequest) (*
 		return mcplib.NewToolResultError(transErr.Error()), nil
 	}
 
-	cp := s.readCheckpoint(ctx, toolName)
-	if writeErr := s.st.WriteCheckpoint(ctx, store.Checkpoint{State: string(newState), Phase: cp.Phase}); writeErr != nil {
+	cp, readErr := s.readCheckpointWithErr(ctx)
+	if readErr != nil {
+		s.mu.Lock()
+		s.machine.Rollback(snap)
+		s.mu.Unlock()
+		return mcplib.NewToolResultError(fmt.Sprintf("failed to read checkpoint: %v", readErr)), nil
+	}
+	cp.State = string(newState)
+	if writeErr := s.writeCheckpoint(ctx, cp); writeErr != nil {
+		s.mu.Lock()
+		s.machine.Rollback(snap)
+		s.mu.Unlock()
 		slog.ErrorContext(ctx, "store write error", "tool", toolName, "state", string(newState), "error", writeErr)
 		slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(newState), "duration_ms", time.Since(start).Milliseconds(), "error", writeErr)
 		return mcplib.NewToolResultError(fmt.Sprintf("failed to persist abort state: %v", writeErr)), nil
@@ -469,6 +506,16 @@ func (s *Server) MCPServer() *mcpserver.MCPServer {
 		s.handleElicitationResponse,
 	)
 	srv.AddTool(
+		mcplib.NewTool("loom_schedule_epic",
+			mcplib.WithDescription("Evaluates the dependency DAG and spawns unblocked stories up to the configured parallelism limit"),
+			mcplib.WithReadOnlyHintAnnotation(false),
+			mcplib.WithString("operation_key",
+				mcplib.Description("Optional idempotency key used to return a cached result for retried calls"),
+			),
+		),
+		s.handleScheduleEpic,
+	)
+	srv.AddTool(
 		mcplib.NewTool("loom_get_state",
 			mcplib.WithDescription("Returns the current FSM state and epic phase (read-only)"),
 			mcplib.WithReadOnlyHintAnnotation(true),
@@ -482,6 +529,7 @@ func (s *Server) MCPServer() *mcpserver.MCPServer {
 		),
 		s.handleAbort,
 	)
+	s.registerBackgroundAgentTool(srv)
 
 	srv.AddResource(
 		mcplib.Resource{
@@ -520,10 +568,7 @@ func (s *Server) MCPServer() *mcpserver.MCPServer {
 			currentState := s.machine.State()
 			s.mu.RUnlock()
 
-			cp, err := s.st.ReadCheckpoint(context.Background())
-			if err != nil {
-				slog.Info("loom://state checkpoint read failed", "error", err)
-			}
+			cp := s.readCheckpoint(context.Background(), "loom://state")
 
 			unblockedStories := []string{}
 			graph, depErr := depgraph.Load(".loom/dependencies.yaml")

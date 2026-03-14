@@ -221,6 +221,12 @@ func (s *sqliteStore) WriteAction(ctx context.Context, action Action) error {
 // already exists the transaction is rolled back and ErrDuplicateOperationKey
 // is returned; neither the checkpoint nor the action is written.
 func (s *sqliteStore) WriteCheckpointAndAction(ctx context.Context, cp Checkpoint, action Action) error {
+	return s.WriteCheckpointAndActionByStoryID(ctx, "", cp, action)
+}
+
+// WriteCheckpointAndActionByStoryID atomically persists a story-scoped
+// checkpoint update and appends an action log entry in a single transaction.
+func (s *sqliteStore) WriteCheckpointAndActionByStoryID(ctx context.Context, storyID string, cp Checkpoint, action Action) error {
 	if cp.UpdatedAt.IsZero() {
 		cp.UpdatedAt = time.Now()
 	}
@@ -240,7 +246,7 @@ func (s *sqliteStore) WriteCheckpointAndAction(ctx context.Context, cp Checkpoin
 		}
 	}()
 
-	cp.StoryID = ""
+	cp.StoryID = storyID
 	_, txErr = tx.ExecContext(ctx,
 		`INSERT INTO checkpoint
 			(story_id, state, phase, pr_number, issue_number, retry_count, updated_at)

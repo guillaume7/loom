@@ -86,3 +86,22 @@ func TestHTTPClient_RateLimit_HTTP429_ExhaustsRetries(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "creating issue")
 }
+
+func TestHTTPClient_RateLimitBudget_ReturnsCoreBudget(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/rate_limit", r.URL.Path)
+		w.Header().Set("X-RateLimit-Limit", "5000")
+		w.Header().Set("X-RateLimit-Remaining", "321")
+		w.Header().Set("X-RateLimit-Reset", "1700000000")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"resources":{"core":{"limit":5000,"remaining":321,"reset":1700000000}}}`))
+	})
+	c := newTestClient(t, handler)
+
+	budget, err := c.RateLimit(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 5000, budget.Limit)
+	assert.Equal(t, 321, budget.Remaining)
+	assert.Equal(t, time.Unix(1700000000, 0), budget.Reset)
+}

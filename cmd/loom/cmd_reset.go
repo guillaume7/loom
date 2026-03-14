@@ -5,9 +5,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 
 	"github.com/guillaume7/loom/internal/config"
+	"github.com/guillaume7/loom/internal/gitworktree"
 	"github.com/guillaume7/loom/internal/store"
 	"github.com/spf13/cobra"
 )
@@ -46,7 +48,20 @@ func newResetCmd() *cobra.Command {
 				}
 			}
 
-			if err := st.DeleteAll(context.Background()); err != nil {
+			resetCtx := context.Background()
+			wd, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			worktrees := gitworktree.New()
+			repoRoot, err := worktrees.RepoRoot(resetCtx, wd)
+			if err != nil {
+				return err
+			}
+			if err := worktrees.CleanupManaged(resetCtx, repoRoot); err != nil {
+				return err
+			}
+			if err := st.DeleteAll(resetCtx); err != nil {
 				return err
 			}
 
