@@ -91,3 +91,37 @@
 - internal/mcp/server_test.go
 - docs/plan/backlog.yaml
 - docs/plan/session-log.md
+
+## Epic TH2.E6 — MCP Elicitation
+
+### Stories Completed
+- TH2.E6.US1 — Elicitation schema definition and emission
+- TH2.E6.US2 — skip_story FSM event and transition
+- TH2.E6.US3 — Elicitation response handler with fallback
+
+### Key Changes
+- Added structured elicitation payload emission for budget-exhaustion paths with enum-based operator actions.
+- Introduced `skip_story` FSM event and transitions with checkpoint phase advancement and skip detail tracking.
+- Added elicitation response tool handling `skip`, `reassign`, and `pause_epic`, plus unsupported-client fallback to immediate `PAUSED`.
+- Expanded capability negotiation and session-scoped handling for elicitation support.
+- Added focused MCP and integration tests for emission ordering, response mapping, fallback behavior, and state transitions.
+
+### Files Modified
+- internal/mcp/elicitation.go
+- internal/mcp/elicitation_test.go
+- internal/mcp/elicitation_checkpoint_test.go
+- internal/mcp/elicitation_response.go
+- internal/mcp/elicitation_response_test.go
+- internal/mcp/capabilities.go
+- internal/mcp/handlers.go
+- internal/mcp/server.go
+- internal/mcp/server_atomic_test.go
+- internal/mcp/server_core_test.go
+- internal/mcp/server_skip_story_test.go
+- internal/fsm/fsm.go
+- internal/fsm/fsm_test.go
+- internal/fsm/fsm_budget_test.go
+- integration/helpers_test.go
+- integration/budget_exhaustion_test.go
+- docs/plan/backlog.yaml
+- docs/plan/session-log.md
