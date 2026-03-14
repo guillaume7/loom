@@ -1,7 +1,7 @@
 # Backlog — Core State File
 backlog:
   project: "loom"
-  last-updated: "2026-03-14T00:20:11Z"
+  last-updated: "2026-03-14T00:24:28Z"
   themes:
     # ── TH1: Loom v1 Core ────────────────────────────────────────────
     - id: TH1
@@ -143,12 +143,12 @@ backlog:
         # E4 — Agent Definitions (P0/P1)
         - id: E4
           name: "Agent Definitions"
-          status: todo
+          status: in-progress
           depends-on: []
           stories:
             - id: TH2.E4.US1
               title: "Orchestrator agent definition"
-              status: todo
+              status: done
               file: docs/themes/TH2-agent-platform/epics/E4-agent-definitions/user-stories/US1-orchestrator-agent.md
               depends-on: []
             - id: TH2.E4.US2
