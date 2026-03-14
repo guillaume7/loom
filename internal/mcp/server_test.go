@@ -249,6 +249,71 @@ func callToolWithSession(t *testing.T, mcpSvr *mcpserver.MCPServer, toolName str
 	return &result, sess
 }
 
+// callToolOnSession invokes a tool using an already-registered session.
+func callToolOnSession(t *testing.T, mcpSvr *mcpserver.MCPServer, sess *testSession, toolName string, args map[string]interface{}) *mcplib.CallToolResult {
+	t.Helper()
+
+	if args == nil {
+		args = map[string]interface{}{}
+	}
+
+	ctx := mcpSvr.WithContext(context.Background(), sess)
+	msg, err := json.Marshal(map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "tools/call",
+		"params": map[string]interface{}{
+			"name":      toolName,
+			"arguments": args,
+		},
+	})
+	require.NoError(t, err)
+
+	raw := mcpSvr.HandleMessage(ctx, msg)
+	require.NotNil(t, raw, "HandleMessage returned nil for tool %q", toolName)
+
+	resp, ok := raw.(mcplib.JSONRPCResponse)
+	require.True(t, ok, "expected JSONRPCResponse, got %T", raw)
+
+	result, ok := resp.Result.(mcplib.CallToolResult)
+	require.True(t, ok, "expected CallToolResult in response.Result, got %T", resp.Result)
+
+	return &result
+}
+
+// initializeSessionWithCapabilities performs initialize on an existing
+// registered session so per-session capability negotiation can be asserted.
+func initializeSessionWithCapabilities(t *testing.T, mcpSvr *mcpserver.MCPServer, sess *testSession, capabilities map[string]interface{}) {
+	t.Helper()
+
+	if capabilities == nil {
+		capabilities = map[string]interface{}{}
+	}
+
+	ctx := mcpSvr.WithContext(context.Background(), sess)
+	msg, err := json.Marshal(map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "initialize",
+		"params": map[string]interface{}{
+			"protocolVersion": mcplib.LATEST_PROTOCOL_VERSION,
+			"capabilities":    capabilities,
+			"clientInfo": map[string]interface{}{
+				"name":    "loom-test-client",
+				"version": "0.0.0",
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	raw := mcpSvr.HandleMessage(ctx, msg)
+	require.NotNil(t, raw)
+
+	resp, ok := raw.(mcplib.JSONRPCResponse)
+	require.True(t, ok, "expected JSONRPCResponse, got %T", raw)
+	require.NotNil(t, resp.Result, "initialize returned empty result")
+}
+
 func drainNotifications(session *testSession) []mcplib.JSONRPCNotification {
 	notifications := make([]mcplib.JSONRPCNotification, 0)
 	for {

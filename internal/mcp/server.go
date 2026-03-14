@@ -58,6 +58,9 @@ type Server struct {
 	gh      loomgh.Client
 	emitter *TaskEmitter
 
+	// Session-scoped cache populated during initialize capability negotiation.
+	sessionTaskSupport map[string]bool
+
 	// Session management (E6).
 	clock        Clock
 	monCfg       MonitorConfig
@@ -82,11 +85,12 @@ func WithMonitorConfig(cfg MonitorConfig) Option { return func(s *Server) { s.mo
 // Optional Option values can be passed to override the clock or monitor config.
 func NewServer(machine FSM, st store.Store, gh loomgh.Client, opts ...Option) *Server {
 	s := &Server{
-		machine: machine,
-		st:      st,
-		gh:      gh,
-		clock:   RealClock,
-		monCfg:  DefaultMonitorConfig(),
+		machine:            machine,
+		st:                 st,
+		gh:                 gh,
+		clock:              RealClock,
+		monCfg:             DefaultMonitorConfig(),
+		sessionTaskSupport: make(map[string]bool),
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -240,6 +244,26 @@ func sessionIDFromContext(ctx context.Context) string {
 		return ""
 	}
 	return session.SessionID()
+}
+
+func (s *Server) setSessionTaskSupport(sessionID string, supported bool) {
+	if sessionID == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.sessionTaskSupport[sessionID] = supported
+}
+
+func (s *Server) sessionSupportsTasks(ctx context.Context) bool {
+	sessionID := sessionIDFromContext(ctx)
+	if sessionID == "" {
+		return false
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.sessionTaskSupport[sessionID]
 }
 
 func (s *Server) readActionByOperationKey(ctx context.Context, toolName, operationKey string) (store.Action, bool, *mcplib.CallToolResult) {

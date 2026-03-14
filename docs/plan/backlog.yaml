@@ -1,7 +1,7 @@
 # Backlog — Core State File
 backlog:
   project: "loom"
-  last-updated: "2026-03-14T15:33:50Z"
+  last-updated: "2026-03-14T15:43:48Z"
   themes:
     # ── TH1: Loom v1 Core ────────────────────────────────────────────
     - id: TH1
@@ -185,7 +185,7 @@ backlog:
               depends-on: [TH2.E5.US1]
             - id: TH2.E5.US3
               title: "Client capability negotiation and fallback"
-              status: todo
+              status: done
               file: docs/themes/TH2-agent-platform/epics/E5-mcp-tasks/user-stories/US3-capability-negotiation.md
               depends-on: [TH2.E5.US1]
 

@@ -93,9 +93,13 @@ func (s *Server) handleHeartbeat(ctx context.Context, req mcplib.CallToolRequest
 }
 
 func (s *Server) runHeartbeatPollingTask(ctx context.Context, req mcplib.CallToolRequest, cp store.Checkpoint, baseResult HeartbeatResult) *mcplib.CallToolResult {
-	emitter := s.Emitter()
-	if emitter == nil {
-		return mcplib.NewToolResultError("task emitter is not initialized")
+	useTaskLifecycle := s.sessionSupportsTasks(ctx)
+	var emitter *TaskEmitter
+	if useTaskLifecycle {
+		emitter = s.Emitter()
+		if emitter == nil {
+			return mcplib.NewToolResultError("task emitter is not initialized")
+		}
 	}
 
 	client, ok := s.gh.(heartbeatPollingClient)
@@ -136,40 +140,50 @@ func (s *Server) runHeartbeatPollingTask(ctx context.Context, req mcplib.CallToo
 
 	taskID := heartbeatTaskID(prNumber)
 	title := fmt.Sprintf("Watching CI for PR #%d", prNumber)
-	if err := emitter.Start(ctx, taskID, title, true); err != nil {
-		return mcplib.NewToolResultError(fmt.Sprintf("failed to emit task start: %v", err))
+	if emitter != nil {
+		if err := emitter.Start(ctx, taskID, title, true); err != nil {
+			return mcplib.NewToolResultError(fmt.Sprintf("failed to emit task start: %v", err))
+		}
 	}
 
 	pollInterval := time.Duration(pollIntervalSeconds) * time.Second
 	for polls := 1; ; polls++ {
 		summary, pollErr := pollCISummary(ctx, client, prNumber)
 		if pollErr != nil {
-			failedResult := map[string]any{"all_green": false, "failed_checks": []string{}, "error": pollErr.Error()}
-			if doneErr := emitter.Done(ctx, taskID, failedResult); doneErr != nil {
-				return mcplib.NewToolResultError(fmt.Sprintf("failed to emit task done: %v", doneErr))
+			if emitter != nil {
+				failedResult := map[string]any{"all_green": false, "failed_checks": []string{}, "error": pollErr.Error()}
+				if doneErr := emitter.Done(ctx, taskID, failedResult); doneErr != nil {
+					return mcplib.NewToolResultError(fmt.Sprintf("failed to emit task done: %v", doneErr))
+				}
 			}
 			return mcplib.NewToolResultError(fmt.Sprintf("failed to poll CI status: %v", pollErr))
 		}
 
-		if err := emitter.Progress(ctx, taskID, summary.progressText()); err != nil {
-			return mcplib.NewToolResultError(fmt.Sprintf("failed to emit task progress: %v", err))
+		if emitter != nil {
+			if err := emitter.Progress(ctx, taskID, summary.progressText()); err != nil {
+				return mcplib.NewToolResultError(fmt.Sprintf("failed to emit task progress: %v", err))
+			}
 		}
 
 		if summary.allGreen() || len(summary.FailedChecks) > 0 {
-			doneResult := map[string]any{"all_green": summary.allGreen()}
-			if len(summary.FailedChecks) > 0 {
-				doneResult["failed_checks"] = summary.FailedChecks
-			}
-			if err := emitter.Done(ctx, taskID, doneResult); err != nil {
-				return mcplib.NewToolResultError(fmt.Sprintf("failed to emit task done: %v", err))
+			if emitter != nil {
+				doneResult := map[string]any{"all_green": summary.allGreen()}
+				if len(summary.FailedChecks) > 0 {
+					doneResult["failed_checks"] = summary.FailedChecks
+				}
+				if err := emitter.Done(ctx, taskID, doneResult); err != nil {
+					return mcplib.NewToolResultError(fmt.Sprintf("failed to emit task done: %v", err))
+				}
 			}
 			return toolResultJSON(baseResult)
 		}
 
 		if maxPolls > 0 && polls >= maxPolls {
-			doneResult := map[string]any{"all_green": false, "failed_checks": []string{}}
-			if err := emitter.Done(ctx, taskID, doneResult); err != nil {
-				return mcplib.NewToolResultError(fmt.Sprintf("failed to emit task done: %v", err))
+			if emitter != nil {
+				doneResult := map[string]any{"all_green": false, "failed_checks": []string{}}
+				if err := emitter.Done(ctx, taskID, doneResult); err != nil {
+					return mcplib.NewToolResultError(fmt.Sprintf("failed to emit task done: %v", err))
+				}
 			}
 			return toolResultJSON(baseResult)
 		}

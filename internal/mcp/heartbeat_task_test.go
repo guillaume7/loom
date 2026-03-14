@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/guillaume7/loom/internal/fsm"
@@ -56,8 +57,15 @@ func TestLoomHeartbeat_PollingMode_EmitsTaskLifecycle_Success(t *testing.T) {
 	}
 	s := mcp.NewServer(machine, st, gh)
 	mcpSvr := s.MCPServer()
+	sess := newTestSession(nextSessionID())
+	require.NoError(t, mcpSvr.RegisterSession(context.Background(), sess))
+	initializeSessionWithCapabilities(t, mcpSvr, sess, map[string]interface{}{
+		"experimental": map[string]interface{}{
+			"tasks": true,
+		},
+	})
 
-	result, session := callToolWithSession(t, mcpSvr, "loom_heartbeat", map[string]interface{}{
+	result := callToolOnSession(t, mcpSvr, sess, "loom_heartbeat", map[string]interface{}{
 		"poll":                  true,
 		"pr_number":             42,
 		"poll_interval_seconds": 0,
@@ -65,7 +73,7 @@ func TestLoomHeartbeat_PollingMode_EmitsTaskLifecycle_Success(t *testing.T) {
 	})
 	require.False(t, result.IsError)
 
-	notes := drainNotifications(session)
+	notes := drainNotifications(sess)
 	require.Len(t, notes, 4)
 
 	assert.Equal(t, "loom/task/start", notes[0].Method)
@@ -107,8 +115,15 @@ func TestLoomHeartbeat_PollingMode_EmitsDoneWithFailedChecks(t *testing.T) {
 	}
 	s := mcp.NewServer(machine, st, gh)
 	mcpSvr := s.MCPServer()
+	sess := newTestSession(nextSessionID())
+	require.NoError(t, mcpSvr.RegisterSession(context.Background(), sess))
+	initializeSessionWithCapabilities(t, mcpSvr, sess, map[string]interface{}{
+		"experimental": map[string]interface{}{
+			"tasks": true,
+		},
+	})
 
-	result, session := callToolWithSession(t, mcpSvr, "loom_heartbeat", map[string]interface{}{
+	result := callToolOnSession(t, mcpSvr, sess, "loom_heartbeat", map[string]interface{}{
 		"poll":                  true,
 		"pr_number":             42,
 		"poll_interval_seconds": 0,
@@ -116,7 +131,7 @@ func TestLoomHeartbeat_PollingMode_EmitsDoneWithFailedChecks(t *testing.T) {
 	})
 	require.False(t, result.IsError)
 
-	notes := drainNotifications(session)
+	notes := drainNotifications(sess)
 	require.Len(t, notes, 3)
 
 	assert.Equal(t, "loom/task/start", notes[0].Method)
@@ -142,4 +157,94 @@ func TestLoomHeartbeat_PollingMode_EmitsDoneWithFailedChecks(t *testing.T) {
 	default:
 		require.Failf(t, "failed_checks type", "unexpected failed_checks type %T", failedAny)
 	}
+}
+
+func TestLoomHeartbeat_PollingMode_WithoutTaskCapability_BlocksWithoutTaskEvents(t *testing.T) {
+	machine := fsm.NewMachine(fsm.DefaultConfig())
+	st := newMemStore()
+	gh := &heartbeatPollingClientMock{
+		pr: &loomgh.PR{Number: 42, HeadSHA: "abc123"},
+		checkRunsByPoll: [][]*loomgh.CheckRun{
+			{
+				{Name: "build", Status: "in_progress", Conclusion: ""},
+			},
+			{
+				{Name: "build", Status: "completed", Conclusion: "success"},
+			},
+		},
+	}
+	s := mcp.NewServer(machine, st, gh)
+	mcpSvr := s.MCPServer()
+	sess := newTestSession(nextSessionID())
+	require.NoError(t, mcpSvr.RegisterSession(context.Background(), sess))
+	initializeSessionWithCapabilities(t, mcpSvr, sess, map[string]interface{}{})
+
+	result := callToolOnSession(t, mcpSvr, sess, "loom_heartbeat", map[string]interface{}{
+		"poll":                  true,
+		"pr_number":             42,
+		"poll_interval_seconds": 0,
+		"max_polls":             3,
+	})
+	require.False(t, result.IsError)
+
+	var payload mcp.HeartbeatResult
+	require.NoError(t, json.Unmarshal([]byte(toolText(t, result)), &payload))
+	assert.Equal(t, "IDLE", payload.State)
+	assert.False(t, payload.Wait)
+	assert.Equal(t, 0, payload.RetryInSeconds)
+	assert.Equal(t, 2, gh.pollCalls, "polling should block and perform CI polling in v1 fallback mode")
+	assert.Empty(t, drainNotifications(sess), "fallback mode must not emit task lifecycle notifications")
+}
+
+func TestLoomHeartbeat_PollingMode_TaskCapabilityNegotiatedOnceAndCached(t *testing.T) {
+	machine := fsm.NewMachine(fsm.DefaultConfig())
+	st := newMemStore()
+	gh := &heartbeatPollingClientMock{
+		pr: &loomgh.PR{Number: 42, HeadSHA: "abc123"},
+		checkRunsByPoll: [][]*loomgh.CheckRun{
+			{
+				{Name: "build", Status: "completed", Conclusion: "success"},
+			},
+		},
+	}
+	s := mcp.NewServer(machine, st, gh)
+	mcpSvr := s.MCPServer()
+	sess := newTestSession(nextSessionID())
+	require.NoError(t, mcpSvr.RegisterSession(context.Background(), sess))
+	initializeSessionWithCapabilities(t, mcpSvr, sess, map[string]interface{}{
+		"experimental": map[string]interface{}{
+			"tasks": true,
+		},
+	})
+
+	first := callToolOnSession(t, mcpSvr, sess, "loom_heartbeat", map[string]interface{}{
+		"poll":                  true,
+		"pr_number":             42,
+		"poll_interval_seconds": 0,
+		"max_polls":             1,
+	})
+	require.False(t, first.IsError)
+	firstNotes := drainNotifications(sess)
+	require.Len(t, firstNotes, 3)
+	require.Equal(t, "loom/task/start", firstNotes[0].Method)
+
+	second := callToolOnSession(t, mcpSvr, sess, "loom_heartbeat", map[string]interface{}{
+		"poll":                  true,
+		"pr_number":             42,
+		"poll_interval_seconds": 0,
+		"max_polls":             1,
+	})
+	require.False(t, second.IsError)
+	secondNotes := drainNotifications(sess)
+	require.Len(t, secondNotes, 3)
+	require.Equal(t, "loom/task/start", secondNotes[0].Method)
+
+	// Each call should only emit one start/progress/done sequence. If capability
+	// negotiation happened per call, behavior could drift; this ensures cached
+	// session capability is reused across multiple tool calls.
+	assert.Equal(t, []string{"loom/task/start", "loom/task/progress", "loom/task/done"}, []string{firstNotes[0].Method, firstNotes[1].Method, firstNotes[2].Method})
+	assert.Equal(t, []string{"loom/task/start", "loom/task/progress", "loom/task/done"}, []string{secondNotes[0].Method, secondNotes[1].Method, secondNotes[2].Method})
+
+	// Sanity check that polling ran twice (one poll per call with max_polls=1).
+	assert.Equal(t, 2, gh.pollCalls)
 }
