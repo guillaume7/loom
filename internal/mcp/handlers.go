@@ -323,7 +323,7 @@ func (s *Server) handleAbort(ctx context.Context, req mcplib.CallToolRequest) (*
 // Loom tools registered. Each call returns a fresh MCPServer instance sharing
 // the same underlying FSM and store.
 func (s *Server) MCPServer() *mcpserver.MCPServer {
-	srv := mcpserver.NewMCPServer("loom", "0.1.0")
+	srv := mcpserver.NewMCPServer("loom", "0.1.0", mcpserver.WithInstructions(s.buildServerInstructions(context.Background())))
 
 	srv.AddTool(
 		mcplib.NewTool("loom_next_step",

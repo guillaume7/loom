@@ -136,7 +136,7 @@ backlog:
               depends-on: [TH2.E3.US1]
             - id: TH2.E3.US5
               title: "MCP server instructions with phase summary and dependency digest"
-              status: todo
+                status: done
               file: docs/themes/TH2-agent-platform/epics/E3-mcp-resources/user-stories/US5-server-instructions.md
               depends-on: [TH2.E3.US1]
 
