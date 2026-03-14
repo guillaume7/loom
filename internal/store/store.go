@@ -20,6 +20,9 @@ var ErrActionNotFound = errors.New("action not found")
 // Checkpoint is a point-in-time snapshot of the Loom workflow that is written
 // to durable storage after every state transition.
 type Checkpoint struct {
+	// StoryID identifies the user story this checkpoint belongs to.
+	// The empty string keeps v1 sequential behavior.
+	StoryID string
 	// State is the serialised FSM state at the time of the checkpoint.
 	State string
 	// Phase is the current epic phase number being processed.

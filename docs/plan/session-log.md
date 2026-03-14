@@ -219,6 +219,10 @@
 ### 2026-03-14T17:37:45Z
 - status-change: TH2.E7 -> done
 - Context: Small epic closeout completed with full suite verification.
+
+### 2026-03-14T17:40:49Z
+- status-change: TH2.E8.US1 -> in-progress
+- Context: Started parallel execution epic with checkpoint story_id schema extension.
 2026-03-14T15:31:57Z | Subagent completed
 2026-03-14T15:33:34Z | Subagent completed
 2026-03-14T15:40:58Z | Subagent completed

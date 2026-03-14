@@ -370,4 +370,3 @@ func TestLoomDependenciesResource_FileNotFound_ReturnsError(t *testing.T) {
 	require.NoError(t, marshalErr)
 	assert.True(t, strings.Contains(strings.ToLower(string(payload)), "not found"), "expected not found message in response payload: %s", string(payload))
 }
-

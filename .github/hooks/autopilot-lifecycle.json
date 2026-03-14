@@ -1,0 +1,25 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "ROOT=docs; if [ ! -f docs/plan/backlog.yaml ] && [ -f docs/plan/backlog.yaml ]; then ROOT=docs; fi; if [ -f ${ROOT}/plan/backlog.yaml ]; then echo '=== BACKLOG STATE ==='; head -80 ${ROOT}/plan/backlog.yaml; echo; echo '=== SESSION LOG (last 10) ==='; tail -10 ${ROOT}/plan/session-log.md 2>/dev/null || echo 'No previous session'; fi",
+        "timeout": 5
+      }
+    ],
+    "SubagentStop": [
+      {
+        "type": "command",
+        "command": "ROOT=docs; if [ ! -f docs/plan/backlog.yaml ] && [ -f docs/plan/backlog.yaml ]; then ROOT=docs; fi; echo \"$(date -u +%Y-%m-%dT%H:%M:%SZ) | Subagent completed\" >> ${ROOT}/plan/session-log.md 2>/dev/null || true",
+        "timeout": 5
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "bash .github/hooks/scripts/save-session-state.sh",
+        "timeout": 10
+      }
+    ]
+  }
+}

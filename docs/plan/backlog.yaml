@@ -1,7 +1,7 @@
 # Backlog — Core State File
 backlog:
   project: "loom"
-  last-updated: "2026-03-14T17:37:45Z"
+  last-updated: "2026-03-14T17:40:49Z"
   themes:
     # ── TH1: Loom v1 Core ────────────────────────────────────────────
     - id: TH1
@@ -236,12 +236,12 @@ backlog:
         # E8 — Parallel Execution (P3)
         - id: E8
           name: "Parallel Execution"
-          status: todo
+          status: in-progress
           depends-on: [E1, E4, E6]
           stories:
             - id: TH2.E8.US1
               title: "Checkpoint table story_id column extension"
-              status: todo
+              status: in-progress
               file: docs/themes/TH2-agent-platform/epics/E8-parallel-execution/user-stories/US1-checkpoint-story-id.md
               depends-on: []
             - id: TH2.E8.US2

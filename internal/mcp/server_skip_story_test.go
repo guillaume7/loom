@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
 func TestLoomCheckpoint_SkipStory_FromAwaitingCI_AdvancesPhaseResetsRetryAndPersistsDetail(t *testing.T) {
 	s, mcpSvr := newTestServer(t)
 	st := s.Store().(*memStore)

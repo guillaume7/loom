@@ -99,6 +99,47 @@ func hasUniqueOperationKeyIndex(t *testing.T, db *sql.DB) bool {
 	return false
 }
 
+func hasUniqueCheckpointStoryIDIndex(t *testing.T, db *sql.DB) bool {
+	t.Helper()
+
+	rows, err := db.Query(`PRAGMA index_list(checkpoint)`)
+	require.NoError(t, err)
+
+	var indexNames []string
+	for rows.Next() {
+		var seq int
+		var name string
+		var unique int
+		var origin, partial interface{}
+		require.NoError(t, rows.Scan(&seq, &name, &unique, &origin, &partial))
+		if unique != 1 {
+			continue
+		}
+		indexNames = append(indexNames, name)
+	}
+
+	require.NoError(t, rows.Close())
+	require.NoError(t, rows.Err())
+
+	for _, name := range indexNames {
+		infoRows, err := db.Query(fmt.Sprintf("PRAGMA index_info(%s)", name))
+		require.NoError(t, err)
+
+		for infoRows.Next() {
+			var seqno, cid int
+			var columnName string
+			require.NoError(t, infoRows.Scan(&seqno, &cid, &columnName))
+			if columnName == "story_id" {
+				require.NoError(t, infoRows.Close())
+				return true
+			}
+		}
+		require.NoError(t, infoRows.Close())
+	}
+
+	return false
+}
+
 func TestMigrate_CreatesActionLogTableOnFreshDB(t *testing.T) {
 	db := openPinnedMemDB(t)
 
@@ -131,6 +172,13 @@ func TestMigrate_AddsColumnsToOldSchema(t *testing.T) {
 
 	// Run the migration — should add the missing E7 columns.
 	require.NoError(t, migrate(db))
+	assert.Contains(t, tableColumns(t, db, "checkpoint"), "story_id")
+	assert.True(t, hasUniqueCheckpointStoryIDIndex(t, db), "checkpoint should have a unique index on story_id")
+
+	var storyID string
+	err = db.QueryRow(`SELECT story_id FROM checkpoint WHERE id = 1`).Scan(&storyID)
+	require.NoError(t, err)
+	assert.Equal(t, "", storyID)
 
 	// Write and read back via the full Store logic to confirm new columns work.
 	st := &sqliteStore{db: db}
@@ -151,6 +199,41 @@ func TestMigrate_AddsColumnsToOldSchema(t *testing.T) {
 	assert.Equal(t, want.IssueNumber, got.IssueNumber)
 	assert.Equal(t, want.RetryCount, got.RetryCount)
 	assert.False(t, got.UpdatedAt.IsZero(), "UpdatedAt should be auto-set")
+}
+
+func TestSQLiteCheckpointByStoryID_AllowsMultipleRowsAndLegacyRowIsUnchanged(t *testing.T) {
+	db := openPinnedMemDB(t)
+	require.NoError(t, migrate(db))
+
+	st := &sqliteStore{db: db}
+	ctx := context.Background()
+
+	require.NoError(t, st.WriteCheckpoint(ctx, Checkpoint{State: "SCANNING", Phase: 1}))
+	require.NoError(t, st.WriteCheckpointByStoryID(ctx, "US-2.1", Checkpoint{State: "ISSUE_CREATED", Phase: 2}))
+	require.NoError(t, st.WriteCheckpointByStoryID(ctx, "US-2.2", Checkpoint{State: "AWAITING_CI", Phase: 3}))
+
+	legacy, err := st.ReadCheckpoint(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, "", legacy.StoryID)
+	assert.Equal(t, "SCANNING", legacy.State)
+	assert.Equal(t, 1, legacy.Phase)
+
+	storyOne, err := st.ReadCheckpointByStoryID(ctx, "US-2.1")
+	require.NoError(t, err)
+	assert.Equal(t, "US-2.1", storyOne.StoryID)
+	assert.Equal(t, "ISSUE_CREATED", storyOne.State)
+	assert.Equal(t, 2, storyOne.Phase)
+
+	storyTwo, err := st.ReadCheckpointByStoryID(ctx, "US-2.2")
+	require.NoError(t, err)
+	assert.Equal(t, "US-2.2", storyTwo.StoryID)
+	assert.Equal(t, "AWAITING_CI", storyTwo.State)
+	assert.Equal(t, 3, storyTwo.Phase)
+
+	var rowCount int
+	err = db.QueryRow(`SELECT COUNT(*) FROM checkpoint`).Scan(&rowCount)
+	require.NoError(t, err)
+	assert.Equal(t, 3, rowCount)
 }
 
 func TestMigrate_AddsActionLogToCheckpointOnlySchema(t *testing.T) {
@@ -188,7 +271,9 @@ func TestMigrate_Idempotent(t *testing.T) {
 	require.NoError(t, migrate(db))
 	beforeColumns := tableColumns(t, db, "action_log")
 	beforeHasIndex := hasUniqueOperationKeyIndex(t, db)
+	beforeHasCheckpointStoryIDIndex := hasUniqueCheckpointStoryIDIndex(t, db)
 	require.NoError(t, migrate(db)) // second call must not fail
 	assert.Equal(t, beforeColumns, tableColumns(t, db, "action_log"))
 	assert.Equal(t, beforeHasIndex, hasUniqueOperationKeyIndex(t, db))
+	assert.Equal(t, beforeHasCheckpointStoryIDIndex, hasUniqueCheckpointStoryIDIndex(t, db))
 }

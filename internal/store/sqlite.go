@@ -52,6 +52,7 @@ func New(dbPath string) (Store, error) {
 func migrate(db *sql.DB) error {
 	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS checkpoint (
 		id           INTEGER PRIMARY KEY,
+		story_id     TEXT    NOT NULL DEFAULT '',
 		state        TEXT    NOT NULL,
 		phase        INTEGER NOT NULL DEFAULT 0,
 		pr_number    INTEGER NOT NULL DEFAULT 0,
@@ -109,6 +110,7 @@ func migrate(db *sql.DB) error {
 		col string
 		ddl string
 	}{
+		{"story_id", "ALTER TABLE checkpoint ADD COLUMN story_id     TEXT    NOT NULL DEFAULT ''"},
 		{"pr_number", "ALTER TABLE checkpoint ADD COLUMN pr_number    INTEGER NOT NULL DEFAULT 0"},
 		{"issue_number", "ALTER TABLE checkpoint ADD COLUMN issue_number INTEGER NOT NULL DEFAULT 0"},
 		{"retry_count", "ALTER TABLE checkpoint ADD COLUMN retry_count  INTEGER NOT NULL DEFAULT 0"},
@@ -122,15 +124,31 @@ func migrate(db *sql.DB) error {
 			return err
 		}
 	}
+
+	_, err = db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_checkpoint_story_id ON checkpoint(story_id)`)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (s *sqliteStore) ReadCheckpoint(ctx context.Context) (Checkpoint, error) {
+	return s.ReadCheckpointByStoryID(ctx, "")
+}
+
+// ReadCheckpointByStoryID returns the most recent persisted Checkpoint for a
+// specific story ID. The empty story ID is reserved for v1 sequential mode.
+func (s *sqliteStore) ReadCheckpointByStoryID(ctx context.Context, storyID string) (Checkpoint, error) {
 	var cp Checkpoint
 	var updatedAt string
 	err := s.db.QueryRowContext(ctx,
-		"SELECT state, phase, pr_number, issue_number, retry_count, updated_at FROM checkpoint WHERE id = 1",
-	).Scan(&cp.State, &cp.Phase, &cp.PRNumber, &cp.IssueNumber, &cp.RetryCount, &updatedAt)
+		`SELECT story_id, state, phase, pr_number, issue_number, retry_count, updated_at
+		FROM checkpoint
+		WHERE story_id = ?
+		ORDER BY id DESC
+		LIMIT 1`,
+		storyID,
+	).Scan(&cp.StoryID, &cp.State, &cp.Phase, &cp.PRNumber, &cp.IssueNumber, &cp.RetryCount, &updatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Checkpoint{}, nil
 	}
@@ -147,13 +165,28 @@ func (s *sqliteStore) ReadCheckpoint(ctx context.Context) (Checkpoint, error) {
 }
 
 func (s *sqliteStore) WriteCheckpoint(ctx context.Context, cp Checkpoint) error {
+	return s.WriteCheckpointByStoryID(ctx, "", cp)
+}
+
+// WriteCheckpointByStoryID persists cp for a specific story ID. The empty
+// story ID preserves v1 sequential-mode behavior.
+func (s *sqliteStore) WriteCheckpointByStoryID(ctx context.Context, storyID string, cp Checkpoint) error {
+	cp.StoryID = storyID
 	if cp.UpdatedAt.IsZero() {
 		cp.UpdatedAt = time.Now()
 	}
 	_, err := s.db.ExecContext(ctx,
-		`INSERT OR REPLACE INTO checkpoint
-			(id, state, phase, pr_number, issue_number, retry_count, updated_at)
-		VALUES (1, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO checkpoint
+			(story_id, state, phase, pr_number, issue_number, retry_count, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(story_id) DO UPDATE SET
+			state = excluded.state,
+			phase = excluded.phase,
+			pr_number = excluded.pr_number,
+			issue_number = excluded.issue_number,
+			retry_count = excluded.retry_count,
+			updated_at = excluded.updated_at`,
+		cp.StoryID,
 		cp.State, cp.Phase, cp.PRNumber, cp.IssueNumber, cp.RetryCount,
 		cp.UpdatedAt.UTC().Format(time.RFC3339Nano),
 	)
@@ -207,10 +240,19 @@ func (s *sqliteStore) WriteCheckpointAndAction(ctx context.Context, cp Checkpoin
 		}
 	}()
 
+	cp.StoryID = ""
 	_, txErr = tx.ExecContext(ctx,
-		`INSERT OR REPLACE INTO checkpoint
-			(id, state, phase, pr_number, issue_number, retry_count, updated_at)
-		VALUES (1, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO checkpoint
+			(story_id, state, phase, pr_number, issue_number, retry_count, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(story_id) DO UPDATE SET
+			state = excluded.state,
+			phase = excluded.phase,
+			pr_number = excluded.pr_number,
+			issue_number = excluded.issue_number,
+			retry_count = excluded.retry_count,
+			updated_at = excluded.updated_at`,
+		cp.StoryID,
 		cp.State, cp.Phase, cp.PRNumber, cp.IssueNumber, cp.RetryCount,
 		cp.UpdatedAt.UTC().Format(time.RFC3339Nano),
 	)

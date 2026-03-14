@@ -19,9 +19,9 @@ type Graph struct {
 
 // Epic is a dependency container for stories.
 type Epic struct {
-	ID        string  `yaml:"id"`
+	ID        string   `yaml:"id"`
 	DependsOn []string `yaml:"depends_on"`
-	Stories   []Story `yaml:"stories"`
+	Stories   []Story  `yaml:"stories"`
 }
 
 // Story is a dependency node in an epic.
