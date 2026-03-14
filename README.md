@@ -51,6 +51,57 @@ See [docs/loom/analysis.md](docs/loom/analysis.md) for the full architecture.
 
 ---
 
+## Agent Squad & Autopilot
+
+Loom ships two operating modes driven by a squad of specialist AI agents:
+
+| Mode | Prompt | Description |
+|---|---|---|
+| **Local Autopilot** | `/run-autopilot` | Orchestrator loops through the backlog locally: developer → reviewer → troubleshooter |
+| **Loom Weaving** | `/run-loom` | `loom-mcp-operator` drives GitHub PRs server-side via `loom_next_step` / `loom_checkpoint` |
+
+### Lifecycle Prompts
+
+| Prompt | Phase | Purpose |
+|---|---|---|
+| `/kickstart-vision` | 1 | Interactively capture the product vision |
+| `/plan-product` | 2–3 | Architect → product-owner: architecture + backlog |
+| `/run-autopilot` | 4A | Local autonomous development loop |
+| `/run-loom` | 4B | Server-side PR weaving loop |
+| `/review` | 4 | Ad-hoc code review |
+| `/troubleshoot` | 4 | Ad-hoc failure diagnosis and fix |
+
+### Agent Roster
+
+| Agent | Phase | Role |
+|---|---|---|
+| **orchestrator** | 4A | Squad leader; sequences stories, manages lifecycle loop |
+| **product-owner** | 3 | Vision → themes, epics, BDD stories, backlog |
+| **architect** | 2 | Vision → architecture, tech stack, ADRs |
+| **developer** | 4A | Implements + tests exactly one user story |
+| **reviewer** | 4A | Code review: correctness, security, conventions |
+| **troubleshooter** | 4A | Diagnoses and fixes failed stories |
+| **loom-mcp-operator** | 4B | Drives Loom MCP tools in the master session |
+| **loom-orchestrator** | 4B | Orchestrates the Loom FSM end-to-end |
+| **loom-gate** | 4B | Evaluates whether a PR is safe to merge |
+| **loom-debug** | 4B | Diagnoses CI failures on a pull request |
+| **loom-merge** | 4B | Merges a pull request by number |
+
+See [`.github/agents/README.md`](.github/agents/README.md) for the full agent ↔ skill matrix.
+
+### Skills
+
+| Skill | Covers |
+|---|---|
+| `the-copilot-build-method` | 4-phase lifecycle, directory conventions, Definition of Done |
+| `bdd-stories` | Story format, acceptance criteria, BDD scenarios |
+| `backlog-management` | YAML schema, status state machine, dependency resolution |
+| `code-quality` | Review checklist, OWASP Top 10 security audit |
+| `architecture-decisions` | ADR format, tech stack analysis, component boundaries |
+| `loom-mcp-loop` | Canonical `loom_next_step` → GitHub action → `loom_checkpoint` loop |
+
+---
+
 ## Quick Start
 
 ### Prerequisites
@@ -146,8 +197,8 @@ Session calls `loom_next_step` → executes the task → calls `loom_checkpoint`
 advances the state machine → loops until complete.
 
 For that master session, use the workspace agent
-`.github/agents/loom-mcp-operator.md` together with the skill
-`.github/skills/loom-mcp-loop.md` so the session follows the exact Loom MCP
+`.github/agents/loom-mcp-operator.agent.md` together with the skill
+`.github/skills/loom-mcp-loop/SKILL.md` so the session follows the exact Loom MCP
 contract instead of improvising workflow steps.
 
 If you built from source and kept the binary in the repository root rather than
@@ -223,17 +274,26 @@ cmd/loom/        ← CLI entry point
 internal/
   fsm/           ← Pure state machine (zero external deps)
   github/        ← GitHub REST API wrapper
-  mcp/           ← MCP stdio server (5 tools)
+  mcp/           ← MCP stdio server
   store/         ← SQLite checkpoint store
   config/        ← Config loading
+  depgraph/      ← Dependency graph engine
+  agentspawn/    ← Agent spawn utilities
+  gitworktree/   ← Git worktree management
+  tools/         ← Shared tool helpers
 docs/
   loom/          ← Architecture analysis
-  adr/           ← Architecture Decision Records
-  epics/         ← E1–E8 epic definitions
-  vision_of_product/ ← Product vision
+  ADRs/          ← Architecture Decision Records
+  architecture/  ← System architecture docs (components, data model, tech stack)
+  themes/        ← TH1, TH2 … themes with epics and user stories
+  vision_of_product/ ← VP1, VP2 … product vision documents
+  plan/          ← backlog.yaml, session-log.md
 .github/
-  agents/        ← 9-agent squad definitions
-  skills/        ← Reusable skill files
+  agents/        ← 11-agent squad + archived agents
+  skills/        ← 6 reusable skills (the-copilot-build-method, bdd-stories,
+                    backlog-management, code-quality, architecture-decisions, loom-mcp-loop)
+  prompts/       ← Lifecycle prompts (/kickstart-vision, /plan-product,
+                    /run-autopilot, /run-loom, /review, /troubleshoot)
   workflows/     ← CI (go vet, golangci-lint, go test -race, cross-compile)
 ```
 
@@ -242,9 +302,11 @@ docs/
 ## Documentation
 
 - [Architecture Analysis](docs/loom/analysis.md)
-- [ADR-001: Adopt Loom](docs/adr/ADR-001-loom-local-orchestrator.md)
-- [Product Vision](docs/vision_of_product/01-vision.md)
-- [Epics Overview](docs/epics/README.md)
+- [System Architecture](docs/architecture/README.md)
+- [ADR-001: Adopt Loom](docs/ADRs/ADR-001-loom-local-orchestrator.md)
+- [Product Vision](docs/vision_of_product/VP1-vision/01-vision.md)
+- [Themes & Epics Overview](docs/themes/TH1-loom-1/epics/README.md)
+- [Agent Squad](.github/agents/README.md)
 - [Workflow Playbook](.github/squad_prompts/WORKFLOW_GITHUB.md)
 
 ---
