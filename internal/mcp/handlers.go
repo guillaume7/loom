@@ -229,38 +229,6 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 	return toolResultJSON(result), nil
 }
 
-func (s *Server) handleHeartbeat(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
-	const toolName = "loom_heartbeat"
-	start := time.Now()
-
-	if res, cancelled := checkCtx(ctx, toolName); cancelled {
-		return res, nil
-	}
-
-	s.mu.RLock()
-	currentState := s.machine.State()
-	s.mu.RUnlock()
-
-	slog.InfoContext(ctx, "tool called", "tool", toolName, "state", string(currentState))
-
-	cp := s.readCheckpoint(ctx, toolName)
-
-	gate := isGateState(currentState)
-	retry := 0
-	if gate {
-		retry = retryInSeconds
-	}
-	result := HeartbeatResult{
-		State:          string(currentState),
-		Phase:          cp.Phase,
-		Wait:           gate,
-		RetryInSeconds: retry,
-	}
-
-	slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(currentState), "duration_ms", time.Since(start).Milliseconds())
-	return toolResultJSON(result), nil
-}
-
 func (s *Server) handleGetState(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 	const toolName = "loom_get_state"
 	start := time.Now()
@@ -354,6 +322,18 @@ func (s *Server) MCPServer() *mcpserver.MCPServer {
 	srv.AddTool(
 		mcplib.NewTool("loom_heartbeat",
 			mcplib.WithDescription("Returns the current FSM state and phase as a health-check"),
+			mcplib.WithBoolean("poll",
+				mcplib.Description("Optional: when true, run CI polling mode and emit task lifecycle notifications"),
+			),
+			mcplib.WithNumber("pr_number",
+				mcplib.Description("Optional: pull request number to poll CI for; defaults to checkpoint PR number"),
+			),
+			mcplib.WithNumber("poll_interval_seconds",
+				mcplib.Description("Optional: polling interval in seconds (default 30)"),
+			),
+			mcplib.WithNumber("max_polls",
+				mcplib.Description("Optional: maximum poll iterations before finishing (for testing and bounded waits)"),
+			),
 		),
 		s.handleHeartbeat,
 	)

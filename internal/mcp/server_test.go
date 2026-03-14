@@ -207,6 +207,14 @@ func newTestServer(t *testing.T) (*mcp.Server, *mcpserver.MCPServer) {
 // returned for the caller to assert on; protocol-level errors fail the test.
 func callTool(t *testing.T, mcpSvr *mcpserver.MCPServer, toolName string, args map[string]interface{}) *mcplib.CallToolResult {
 	t.Helper()
+	result, _ := callToolWithSession(t, mcpSvr, toolName, args)
+	return result
+}
+
+// callToolWithSession is like callTool but returns the registered test session
+// so callers can inspect any server notifications sent during the call.
+func callToolWithSession(t *testing.T, mcpSvr *mcpserver.MCPServer, toolName string, args map[string]interface{}) (*mcplib.CallToolResult, *testSession) {
+	t.Helper()
 
 	if args == nil {
 		args = map[string]interface{}{}
@@ -238,7 +246,19 @@ func callTool(t *testing.T, mcpSvr *mcpserver.MCPServer, toolName string, args m
 	result, ok := resp.Result.(mcplib.CallToolResult)
 	require.True(t, ok, "expected CallToolResult in response.Result, got %T", resp.Result)
 
-	return &result
+	return &result, sess
+}
+
+func drainNotifications(session *testSession) []mcplib.JSONRPCNotification {
+	notifications := make([]mcplib.JSONRPCNotification, 0)
+	for {
+		select {
+		case note := <-session.notifications:
+			notifications = append(notifications, note)
+		default:
+			return notifications
+		}
+	}
 }
 
 // callToolConcurrent is a goroutine-safe variant of callTool that returns a
