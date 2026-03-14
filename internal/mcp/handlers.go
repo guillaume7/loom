@@ -115,10 +115,11 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 
 	// Decode the typed checkpoint request from generic MCP arguments using
 	// direct type assertions, avoiding an unnecessary JSON round-trip.
-	actionStr, _ := req.Params.Arguments["action"].(string)
+	args := req.GetArguments()
+	actionStr, _ := args["action"].(string)
 	if actionStr == "" {
 		// Accept "event" for backward compatibility.
-		actionStr, _ = req.Params.Arguments["event"].(string)
+		actionStr, _ = args["event"].(string)
 	}
 	if actionStr == "" {
 		return mcplib.NewToolResultError("missing or invalid 'action' argument: must be a non-empty string"), nil
@@ -417,6 +418,7 @@ func (s *Server) MCPServer() *mcpserver.MCPServer {
 	srv.AddTool(
 		mcplib.NewTool("loom_next_step",
 			mcplib.WithDescription("Returns the current workflow state and the next action the agent should take"),
+			mcplib.WithReadOnlyHintAnnotation(false),
 			mcplib.WithString("operation_key",
 				mcplib.Description("Optional idempotency key used to return a cached result for retried calls"),
 			),
@@ -426,6 +428,7 @@ func (s *Server) MCPServer() *mcpserver.MCPServer {
 	srv.AddTool(
 		mcplib.NewTool("loom_checkpoint",
 			mcplib.WithDescription("Fires an event on the Loom FSM to advance the workflow and persists the new state"),
+			mcplib.WithReadOnlyHintAnnotation(false),
 			mcplib.WithString("action",
 				mcplib.Required(),
 				mcplib.Description("The action to fire (e.g. start, pr_opened, ci_green, ci_red, review_approved, abort)"),
@@ -439,6 +442,7 @@ func (s *Server) MCPServer() *mcpserver.MCPServer {
 	srv.AddTool(
 		mcplib.NewTool("loom_heartbeat",
 			mcplib.WithDescription("Returns the current FSM state and phase as a health-check"),
+			mcplib.WithReadOnlyHintAnnotation(true),
 			mcplib.WithBoolean("poll",
 				mcplib.Description("Optional: when true, run CI polling mode and emit task lifecycle notifications"),
 			),
@@ -467,12 +471,14 @@ func (s *Server) MCPServer() *mcpserver.MCPServer {
 	srv.AddTool(
 		mcplib.NewTool("loom_get_state",
 			mcplib.WithDescription("Returns the current FSM state and epic phase (read-only)"),
+			mcplib.WithReadOnlyHintAnnotation(true),
 		),
 		s.handleGetState,
 	)
 	srv.AddTool(
 		mcplib.NewTool("loom_abort",
 			mcplib.WithDescription("Aborts the current workflow by transitioning the FSM to PAUSED"),
+			mcplib.WithReadOnlyHintAnnotation(false),
 		),
 		s.handleAbort,
 	)

@@ -45,7 +45,7 @@ func (s *Server) handleElicitationResponse(ctx context.Context, req mcplib.CallT
 		return res, nil
 	}
 
-	action, ok := req.Params.Arguments["action"].(string)
+	action, ok := req.GetArguments()["action"].(string)
 	if !ok || strings.TrimSpace(action) == "" {
 		return mcplib.NewToolResultError("missing or invalid 'action' argument: must be a non-empty string"), nil
 	}

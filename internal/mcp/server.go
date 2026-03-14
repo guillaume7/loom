@@ -240,7 +240,8 @@ func marshalResultText(v interface{}) (string, error) {
 }
 
 func optionalStringArgument(req mcplib.CallToolRequest, name string) (string, bool, error) {
-	v, ok := req.Params.Arguments[name]
+	args := req.GetArguments()
+	v, ok := args[name]
 	if !ok {
 		return "", false, nil
 	}

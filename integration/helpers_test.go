@@ -86,10 +86,10 @@ func callTool(t *testing.T, mcpSvr *mcpserver.MCPServer, toolName string, args m
 	resp, ok := raw.(mcplib.JSONRPCResponse)
 	require.True(t, ok, "expected JSONRPCResponse, got %T", raw)
 
-	result, ok := resp.Result.(mcplib.CallToolResult)
+	result, ok := parseCallToolResult(resp.Result)
 	require.True(t, ok, "expected CallToolResult in response.Result, got %T", resp.Result)
 
-	return &result
+	return result
 }
 
 // newRegisteredSession registers and returns a reusable test session.
@@ -127,10 +127,22 @@ func callToolOnSession(t *testing.T, mcpSvr *mcpserver.MCPServer, sess *testSess
 	resp, ok := raw.(mcplib.JSONRPCResponse)
 	require.True(t, ok, "expected JSONRPCResponse, got %T", raw)
 
-	result, ok := resp.Result.(mcplib.CallToolResult)
+	result, ok := parseCallToolResult(resp.Result)
 	require.True(t, ok, "expected CallToolResult in response.Result, got %T", resp.Result)
 
-	return &result
+	return result
+}
+
+func parseCallToolResult(v interface{}) (*mcplib.CallToolResult, bool) {
+	switch result := v.(type) {
+	case mcplib.CallToolResult:
+		copied := result
+		return &copied, true
+	case *mcplib.CallToolResult:
+		return result, true
+	default:
+		return nil, false
+	}
 }
 
 // initializeSessionWithCapabilities sends an initialize request for an

@@ -251,7 +251,7 @@ func pollCISummary(ctx context.Context, gh heartbeatPollingClient, prNumber int)
 }
 
 func optionalBoolArgument(req mcplib.CallToolRequest, name string) (bool, bool, error) {
-	v, ok := req.Params.Arguments[name]
+	v, ok := req.GetArguments()[name]
 	if !ok {
 		return false, false, nil
 	}
@@ -263,7 +263,7 @@ func optionalBoolArgument(req mcplib.CallToolRequest, name string) (bool, bool, 
 }
 
 func optionalIntArgument(req mcplib.CallToolRequest, name string) (int, bool, error) {
-	v, ok := req.Params.Arguments[name]
+	v, ok := req.GetArguments()[name]
 	if !ok {
 		return 0, false, nil
 	}

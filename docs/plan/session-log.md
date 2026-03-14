@@ -199,6 +199,14 @@
 ### 2026-03-14T17:16:09Z
 - status-change: TH2.E7.US1 -> done
 - Context: Startup token scope validation implemented, reviewed, and verified.
+
+### 2026-03-14T17:18:16Z
+- status-change: TH2.E7.US2 -> in-progress
+- Context: Started MCP tool readOnlyHint annotation story.
+
+### 2026-03-14T17:26:51Z
+- status-change: TH2.E7.US2 -> done
+- Context: MCP readOnlyHint annotations added and verified via tools/list tests.
 2026-03-14T15:31:57Z | Subagent completed
 2026-03-14T15:33:34Z | Subagent completed
 2026-03-14T15:40:58Z | Subagent completed
@@ -215,3 +223,5 @@
 2026-03-14T16:22:48Z | Subagent completed
 2026-03-14T17:13:42Z | Subagent completed
 2026-03-14T17:15:35Z | Subagent completed
+2026-03-14T17:24:08Z | Subagent completed
+2026-03-14T17:26:21Z | Subagent completed

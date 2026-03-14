@@ -45,8 +45,10 @@ func TestToolsList_RegistersAllToolsWithSchemas(t *testing.T) {
 	require.Len(t, result.Tools, 6, "expected exactly 6 tools registered")
 
 	var names []string
+	toolsByName := make(map[string]mcplib.Tool, len(result.Tools))
 	for _, tool := range result.Tools {
 		names = append(names, tool.Name)
+		toolsByName[tool.Name] = tool
 		assert.NotEmpty(t, tool.InputSchema.Type, "tool %q has empty InputSchema.Type", tool.Name)
 	}
 
@@ -58,6 +60,19 @@ func TestToolsList_RegistersAllToolsWithSchemas(t *testing.T) {
 		"loom_get_state",
 		"loom_abort",
 	}, names)
+
+	assertReadOnlyHint := func(toolName string, expected bool) {
+		tool, ok := toolsByName[toolName]
+		require.True(t, ok, "expected tool %q in tools/list", toolName)
+		require.NotNil(t, tool.Annotations.ReadOnlyHint, "tool %q missing annotations.readOnlyHint", toolName)
+		assert.Equal(t, expected, *tool.Annotations.ReadOnlyHint, "unexpected annotations.readOnlyHint for %q", toolName)
+	}
+
+	assertReadOnlyHint("loom_get_state", true)
+	assertReadOnlyHint("loom_heartbeat", true)
+	assertReadOnlyHint("loom_next_step", false)
+	assertReadOnlyHint("loom_checkpoint", false)
+	assertReadOnlyHint("loom_abort", false)
 }
 
 func TestLoomNextStep_ReturnsStateAndInstruction(t *testing.T) {

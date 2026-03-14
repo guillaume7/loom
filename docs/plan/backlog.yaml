@@ -1,7 +1,7 @@
 # Backlog — Core State File
 backlog:
   project: "loom"
-  last-updated: "2026-03-14T17:16:09Z"
+  last-updated: "2026-03-14T17:26:51Z"
   themes:
     # ── TH1: Loom v1 Core ────────────────────────────────────────────
     - id: TH1
@@ -224,7 +224,7 @@ backlog:
               depends-on: []
             - id: TH2.E7.US2
               title: "MCP tool readOnlyHint annotations"
-              status: todo
+              status: done
               file: docs/themes/TH2-agent-platform/epics/E7-security-hardening/user-stories/US2-tool-annotations.md
               depends-on: []
             - id: TH2.E7.US3

@@ -243,10 +243,10 @@ func callToolWithSession(t *testing.T, mcpSvr *mcpserver.MCPServer, toolName str
 	resp, ok := raw.(mcplib.JSONRPCResponse)
 	require.True(t, ok, "expected JSONRPCResponse, got %T", raw)
 
-	result, ok := resp.Result.(mcplib.CallToolResult)
+	result, ok := parseCallToolResult(resp.Result)
 	require.True(t, ok, "expected CallToolResult in response.Result, got %T", resp.Result)
 
-	return &result, sess
+	return result, sess
 }
 
 // callToolOnSession invokes a tool using an already-registered session.
@@ -275,10 +275,10 @@ func callToolOnSession(t *testing.T, mcpSvr *mcpserver.MCPServer, sess *testSess
 	resp, ok := raw.(mcplib.JSONRPCResponse)
 	require.True(t, ok, "expected JSONRPCResponse, got %T", raw)
 
-	result, ok := resp.Result.(mcplib.CallToolResult)
+	result, ok := parseCallToolResult(resp.Result)
 	require.True(t, ok, "expected CallToolResult in response.Result, got %T", resp.Result)
 
-	return &result
+	return result
 }
 
 // initializeSessionWithCapabilities performs initialize on an existing
@@ -362,8 +362,20 @@ func callToolConcurrent(mcpSvr *mcpserver.MCPServer, toolName string, args map[s
 	if !ok {
 		return false
 	}
-	_, ok = resp.Result.(mcplib.CallToolResult)
+	_, ok = parseCallToolResult(resp.Result)
 	return ok
+}
+
+func parseCallToolResult(v interface{}) (*mcplib.CallToolResult, bool) {
+	switch result := v.(type) {
+	case mcplib.CallToolResult:
+		copied := result
+		return &copied, true
+	case *mcplib.CallToolResult:
+		return result, true
+	default:
+		return nil, false
+	}
 }
 
 // toolText returns the text of the first TextContent item in result.
