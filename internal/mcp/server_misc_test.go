@@ -322,3 +322,219 @@ func TestLoomDependenciesResource_FileNotFound_ReturnsError(t *testing.T) {
 	require.NoError(t, marshalErr)
 	assert.True(t, strings.Contains(strings.ToLower(string(payload)), "not found"), "expected not found message in response payload: %s", string(payload))
 }
+
+// --------------------------------------------------------------------------
+// TH2.E3.US3: Built-in loom://state resource
+// --------------------------------------------------------------------------
+
+func TestLoomStateResource_ListIncludesURI(t *testing.T) {
+	machine := fsm.NewMachine(fsm.DefaultConfig())
+	st := newMemStore()
+	s := mcp.NewServer(machine, st, nil)
+	mcpSvr := s.MCPServer()
+
+	ctx := context.Background()
+	sess := newTestSession(nextSessionID())
+	require.NoError(t, mcpSvr.RegisterSession(ctx, sess))
+	ctx = mcpSvr.WithContext(ctx, sess)
+
+	msg, err := json.Marshal(map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "resources/list",
+		"params":  map[string]interface{}{},
+	})
+	require.NoError(t, err)
+
+	raw := mcpSvr.HandleMessage(ctx, msg)
+	require.NotNil(t, raw)
+
+	resp, ok := raw.(mcplib.JSONRPCResponse)
+	require.True(t, ok, "expected JSONRPCResponse, got %T", raw)
+
+	result, ok := resp.Result.(mcplib.ListResourcesResult)
+	require.True(t, ok, "expected ListResourcesResult, got %T", resp.Result)
+
+	var uris []string
+	for _, r := range result.Resources {
+		uris = append(uris, r.URI)
+	}
+	assert.Contains(t, uris, "loom://state")
+}
+
+func TestLoomStateResource_ReadReturnsJSON(t *testing.T) {
+	originalWD, err := os.Getwd()
+	require.NoError(t, err)
+	tempDir := t.TempDir()
+	require.NoError(t, os.Chdir(tempDir))
+	t.Cleanup(func() {
+		require.NoError(t, os.Chdir(originalWD))
+	})
+
+	machine := fsm.NewMachine(fsm.DefaultConfig())
+	st := newMemStore()
+	s := mcp.NewServer(machine, st, nil)
+	mcpSvr := s.MCPServer()
+
+	resp := callResourceRead(t, mcpSvr, "loom://state")
+
+	result, ok := resp.Result.(mcplib.ReadResourceResult)
+	require.True(t, ok, "expected ReadResourceResult, got %T", resp.Result)
+	require.Len(t, result.Contents, 1, "expected single resource content")
+
+	tc, ok := result.Contents[0].(mcplib.TextResourceContents)
+	require.True(t, ok, "expected TextResourceContents, got %T", result.Contents[0])
+	assert.Equal(t, "loom://state", tc.URI)
+	assert.Equal(t, "application/json", tc.MIMEType)
+
+	var body map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(tc.Text), &body))
+
+	assert.Contains(t, body, "state")
+	assert.Contains(t, body, "phase")
+	assert.Contains(t, body, "pr_number")
+	assert.Contains(t, body, "issue_number")
+	assert.Contains(t, body, "retry_count")
+	assert.Contains(t, body, "updated_at")
+	assert.Contains(t, body, "unblocked_stories")
+
+	assert.Equal(t, "IDLE", body["state"])
+	assert.Equal(t, float64(0), body["phase"])
+	assert.Equal(t, float64(0), body["pr_number"])
+	assert.Equal(t, float64(0), body["issue_number"])
+	assert.Equal(t, float64(0), body["retry_count"])
+	assert.Equal(t, "", body["updated_at"])
+
+	unblockedStories, ok := body["unblocked_stories"].([]interface{})
+	require.True(t, ok, "expected unblocked_stories to be an array, got %T", body["unblocked_stories"])
+	assert.Empty(t, unblockedStories)
+}
+
+func TestLoomStateResource_UnblockedStoriesBehavior(t *testing.T) {
+	t.Run("missing dependencies file still includes empty unblocked_stories", func(t *testing.T) {
+		originalWD, err := os.Getwd()
+		require.NoError(t, err)
+		tempDir := t.TempDir()
+		require.NoError(t, os.Chdir(tempDir))
+		t.Cleanup(func() {
+			require.NoError(t, os.Chdir(originalWD))
+		})
+
+		machine := fsm.NewMachine(fsm.DefaultConfig())
+		st := newMemStore()
+		s := mcp.NewServer(machine, st, nil)
+		mcpSvr := s.MCPServer()
+
+		resp := callResourceRead(t, mcpSvr, "loom://state")
+		result, ok := resp.Result.(mcplib.ReadResourceResult)
+		require.True(t, ok, "expected ReadResourceResult, got %T", resp.Result)
+		require.Len(t, result.Contents, 1)
+
+		tc, ok := result.Contents[0].(mcplib.TextResourceContents)
+		require.True(t, ok, "expected TextResourceContents, got %T", result.Contents[0])
+
+		var body map[string]interface{}
+		require.NoError(t, json.Unmarshal([]byte(tc.Text), &body))
+
+		value, exists := body["unblocked_stories"]
+		require.True(t, exists, "expected unblocked_stories key to be present")
+		stories, ok := value.([]interface{})
+		require.True(t, ok, "expected unblocked_stories to be an array, got %T", value)
+		assert.Empty(t, stories)
+	})
+
+	t.Run("valid dependencies file returns unblocked story IDs", func(t *testing.T) {
+		originalWD, err := os.Getwd()
+		require.NoError(t, err)
+		tempDir := t.TempDir()
+		require.NoError(t, os.Chdir(tempDir))
+		t.Cleanup(func() {
+			require.NoError(t, os.Chdir(originalWD))
+		})
+
+		require.NoError(t, os.Mkdir(filepath.Join(tempDir, ".loom"), 0o755))
+		deps := `version: 1
+epics:
+  - id: E2
+    depends_on: []
+    stories:
+      - id: US-2.1
+        depends_on: []
+      - id: US-2.2
+        depends_on: []
+      - id: US-2.3
+        depends_on: [US-2.1]
+`
+		require.NoError(t, os.WriteFile(filepath.Join(tempDir, ".loom", "dependencies.yaml"), []byte(deps), 0o644))
+
+		machine := fsm.NewMachine(fsm.DefaultConfig())
+		st := newMemStore()
+		s := mcp.NewServer(machine, st, nil)
+		mcpSvr := s.MCPServer()
+
+		resp := callResourceRead(t, mcpSvr, "loom://state")
+		result, ok := resp.Result.(mcplib.ReadResourceResult)
+		require.True(t, ok, "expected ReadResourceResult, got %T", resp.Result)
+		require.Len(t, result.Contents, 1)
+
+		tc, ok := result.Contents[0].(mcplib.TextResourceContents)
+		require.True(t, ok, "expected TextResourceContents, got %T", result.Contents[0])
+
+		var body map[string]interface{}
+		require.NoError(t, json.Unmarshal([]byte(tc.Text), &body))
+
+		value, exists := body["unblocked_stories"]
+		require.True(t, exists, "expected unblocked_stories key to be present")
+		rawStories, ok := value.([]interface{})
+		require.True(t, ok, "expected unblocked_stories to be an array, got %T", value)
+
+		stories := make([]string, 0, len(rawStories))
+		for _, raw := range rawStories {
+			storyID, ok := raw.(string)
+			require.True(t, ok, "expected story ID to be a string, got %T", raw)
+			stories = append(stories, storyID)
+		}
+
+		assert.Equal(t, []string{"US-2.1", "US-2.2"}, stories)
+	})
+}
+
+func TestLoomStateResource_ReflectsCurrentState(t *testing.T) {
+	machine := fsm.NewMachine(fsm.DefaultConfig())
+	st := newMemStore()
+	s := mcp.NewServer(machine, st, nil)
+	mcpSvr := s.MCPServer()
+
+	before := callResourceRead(t, mcpSvr, "loom://state")
+	beforeResult, ok := before.Result.(mcplib.ReadResourceResult)
+	require.True(t, ok, "expected ReadResourceResult, got %T", before.Result)
+	require.Len(t, beforeResult.Contents, 1)
+
+	beforeText, ok := beforeResult.Contents[0].(mcplib.TextResourceContents)
+	require.True(t, ok, "expected TextResourceContents, got %T", beforeResult.Contents[0])
+
+	var beforeBody struct {
+		State string `json:"state"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(beforeText.Text), &beforeBody))
+	assert.Equal(t, "IDLE", beforeBody.State)
+
+	checkpoint := callTool(t, mcpSvr, "loom_checkpoint", map[string]interface{}{"action": "start"})
+	assert.False(t, checkpoint.IsError, "expected start checkpoint to succeed")
+
+	after := callResourceRead(t, mcpSvr, "loom://state")
+	afterResult, ok := after.Result.(mcplib.ReadResourceResult)
+	require.True(t, ok, "expected ReadResourceResult, got %T", after.Result)
+	require.Len(t, afterResult.Contents, 1)
+
+	afterText, ok := afterResult.Contents[0].(mcplib.TextResourceContents)
+	require.True(t, ok, "expected TextResourceContents, got %T", afterResult.Contents[0])
+
+	var afterBody struct {
+		State string `json:"state"`
+		Phase int    `json:"phase"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(afterText.Text), &afterBody))
+	assert.Equal(t, "SCANNING", afterBody.State)
+	assert.Equal(t, 0, afterBody.Phase)
+}

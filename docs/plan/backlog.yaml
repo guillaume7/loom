@@ -126,7 +126,7 @@ backlog:
               depends-on: [TH2.E3.US1]
             - id: TH2.E3.US3
               title: "loom://state MCP resource"
-              status: todo
+                status: done
               file: docs/themes/TH2-agent-platform/epics/E3-mcp-resources/user-stories/US3-state-resource.md
               depends-on: [TH2.E3.US1]
             - id: TH2.E3.US4
