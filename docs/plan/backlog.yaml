@@ -1,7 +1,7 @@
 # Backlog — Core State File
 backlog:
   project: "loom"
-  last-updated: "2026-03-14T17:06:37Z"
+  last-updated: "2026-03-14T17:16:09Z"
   themes:
     # ── TH1: Loom v1 Core ────────────────────────────────────────────
     - id: TH1
@@ -214,12 +214,12 @@ backlog:
         # E7 — Security Hardening (P2)
         - id: E7
           name: "Security Hardening"
-          status: todo
+          status: in-progress
           depends-on: []
           stories:
             - id: TH2.E7.US1
               title: "GitHub token scope validation on startup"
-              status: todo
+              status: done
               file: docs/themes/TH2-agent-platform/epics/E7-security-hardening/user-stories/US1-token-validation.md
               depends-on: []
             - id: TH2.E7.US2

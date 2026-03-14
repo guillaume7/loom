@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -248,6 +249,53 @@ func (c *HTTPClient) Ping(ctx context.Context) error {
 		return fmt.Errorf("ping: %w", err)
 	}
 	return nil
+}
+
+// TokenScopes calls /user and returns scopes from X-OAuth-Scopes.
+func (c *HTTPClient) TokenScopes(ctx context.Context) ([]string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/user", nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Accept", "application/vnd.github+json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("execute request: %w", err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	body, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return nil, fmt.Errorf("read response body: %w", readErr)
+	}
+
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return nil, fmt.Errorf("GitHub token is invalid or expired")
+	}
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("token validation failed: HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	return parseOAuthScopes(resp.Header.Get("X-OAuth-Scopes")), nil
+}
+
+func parseOAuthScopes(headerVal string) []string {
+	if strings.TrimSpace(headerVal) == "" {
+		return nil
+	}
+	parts := strings.Split(headerVal, ",")
+	scopes := make([]string, 0, len(parts))
+	for _, p := range parts {
+		s := strings.TrimSpace(p)
+		if s != "" {
+			scopes = append(scopes, s)
+		}
+	}
+	return scopes
 }
 
 // ── Issue operations ──────────────────────────────────────────────────────

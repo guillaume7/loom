@@ -191,6 +191,14 @@
 ### 2026-03-14T17:06:37Z
 - status-change: TH2.E6 -> done
 - Context: Small epic closeout completed with full test suite verification.
+
+### 2026-03-14T17:09:23Z
+- status-change: TH2.E7.US1 -> in-progress
+- Context: Started security hardening epic with GitHub token scope validation story.
+
+### 2026-03-14T17:16:09Z
+- status-change: TH2.E7.US1 -> done
+- Context: Startup token scope validation implemented, reviewed, and verified.
 2026-03-14T15:31:57Z | Subagent completed
 2026-03-14T15:33:34Z | Subagent completed
 2026-03-14T15:40:58Z | Subagent completed
@@ -205,3 +213,5 @@
 2026-03-14T16:18:09Z | Subagent completed
 2026-03-14T16:21:24Z | Subagent completed
 2026-03-14T16:22:48Z | Subagent completed
+2026-03-14T17:13:42Z | Subagent completed
+2026-03-14T17:15:35Z | Subagent completed
