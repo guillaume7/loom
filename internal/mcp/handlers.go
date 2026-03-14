@@ -2,11 +2,13 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/guillaume7/loom/internal/depgraph"
@@ -452,6 +454,29 @@ func (s *Server) MCPServer() *mcpserver.MCPServer {
 		},
 	)
 
+	srv.AddResource(
+		mcplib.Resource{
+			URI:         "loom://log",
+			Name:        "Action Log",
+			Description: "NDJSON of the last 200 action_log entries",
+			MIMEType:    "application/x-ndjson",
+		},
+		func(_ context.Context, _ mcplib.ReadResourceRequest) ([]mcplib.ResourceContents, error) {
+			actions, err := s.st.ReadActions(context.Background(), 200)
+			if err != nil {
+				return nil, fmt.Errorf("loom://log: %w", err)
+			}
+			var sb strings.Builder
+			for index := len(actions) - 1; index >= 0; index-- {
+				a := actions[index]
+				line, err := json.Marshal(map[string]any{"id": a.ID, "session_id": a.SessionID, "operation_key": a.OperationKey, "state_before": a.StateBefore, "state_after": a.StateAfter, "event": a.Event, "detail": a.Detail, "created_at": a.CreatedAt})
+				if err != nil { return nil, fmt.Errorf("loom://log: failed to marshal action %d: %w", a.ID, err) }
+				sb.Write(line)
+				sb.WriteByte('\n')
+			}
+			return []mcplib.ResourceContents{mcplib.TextResourceContents{URI: "loom://log", MIMEType: "application/x-ndjson", Text: sb.String()}}, nil
+		},
+	)
 	s.mu.RLock()
 	resources := make([]resourceEntry, len(s.resources))
 	copy(resources, s.resources)
