@@ -3,9 +3,11 @@ package main
 import (
 	"bytes"
 	"context"
-	"os"
+	"fmt"
+	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/guillaume7/loom/internal/store"
 	"github.com/stretchr/testify/assert"
@@ -130,7 +132,6 @@ func TestResumeCmd_NothingToResume(t *testing.T) {
 }
 
 func TestLogCmd_EmptyFile_ExitsOK(t *testing.T) {
-	t.Setenv("LOOM_LOG_PATH", t.TempDir()+"/nonexistent.log")
 	t.Setenv("LOOM_DB_PATH", t.TempDir()+"/state.db")
 	var buf bytes.Buffer
 	cmd := newRootCmd()
@@ -138,45 +139,83 @@ func TestLogCmd_EmptyFile_ExitsOK(t *testing.T) {
 	cmd.SetArgs([]string{"log"})
 	err := cmd.Execute()
 	require.NoError(t, err)
-	assert.Empty(t, buf.String())
+	assert.Equal(t, "No actions recorded\n", buf.String())
 }
 
-func TestLogCmd_WithContent_PrintsLines(t *testing.T) {
+func TestLogCmd_WithActions_PrintsRecentEntries(t *testing.T) {
 	dir := t.TempDir()
-	logPath := dir + "/loom.log"
-	t.Setenv("LOOM_LOG_PATH", logPath)
-	t.Setenv("LOOM_DB_PATH", dir+"/state.db")
+	dbPath := dir + "/state.db"
+	t.Setenv("LOOM_DB_PATH", dbPath)
 
-	// Write two log lines.
-	require.NoError(t, os.WriteFile(logPath, []byte(`{"level":"INFO","msg":"first"}
-{"level":"INFO","msg":"second"}
-`), 0o600))
+	st, err := store.New(dbPath)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, st.Close())
+	})
+
+	now := time.Date(2026, 3, 14, 10, 0, 0, 0, time.UTC)
+	for i := 0; i < 5; i++ {
+		err := st.WriteAction(context.Background(), store.Action{
+			SessionID:    "session-1",
+			OperationKey: fmt.Sprintf("op-%d", i),
+			StateBefore:  fmt.Sprintf("S%d", i),
+			StateAfter:   fmt.Sprintf("S%d", i+1),
+			Event:        fmt.Sprintf("event-%d", i),
+			CreatedAt:    now.Add(time.Duration(i) * time.Second),
+		})
+		require.NoError(t, err)
+	}
 
 	var buf bytes.Buffer
 	cmd := newRootCmd()
 	cmd.SetOut(&buf)
 	cmd.SetArgs([]string{"log"})
 	require.NoError(t, cmd.Execute())
-	assert.Contains(t, buf.String(), "first")
-	assert.Contains(t, buf.String(), "second")
+
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	require.Len(t, lines, 5)
+	// Reverse-chronological by created_at.
+	assert.Contains(t, lines[0], "op-4")
+	assert.Contains(t, lines[0], "S4 -> S5")
+	assert.Contains(t, lines[0], "event-4")
+	assert.Regexp(t, regexp.MustCompile(`^\d{4}-\d{2}-\d{2}T`), lines[0])
+	assert.Contains(t, lines[4], "op-0")
 }
 
-func TestLogCmd_Tail_LimitsOutput(t *testing.T) {
+func TestLogCmd_Limit_OverridesDefault(t *testing.T) {
 	dir := t.TempDir()
-	logPath := dir + "/loom.log"
-	t.Setenv("LOOM_LOG_PATH", logPath)
-	t.Setenv("LOOM_DB_PATH", dir+"/state.db")
+	dbPath := dir + "/state.db"
+	t.Setenv("LOOM_DB_PATH", dbPath)
 
-	require.NoError(t, os.WriteFile(logPath, []byte("line1\nline2\nline3\n"), 0o600))
+	st, err := store.New(dbPath)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, st.Close())
+	})
+
+	now := time.Date(2026, 3, 14, 11, 0, 0, 0, time.UTC)
+	for i := 0; i < 100; i++ {
+		err := st.WriteAction(context.Background(), store.Action{
+			SessionID:    "session-2",
+			OperationKey: fmt.Sprintf("k-%03d", i),
+			StateBefore:  "BEFORE",
+			StateAfter:   "AFTER",
+			Event:        "transition",
+			CreatedAt:    now.Add(time.Duration(i) * time.Second),
+		})
+		require.NoError(t, err)
+	}
 
 	var buf bytes.Buffer
 	cmd := newRootCmd()
 	cmd.SetOut(&buf)
-	cmd.SetArgs([]string{"log", "-n", "1"})
+	cmd.SetArgs([]string{"log", "--limit", "10"})
 	require.NoError(t, cmd.Execute())
-	out := buf.String()
-	assert.Contains(t, out, "line3")
-	assert.NotContains(t, out, "line1")
+
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	require.Len(t, lines, 10)
+	assert.Contains(t, lines[0], "k-099")
+	assert.Contains(t, lines[9], "k-090")
 }
 
 func TestStatusCmd_WithActiveCheckpoint_PrintsStateAndPhase(t *testing.T) {

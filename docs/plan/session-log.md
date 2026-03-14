@@ -69,6 +69,18 @@
 ### 2026-03-14T00:08:22Z
 - status-change: TH2.E2.US3 -> done
 - Context: MCP idempotency enforcement approved after atomic write and FSM rollback fixes.
+
+### 2026-03-14T00:08:48Z
+- status-change: TH2.E2.US4 -> in-progress
+- Context: Finishing Epic E2 with CLI action history output.
+
+### 2026-03-14T00:12:36Z
+- status-change: TH2.E2.US4 -> done
+- Context: CLI action history behavior verified and reviewer-approved.
+
+### 2026-03-14T00:20:11Z
+- status-change: TH2.E2 -> done
+- Context: Large epic closeout completed after integration validation, rollback fix, and epic-level review approval.
 2026-03-13T23:29:21Z | Subagent completed
 2026-03-13T23:30:27Z | Subagent completed
 2026-03-13T23:33:48Z | Subagent completed
@@ -83,3 +95,10 @@
 2026-03-13T23:58:36Z | Subagent completed
 2026-03-14T00:04:39Z | Subagent completed
 2026-03-14T00:08:04Z | Subagent completed
+2026-03-14T00:10:55Z | Subagent completed
+2026-03-14T00:12:27Z | Subagent completed
+2026-03-14T00:13:45Z | Subagent completed
+2026-03-14T00:14:39Z | Subagent completed
+2026-03-14T00:16:47Z | Subagent completed
+2026-03-14T00:18:29Z | Subagent completed
+2026-03-14T00:19:47Z | Subagent completed

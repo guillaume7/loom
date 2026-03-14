@@ -16,3 +16,33 @@
 - internal/depgraph/depgraph_test.go
 - docs/plan/backlog.yaml
 - docs/plan/session-log.md
+
+## Epic TH2.E2 — Action Log & Idempotency
+
+### Stories Completed
+- TH2.E2.US1 — Action log table migration
+- TH2.E2.US2 — WriteAction and ReadActions store methods
+- TH2.E2.US3 — Idempotency check in MCP tool handlers
+- TH2.E2.US4 — loom log CLI shows action history
+
+### Key Changes
+- Added additive SQLite migration for the action_log table and unique operation keys.
+- Added durable store APIs for writing, listing, and looking up action-log entries, plus atomic checkpoint-and-action persistence.
+- Enforced MCP checkpoint idempotency with cached replay and rollback-safe failure handling.
+- Updated loom log to display structured action history from the database with limit support.
+- Expanded tests across store, MCP, FSM rollback, integration helpers, and CLI log behavior.
+
+### Files Modified
+- internal/store/store.go
+- internal/store/sqlite.go
+- internal/store/store_test.go
+- internal/store/migrate_test.go
+- internal/mcp/server.go
+- internal/mcp/server_test.go
+- internal/fsm/fsm.go
+- internal/fsm/fsm_test.go
+- integration/helpers_test.go
+- cmd/loom/cmd_log.go
+- cmd/loom/main_test.go
+- docs/plan/backlog.yaml
+- docs/plan/session-log.md
