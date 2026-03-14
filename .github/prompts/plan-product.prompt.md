@@ -26,7 +26,43 @@ Invoke the @product-owner agent to break the vision + architecture into:
 - `docs/themes/TH<n>-<name>/` — theme/epic/story hierarchy
 - `docs/plan/backlog.yaml` — YAML dependency graph with all stories
 
-After both steps complete, display a summary of:
+### Step 3 — GitHub Issue Templates
+
+After Step 2 completes, sync `.github/ISSUE_TEMPLATE/` with the current epic set:
+
+**Generate / update epic templates**
+
+For every epic discovered under `docs/themes/TH<n>-*/epics/E<m>-*/`, create or overwrite `.github/ISSUE_TEMPLATE/<epic-slug>.md` (e.g. `e1-project-foundation.md`) using this structure:
+
+```markdown
+---
+name: "E<m> — <Epic Title>"
+about: <one-sentence goal from epic.md>
+title: "E<m>: <Epic Title>"
+labels: ["epic", "E<m>", "TH<n>"]
+---
+
+## Goal
+
+<goal paragraph from epic.md>
+
+## User Stories
+
+<checkbox list of story IDs and titles from the epic's user-stories/ directory>
+
+## Acceptance Criteria
+
+<acceptance criteria from epic.md, as checkboxes>
+```
+
+**Archive stale epic templates**
+
+1. List all files in `.github/ISSUE_TEMPLATE/` whose names match the pattern `e[0-9]*.md`.
+2. For any file that does NOT correspond to a current epic (no matching `docs/themes/` directory), move it to `.github/ISSUE_TEMPLATE/archive/`.
+3. Never touch utility templates: `debugging.md`, `implementation-status.md`, `refactoring.md`, `config.yml`.
+
+After all three steps complete, display a summary of:
 - Number of themes, epics, and stories created
+- Issue templates created/updated and any archived
 - Dependency graph overview
 - Estimated implementation order
