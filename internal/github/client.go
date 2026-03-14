@@ -251,6 +251,59 @@ func (c *HTTPClient) Ping(ctx context.Context) error {
 	return nil
 }
 
+// RateLimit returns the current GitHub core API rate-limit budget.
+func (c *HTTPClient) RateLimit(ctx context.Context) (RateLimit, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/rate_limit", nil)
+	if err != nil {
+		return RateLimit{}, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Accept", "application/vnd.github+json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return RateLimit{}, fmt.Errorf("execute request: %w", err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	body, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return RateLimit{}, fmt.Errorf("read response body: %w", readErr)
+	}
+	if resp.StatusCode >= 400 {
+		return RateLimit{}, fmt.Errorf("rate limit request failed: HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	rl := parseRateLimitHeaders(resp)
+	if rl.limit == 0 {
+		var payload struct {
+			Resources struct {
+				Core struct {
+					Limit     int   `json:"limit"`
+					Remaining int   `json:"remaining"`
+					Reset     int64 `json:"reset"`
+				} `json:"core"`
+			} `json:"resources"`
+		}
+		if err := json.Unmarshal(body, &payload); err != nil {
+			return RateLimit{}, fmt.Errorf("decode rate limit response: %w", err)
+		}
+		rl.limit = payload.Resources.Core.Limit
+		rl.remaining = payload.Resources.Core.Remaining
+		if payload.Resources.Core.Reset > 0 {
+			rl.reset = time.Unix(payload.Resources.Core.Reset, 0)
+		}
+	}
+
+	return RateLimit{
+		Limit:     rl.limit,
+		Remaining: rl.remaining,
+		Reset:     rl.reset,
+	}, nil
+}
+
 // TokenScopes calls /user and returns scopes from X-OAuth-Scopes.
 func (c *HTTPClient) TokenScopes(ctx context.Context) ([]string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/user", nil)

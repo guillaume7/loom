@@ -65,6 +65,7 @@ func TestLoad_EnvOverrides(t *testing.T) {
 	t.Setenv("LOOM_REPO", "override-repo")
 	t.Setenv("LOOM_TOKEN", "mytoken")
 	t.Setenv("LOOM_DB_PATH", "/tmp/custom.db")
+	t.Setenv("LOOM_MAX_PARALLEL", "7")
 
 	// Write a file with different values — env must win.
 	dir := filepath.Join(home, ".loom")
@@ -80,6 +81,7 @@ repo  = "file-repo"
 	assert.Equal(t, "override-repo", cfg.Repo)
 	assert.Equal(t, "mytoken", cfg.Token)
 	assert.Equal(t, "/tmp/custom.db", cfg.DBPath)
+	assert.Equal(t, 7, cfg.MaxParallel)
 }
 
 func TestLoad_Token_NotInLogs(t *testing.T) {
@@ -104,9 +106,10 @@ func TestLoad_DefaultDBPath(t *testing.T) {
 	t.Setenv("LOOM_REPO", "")
 	t.Setenv("LOOM_TOKEN", "")
 	t.Setenv("LOOM_LOG_PATH", "")
+	t.Setenv("LOOM_MAX_PARALLEL", "")
 
 	cfg, err := config.Load()
 	require.NoError(t, err)
 	assert.Equal(t, ".loom/state.db", cfg.DBPath)
+	assert.Equal(t, 3, cfg.MaxParallel)
 }
-

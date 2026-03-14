@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/guillaume7/loom/internal/fsm"
-	"github.com/guillaume7/loom/internal/store"
 )
 
 // Clock provides the current time. Inject a fake implementation in tests
@@ -113,14 +112,23 @@ func (s *Server) RunStallCheck(ctx context.Context) bool {
 		s.mu.Unlock()
 		return false
 	}
+	snap := s.machine.TakeSnapshot()
 	_, _ = s.machine.Transition(fsm.EventAbort)
 	s.mu.Unlock()
 
-	cp := s.readCheckpoint(ctx, "stall_check")
-	if err := s.st.WriteCheckpoint(ctx, store.Checkpoint{
-		State: string(fsm.StatePaused),
-		Phase: cp.Phase,
-	}); err != nil {
+	cp, err := s.readCheckpointWithErr(ctx)
+	if err != nil {
+		s.mu.Lock()
+		s.machine.Rollback(snap)
+		s.mu.Unlock()
+		slog.ErrorContext(ctx, "failed to read checkpoint during stall recovery", "error", err)
+		return false
+	}
+	cp.State = string(fsm.StatePaused)
+	if err := s.writeCheckpoint(ctx, cp); err != nil {
+		s.mu.Lock()
+		s.machine.Rollback(snap)
+		s.mu.Unlock()
 		slog.ErrorContext(ctx, "failed to persist PAUSED checkpoint on stall", "error", err)
 	} else {
 		slog.WarnContext(ctx, "stall recovery: state written to PAUSED",

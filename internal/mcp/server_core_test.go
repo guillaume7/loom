@@ -42,7 +42,7 @@ func TestToolsList_RegistersAllToolsWithSchemas(t *testing.T) {
 	result, ok := resp.Result.(mcplib.ListToolsResult)
 	require.True(t, ok, "expected ListToolsResult, got %T", resp.Result)
 
-	require.Len(t, result.Tools, 6, "expected exactly 6 tools registered")
+	require.Len(t, result.Tools, 8, "expected exactly 8 tools registered")
 
 	var names []string
 	toolsByName := make(map[string]mcplib.Tool, len(result.Tools))
@@ -57,8 +57,10 @@ func TestToolsList_RegistersAllToolsWithSchemas(t *testing.T) {
 		"loom_checkpoint",
 		"loom_heartbeat",
 		"loom_elicitation_response",
+		"loom_schedule_epic",
 		"loom_get_state",
 		"loom_abort",
+		"loom_spawn_agent",
 	}, names)
 
 	assertReadOnlyHint := func(toolName string, expected bool) {
@@ -72,7 +74,9 @@ func TestToolsList_RegistersAllToolsWithSchemas(t *testing.T) {
 	assertReadOnlyHint("loom_heartbeat", true)
 	assertReadOnlyHint("loom_next_step", false)
 	assertReadOnlyHint("loom_checkpoint", false)
+	assertReadOnlyHint("loom_schedule_epic", false)
 	assertReadOnlyHint("loom_abort", false)
+	assertReadOnlyHint("loom_spawn_agent", false)
 }
 
 func TestLoomNextStep_ReturnsStateAndInstruction(t *testing.T) {

@@ -2,6 +2,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -23,6 +24,9 @@ type Config struct {
 	// LogPath is the path to the structured JSON log file.
 	// Defaults to ~/.loom/loom.log if unset.
 	LogPath string `toml:"log_path"`
+	// MaxParallel is the maximum number of stories the orchestrator may spawn
+	// concurrently. Defaults to 3 when unset or invalid.
+	MaxParallel int `toml:"max_parallel"`
 
 	// Deprecated: Use Owner instead.
 	RepoOwner string `toml:"repo_owner"`
@@ -38,6 +42,7 @@ type Config struct {
 //	LOOM_TOKEN     → cfg.Token
 //	LOOM_DB_PATH   → cfg.DBPath
 //	LOOM_LOG_PATH  → cfg.LogPath
+//	LOOM_MAX_PARALLEL → cfg.MaxParallel
 //
 // A missing config file is not an error; Load returns a zero-value Config.
 // DBPath defaults to ".loom/state.db" and LogPath defaults to
@@ -75,6 +80,12 @@ func Load() (Config, error) {
 	if v := os.Getenv("LOOM_LOG_PATH"); v != "" {
 		cfg.LogPath = v
 	}
+	if v := os.Getenv("LOOM_MAX_PARALLEL"); v != "" {
+		var parsed int
+		if _, err := fmt.Sscanf(v, "%d", &parsed); err == nil {
+			cfg.MaxParallel = parsed
+		}
+	}
 
 	// Default DBPath.
 	if cfg.DBPath == "" {
@@ -83,6 +94,9 @@ func Load() (Config, error) {
 	// Default LogPath to ~/.loom/loom.log.
 	if cfg.LogPath == "" && homeDir != "" {
 		cfg.LogPath = filepath.Join(homeDir, ".loom", "loom.log")
+	}
+	if cfg.MaxParallel <= 0 {
+		cfg.MaxParallel = 3
 	}
 
 	// Populate legacy aliases if not already set by file.

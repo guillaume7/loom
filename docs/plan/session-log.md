@@ -243,3 +243,39 @@
 2026-03-14T17:26:21Z | Subagent completed
 2026-03-14T17:32:52Z | Subagent completed
 2026-03-14T17:34:39Z | Subagent completed
+
+### 2026-03-14T19:18:29Z
+- status-change: TH2.E8.US1 -> done
+- Context: Crash recovery confirmed the checkpoint story_id implementation was already present; targeted store, MCP, CLI, and integration tests passed.
+
+### 2026-03-14T19:18:29Z
+- status-change: TH2.E8.US2 -> in-progress
+- Context: Advanced to background agent spawning via code chat CLI after recovering the completed US1 state.
+
+### 2026-03-14T19:58:42Z
+- status-change: TH2.E8.US2 -> done
+- Context: Background agent spawning was hardened for story-scoped checkpoints, rollback safety, and Windows-safe env filtering; full test suite passed.
+
+### 2026-03-14T19:58:42Z
+- status-change: TH2.E8.US3 -> in-progress
+- Context: Advanced to git worktree lifecycle management as the next eligible parallel-execution story.
+
+### 2026-03-14T20:08:57Z
+- status-change: TH2.E8.US3 -> done
+- Context: Deterministic worktree creation, cleanup on agent completion, and loom reset cleanup were implemented and verified with targeted and full test suites.
+
+### 2026-03-14T20:08:57Z
+- status-change: TH2.E8.US4 -> in-progress
+- Context: Advanced to DAG-aware parallel scheduling with concurrency limits as the final E8 story.
+
+### 2026-03-14T20:19:52Z
+- status-change: TH2.E8.US4 -> done
+- Context: DAG-aware scheduling, concurrency limits, and GitHub rate-limit deferral were implemented and verified with targeted and full test suites.
+
+### 2026-03-14T20:19:52Z
+- status-change: TH2.E8 -> done
+- Context: Parallel execution epic completed after validating background spawn, worktree lifecycle, and scheduling behavior.
+
+### 2026-03-14T20:19:52Z
+- status-change: TH2 -> done
+- Context: Native Agent Platform theme completed; all TH2 backlog stories are now verified done.

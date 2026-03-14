@@ -62,14 +62,19 @@ func (s *Server) handleElicitationResponse(ctx context.Context, req mcplib.CallT
 		return mcplib.NewToolResultError("no active elicitation to respond to"), nil
 	}
 
-	cp := s.readCheckpoint(ctx, toolName)
+	cp, readErr := s.readCheckpointWithErr(ctx)
+	if readErr != nil {
+		return mcplib.NewToolResultError(fmt.Sprintf("failed to read checkpoint: %v", readErr)), nil
+	}
 	previousState := s.machine.State()
 	nextPhase := cp.Phase
 	nextRetryCount := cp.RetryCount
 	nextPRNumber := cp.PRNumber
 	detail := ""
+	originalCheckpoint := cp
 
 	snap := s.machine.TakeSnapshot()
+	var closePRNumber int
 
 	var transitionEvent fsm.Event
 	switch action {
@@ -88,17 +93,10 @@ func (s *Server) handleElicitationResponse(ctx context.Context, req mcplib.CallT
 			return mcplib.NewToolResultError("reassign requires a positive PR number in the active elicitation context"), nil
 		}
 
-		closingClient, hasClosingClient := s.gh.(prClosingClient)
-		if !hasClosingClient {
-			return mcplib.NewToolResultError("reassign requested but GitHub client does not support PR closing"), nil
-		}
-		if err := closingClient.CloseIssue(ctx, prNumber); err != nil {
-			return mcplib.NewToolResultError(fmt.Sprintf("failed to close PR #%d: %v", prNumber, err)), nil
-		}
-
 		transitionEvent = fsm.EventReassign
 		nextRetryCount = 0
 		nextPRNumber = 0
+		closePRNumber = prNumber
 		detail = fmt.Sprintf("reassigned story from PR #%d", prNumber)
 
 	case "pause_epic":
@@ -111,7 +109,7 @@ func (s *Server) handleElicitationResponse(ctx context.Context, req mcplib.CallT
 		return mcplib.NewToolResultError(transErr.Error()), nil
 	}
 
-	if writeErr := s.st.WriteCheckpoint(ctx, store.Checkpoint{
+	if writeErr := s.writeCheckpoint(ctx, store.Checkpoint{
 		State:       string(newState),
 		Phase:       nextPhase,
 		PRNumber:    nextPRNumber,
@@ -120,6 +118,24 @@ func (s *Server) handleElicitationResponse(ctx context.Context, req mcplib.CallT
 	}); writeErr != nil {
 		s.machine.Rollback(snap)
 		return mcplib.NewToolResultError(fmt.Sprintf("failed to persist checkpoint: %v", writeErr)), nil
+	}
+
+	if closePRNumber > 0 {
+		closingClient, hasClosingClient := s.gh.(prClosingClient)
+		if !hasClosingClient {
+			s.machine.Rollback(snap)
+			if restoreErr := s.writeCheckpoint(ctx, originalCheckpoint); restoreErr != nil {
+				return mcplib.NewToolResultError(fmt.Sprintf("reassign requested but GitHub client does not support PR closing; additionally failed to restore checkpoint: %v", restoreErr)), nil
+			}
+			return mcplib.NewToolResultError("reassign requested but GitHub client does not support PR closing"), nil
+		}
+		if err := closingClient.CloseIssue(ctx, closePRNumber); err != nil {
+			s.machine.Rollback(snap)
+			if restoreErr := s.writeCheckpoint(ctx, originalCheckpoint); restoreErr != nil {
+				return mcplib.NewToolResultError(fmt.Sprintf("failed to close PR #%d: %v; additionally failed to restore checkpoint: %v", closePRNumber, err, restoreErr)), nil
+			}
+			return mcplib.NewToolResultError(fmt.Sprintf("failed to close PR #%d: %v", closePRNumber, err)), nil
+		}
 	}
 
 	s.activeElicitation = elicitationContext{}

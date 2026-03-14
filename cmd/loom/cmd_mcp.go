@@ -43,7 +43,9 @@ func newMCPCmd() *cobra.Command {
 				gh = loomgh.NewHTTPClient("https://api.github.com", cfg.Token, cfg.Owner, cfg.Repo)
 			}
 
-			srv := mcp.NewServer(machine, st, gh)
+			srv := mcp.NewServer(machine, st, gh, mcp.WithSchedulerConfig(mcp.SchedulerConfig{
+				MaxParallel: cfg.MaxParallel,
+			}))
 
 			ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 			defer stop()

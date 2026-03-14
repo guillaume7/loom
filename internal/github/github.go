@@ -1,7 +1,17 @@
 // Package github provides a GitHub REST API client interface for Loom.
 package github
 
-import "context"
+import (
+	"context"
+	"time"
+)
+
+// RateLimit captures the current GitHub API core rate-limit budget.
+type RateLimit struct {
+	Limit     int
+	Remaining int
+	Reset     time.Time
+}
 
 // IssueNumber is the numeric identifier of a GitHub issue or pull request.
 type IssueNumber int
