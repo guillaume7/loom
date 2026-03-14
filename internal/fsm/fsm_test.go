@@ -590,3 +590,76 @@ func TestMachine_CounterReset_ScanningResetsLoopCounters(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, fsm.StateDebugging, got, "debug cycle should be allowed again after SCANNING reset")
 }
+
+// ---------------------------------------------------------------------------
+// Snapshot and Rollback
+// ---------------------------------------------------------------------------
+
+// TestMachine_TakeSnapshot_CapturesState verifies that TakeSnapshot returns a
+// snapshot reflecting the current FSM state.
+func TestMachine_TakeSnapshot_CapturesState(t *testing.T) {
+	m := fsm.NewMachine(fsm.DefaultConfig())
+	mustTransition(t, m, fsm.EventStart) // IDLE → SCANNING
+
+	snap := m.TakeSnapshot()
+
+	// Advance to a new state after the snapshot.
+	mustTransition(t, m, fsm.EventPhaseIdentified) // → ISSUE_CREATED
+	assert.Equal(t, fsm.StateIssueCreated, m.State())
+
+	// Rollback restores to SCANNING.
+	m.Rollback(snap)
+	assert.Equal(t, fsm.StateScanning, m.State())
+}
+
+// TestMachine_Rollback_RestoresCounters verifies that Rollback restores
+// retry counters so a failed-and-retried operation does not consume an extra
+// budget unit.
+func TestMachine_Rollback_RestoresCounters(t *testing.T) {
+	cfg := fsm.DefaultConfig()
+	cfg.MaxRetriesAwaitingPR = 2
+	m := fsm.NewMachine(cfg)
+	mustTransition(t, m, setupAwaitingPR...)
+
+	// Consume one timeout (awaitingPRRetries becomes 1 after transition).
+	snap := m.TakeSnapshot()
+	_, err := m.Transition(fsm.EventTimeout)
+	assert.NoError(t, err)
+
+	// Rollback restores the counter to the pre-transition value.
+	m.Rollback(snap)
+
+	// After rollback we should be able to fire two more timeouts within budget
+	// (same budget as if the first one never happened).
+	for i := 0; i < cfg.MaxRetriesAwaitingPR; i++ {
+		got, err := m.Transition(fsm.EventTimeout)
+		assert.NoError(t, err, "retry %d should succeed after rollback", i+1)
+		assert.Equal(t, fsm.StateAwaitingPR, got)
+	}
+	// Now budget is exhausted.
+	got, err := m.Transition(fsm.EventTimeout)
+	assert.NoError(t, err)
+	assert.Equal(t, fsm.StatePaused, got)
+}
+
+// TestMachine_Rollback_AllowsRetry verifies that after a rollback the same
+// event can be successfully fired again — the core property required for the
+// same-process retry scenario in the MCP server.
+func TestMachine_Rollback_AllowsRetry(t *testing.T) {
+	m := fsm.NewMachine(fsm.DefaultConfig())
+
+	snap := m.TakeSnapshot()
+	got, err := m.Transition(fsm.EventStart)
+	assert.NoError(t, err)
+	assert.Equal(t, fsm.StateScanning, got)
+
+	// Simulate a failed store write: roll back.
+	m.Rollback(snap)
+	assert.Equal(t, fsm.StateIdle, m.State(), "must be back at IDLE after rollback")
+
+	// Retry the same event — must succeed.
+	got, err = m.Transition(fsm.EventStart)
+	assert.NoError(t, err)
+	assert.Equal(t, fsm.StateScanning, got)
+}
+

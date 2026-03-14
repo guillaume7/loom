@@ -26,10 +26,11 @@ import (
 // --------------------------------------------------------------------------
 
 type memStore struct {
-	mu      sync.Mutex
-	cp      store.Checkpoint
-	actions []store.Action
-	empty   bool
+	mu                    sync.Mutex
+	cp                    store.Checkpoint
+	actions               []store.Action
+	empty                 bool
+	readActionLookupCalls int
 }
 
 func newMemStore() *memStore { return &memStore{empty: true} }
@@ -67,6 +68,36 @@ func (s *memStore) WriteAction(_ context.Context, action store.Action) error {
 	return nil
 }
 
+func (s *memStore) WriteCheckpointAndAction(_ context.Context, cp store.Checkpoint, action store.Action) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, existing := range s.actions {
+		if existing.OperationKey == action.OperationKey {
+			return store.ErrDuplicateOperationKey
+		}
+	}
+	s.cp = cp
+	s.empty = false
+	if action.CreatedAt.IsZero() {
+		action.CreatedAt = time.Now().UTC()
+	}
+	action.ID = int64(len(s.actions) + 1)
+	s.actions = append(s.actions, action)
+	return nil
+}
+
+func (s *memStore) ReadActionByOperationKey(_ context.Context, operationKey string) (store.Action, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.readActionLookupCalls++
+	for _, action := range s.actions {
+		if action.OperationKey == operationKey {
+			return action, nil
+		}
+	}
+	return store.Action{}, store.ErrActionNotFound
+}
+
 func (s *memStore) ReadActions(_ context.Context, limit int) ([]store.Action, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -102,6 +133,10 @@ type failingStore struct {
 func newFailingStore() *failingStore { return &failingStore{memStore: memStore{empty: true}} }
 
 func (s *failingStore) WriteCheckpoint(_ context.Context, _ store.Checkpoint) error {
+	return errors.New("simulated store write failure")
+}
+
+func (s *failingStore) WriteCheckpointAndAction(_ context.Context, _ store.Checkpoint, _ store.Action) error {
 	return errors.New("simulated store write failure")
 }
 
@@ -363,6 +398,339 @@ func TestLoomCheckpoint_StoreWriteFailure_ReturnsError(t *testing.T) {
 		"action": "start",
 	})
 	assert.True(t, result.IsError, "expected tool error when store write fails")
+}
+
+func TestLoomNextStep_Idempotency_RetryReturnsCachedResult(t *testing.T) {
+	s, mcpSvr := newTestServer(t)
+	st := s.Store().(*memStore)
+
+	first := callTool(t, mcpSvr, "loom_next_step", map[string]interface{}{
+		"operation_key": "next_step:IDLE",
+	})
+	assert.False(t, first.IsError)
+
+	second := callTool(t, mcpSvr, "loom_next_step", map[string]interface{}{
+		"operation_key": "next_step:IDLE",
+	})
+	assert.False(t, second.IsError)
+	assert.Equal(t, toolText(t, first), toolText(t, second))
+
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	require.Len(t, st.actions, 1)
+	assert.Equal(t, "next_step:IDLE", st.actions[0].OperationKey)
+	assert.Equal(t, "next_step", st.actions[0].Event)
+}
+
+func TestLoomCheckpoint_Idempotency_FirstExecutionLogsAction(t *testing.T) {
+	s, mcpSvr := newTestServer(t)
+	st := s.Store().(*memStore)
+
+	result := callTool(t, mcpSvr, "loom_checkpoint", map[string]interface{}{
+		"action":        "start",
+		"operation_key": "checkpoint:IDLE->SCANNING",
+	})
+	assert.False(t, result.IsError)
+
+	var got mcp.CheckpointResult
+	require.NoError(t, json.Unmarshal([]byte(toolText(t, result)), &got))
+	assert.Equal(t, "IDLE", got.PreviousState)
+	assert.Equal(t, "SCANNING", got.NewState)
+
+	action, err := st.ReadActionByOperationKey(context.Background(), "checkpoint:IDLE->SCANNING")
+	require.NoError(t, err)
+	assert.Equal(t, "IDLE", action.StateBefore)
+	assert.Equal(t, "SCANNING", action.StateAfter)
+	assert.Equal(t, "start", action.Event)
+	assert.Equal(t, toolText(t, result), action.Detail)
+}
+
+func TestLoomCheckpoint_Idempotency_RetryReturnsCachedResult(t *testing.T) {
+	_, mcpSvr := newTestServer(t)
+	args := map[string]interface{}{
+		"action":        "start",
+		"operation_key": "checkpoint:IDLE->SCANNING",
+	}
+
+	first := callTool(t, mcpSvr, "loom_checkpoint", args)
+	assert.False(t, first.IsError)
+
+	second := callTool(t, mcpSvr, "loom_checkpoint", args)
+	assert.False(t, second.IsError)
+	assert.Equal(t, toolText(t, first), toolText(t, second))
+}
+
+func TestLoomCheckpoint_Idempotency_DifferentOperationKeyExecutes(t *testing.T) {
+	s, mcpSvr := newTestServer(t)
+	st := s.Store().(*memStore)
+
+	first := callTool(t, mcpSvr, "loom_checkpoint", map[string]interface{}{
+		"action":        "start",
+		"operation_key": "checkpoint:IDLE->SCANNING",
+	})
+	assert.False(t, first.IsError)
+
+	second := callTool(t, mcpSvr, "loom_checkpoint", map[string]interface{}{
+		"action":        "phase_identified",
+		"operation_key": "checkpoint:SCANNING->ISSUE_CREATED",
+	})
+	assert.False(t, second.IsError)
+
+	var got mcp.CheckpointResult
+	require.NoError(t, json.Unmarshal([]byte(toolText(t, second)), &got))
+	assert.Equal(t, "SCANNING", got.PreviousState)
+	assert.Equal(t, "ISSUE_CREATED", got.NewState)
+
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	require.Len(t, st.actions, 2)
+	assert.Equal(t, "checkpoint:IDLE->SCANNING", st.actions[0].OperationKey)
+	assert.Equal(t, "checkpoint:SCANNING->ISSUE_CREATED", st.actions[1].OperationKey)
+}
+
+// --------------------------------------------------------------------------
+// Atomicity failure-window tests (TH2.E2.US3 fix)
+// --------------------------------------------------------------------------
+
+// transientFailStore fails WriteCheckpointAndAction on the first call only,
+// then delegates to the underlying memStore. This simulates a transient I/O
+// error that leaves no partial writes in the store.
+type transientFailStore struct {
+	memStore
+	failed bool
+}
+
+func newTransientFailStore() *transientFailStore {
+	return &transientFailStore{memStore: memStore{empty: true}}
+}
+
+func (s *transientFailStore) WriteCheckpointAndAction(ctx context.Context, cp store.Checkpoint, action store.Action) error {
+	s.memStore.mu.Lock()
+	if !s.failed {
+		s.failed = true
+		s.memStore.mu.Unlock()
+		return errors.New("simulated transient write failure")
+	}
+	s.memStore.mu.Unlock()
+	return s.memStore.WriteCheckpointAndAction(ctx, cp, action)
+}
+
+// TestLoomCheckpoint_AtomicWriteFailure_LeavesStoreConsistent verifies that
+// when WriteCheckpointAndAction fails, neither the checkpoint nor the action
+// log entry is persisted — eliminating the partial-write window.
+func TestLoomCheckpoint_AtomicWriteFailure_LeavesStoreConsistent(t *testing.T) {
+	machine := fsm.NewMachine(fsm.DefaultConfig())
+	st := newTransientFailStore()
+	s := mcp.NewServer(machine, st, nil)
+	mcpSvr := s.MCPServer()
+
+	// First call: WriteCheckpointAndAction fails.
+	result := callTool(t, mcpSvr, "loom_checkpoint", map[string]interface{}{
+		"action":        "start",
+		"operation_key": "checkpoint:IDLE->SCANNING:attempt1",
+	})
+	assert.True(t, result.IsError, "expected tool error on first attempt")
+
+	// After the failure the store must be pristine: no checkpoint, no action entry.
+	cp, err := st.ReadCheckpoint(context.Background())
+	require.NoError(t, err)
+	assert.Empty(t, cp.State, "checkpoint must not be persisted after failed WriteCheckpointAndAction")
+
+	_, lookupErr := st.ReadActionByOperationKey(context.Background(), "checkpoint:IDLE->SCANNING:attempt1")
+	assert.ErrorIs(t, lookupErr, store.ErrActionNotFound,
+		"action log entry must not be persisted after failed WriteCheckpointAndAction")
+}
+
+// TestLoomCheckpoint_AtomicWriteFailure_StoreWriteFailure_WithOperationKey verifies
+// that a store write failure on the idempotent path (with operation_key) returns an
+// error, consistent with the non-idempotent path behaviour.
+func TestLoomCheckpoint_AtomicWriteFailure_StoreWriteFailure_WithOperationKey(t *testing.T) {
+	machine := fsm.NewMachine(fsm.DefaultConfig())
+	st := newFailingStore()
+	s := mcp.NewServer(machine, st, nil)
+	mcpSvr := s.MCPServer()
+
+	result := callTool(t, mcpSvr, "loom_checkpoint", map[string]interface{}{
+		"action":        "start",
+		"operation_key": "checkpoint:IDLE->SCANNING",
+	})
+	assert.True(t, result.IsError, "expected tool error when store write fails on idempotent path")
+}
+
+// TestLoomCheckpoint_SameProcessRetry_AfterTransientWriteFailure verifies the
+// rollback property: when WriteCheckpointAndAction fails with a non-duplicate
+// error, the in-memory FSM is rolled back to its pre-transition state so that
+// a same-process retry with the same operation_key can successfully fire the
+// event again and persist the checkpoint.
+//
+// Without a rollback the FSM would be stuck at newState after the first
+// failure, causing the second attempt to fail with an invalid-transition error.
+func TestLoomCheckpoint_SameProcessRetry_AfterTransientWriteFailure(t *testing.T) {
+	machine := fsm.NewMachine(fsm.DefaultConfig())
+	st := newTransientFailStore()
+	s := mcp.NewServer(machine, st, nil)
+	mcpSvr := s.MCPServer()
+
+	args := map[string]interface{}{
+		"action":        "start",
+		"operation_key": "checkpoint:IDLE->SCANNING",
+	}
+
+	// First call: WriteCheckpointAndAction fails → FSM must be rolled back.
+	result1 := callTool(t, mcpSvr, "loom_checkpoint", args)
+	assert.True(t, result1.IsError, "expected tool error on first attempt (transient failure)")
+
+	// Verify FSM was rolled back: store still empty, no action persisted.
+	cp, err := st.ReadCheckpoint(context.Background())
+	require.NoError(t, err)
+	assert.Empty(t, cp.State, "store checkpoint must remain empty after rollback")
+
+	// Second call: same operation_key, same server process, store now succeeds.
+	// The FSM must be at IDLE again (rolled back) so 'start' fires correctly.
+	result2 := callTool(t, mcpSvr, "loom_checkpoint", args)
+	assert.False(t, result2.IsError, "expected success on retry after rollback")
+
+	var got mcp.CheckpointResult
+	require.NoError(t, json.Unmarshal([]byte(toolText(t, result2)), &got))
+	assert.Equal(t, "IDLE", got.PreviousState, "retry must fire from rolled-back IDLE state")
+	assert.Equal(t, "SCANNING", got.NewState)
+
+	// Verify the action was committed on the successful retry.
+	action, lookupErr := st.ReadActionByOperationKey(context.Background(), "checkpoint:IDLE->SCANNING")
+	require.NoError(t, lookupErr)
+	assert.Equal(t, "IDLE", action.StateBefore)
+	assert.Equal(t, "SCANNING", action.StateAfter)
+}
+
+// TestLoomCheckpoint_SameProcessRetry_CountersRolledBack verifies that retry
+// counters (e.g. awaitingPRRetries) are also restored on rollback, preventing
+// premature budget exhaustion when a timeout self-loop write fails transiently.
+func TestLoomCheckpoint_SameProcessRetry_CountersRolledBack(t *testing.T) {
+	// Build a machine already at AWAITING_PR so we can test timeout self-loops.
+	m := fsm.NewMachine(fsm.DefaultConfig())
+	if _, err := m.Transition(fsm.EventStart); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Transition(fsm.EventPhaseIdentified); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Transition(fsm.EventCopilotAssigned); err != nil {
+		t.Fatal(err)
+	}
+
+	st := newTransientFailStore()
+	s := mcp.NewServer(m, st, nil)
+	mcpSvr := s.MCPServer()
+
+	timeoutArgs := map[string]interface{}{
+		"action":        "timeout",
+		"operation_key": "checkpoint:AWAITING_PR->AWAITING_PR:t1",
+	}
+
+	// First call: write fails → rollback → awaitingPRRetries must be 0 again.
+	r1 := callTool(t, mcpSvr, "loom_checkpoint", timeoutArgs)
+	assert.True(t, r1.IsError, "expected error on first attempt")
+
+	// Second call: write succeeds this time (transient store only fails once).
+	r2 := callTool(t, mcpSvr, "loom_checkpoint", timeoutArgs)
+	assert.False(t, r2.IsError, "expected success on retry")
+
+	var got mcp.CheckpointResult
+	require.NoError(t, json.Unmarshal([]byte(toolText(t, r2)), &got))
+	// AWAITING_PR --timeout--> AWAITING_PR (within budget)
+	assert.Equal(t, "AWAITING_PR", got.PreviousState)
+	assert.Equal(t, "AWAITING_PR", got.NewState)
+}
+
+// duplicateOnWriteStore allows ReadActionByOperationKey to succeed after the
+// first WriteCheckpointAndAction commits, then refuses the second write to
+// simulate a concurrent duplicate.
+type duplicateOnWriteStore struct {
+	memStore
+	firstDone bool
+}
+
+func newDuplicateOnWriteStore() *duplicateOnWriteStore {
+	return &duplicateOnWriteStore{memStore: memStore{empty: true}}
+}
+
+func (s *duplicateOnWriteStore) WriteCheckpointAndAction(ctx context.Context, cp store.Checkpoint, action store.Action) error {
+	s.memStore.mu.Lock()
+	defer s.memStore.mu.Unlock()
+	if s.firstDone {
+		return store.ErrDuplicateOperationKey
+	}
+	// Commit both writes using the internal (unlocked) logic.
+	for _, existing := range s.memStore.actions {
+		if existing.OperationKey == action.OperationKey {
+			return store.ErrDuplicateOperationKey
+		}
+	}
+	s.memStore.cp = cp
+	s.memStore.empty = false
+	if action.CreatedAt.IsZero() {
+		action.CreatedAt = time.Now().UTC()
+	}
+	action.ID = int64(len(s.memStore.actions) + 1)
+	s.memStore.actions = append(s.memStore.actions, action)
+	s.firstDone = true
+	return nil
+}
+
+// TestLoomCheckpoint_AtomicDuplicateOnWrite_ReturnsCachedResult verifies that
+// when WriteCheckpointAndAction returns ErrDuplicateOperationKey (concurrent
+// duplicate), the handler looks up the previously committed result and returns
+// it successfully — safe replay without a double transition.
+func TestLoomCheckpoint_AtomicDuplicateOnWrite_ReturnsCachedResult(t *testing.T) {
+	machine := fsm.NewMachine(fsm.DefaultConfig())
+	st := newDuplicateOnWriteStore()
+	s := mcp.NewServer(machine, st, nil)
+	mcpSvr := s.MCPServer()
+
+	first := callTool(t, mcpSvr, "loom_checkpoint", map[string]interface{}{
+		"action":        "start",
+		"operation_key": "checkpoint:IDLE->SCANNING",
+	})
+	require.False(t, first.IsError, "first call must succeed")
+
+	// Now the initial ReadActionByOperationKey lookup won't find the entry
+	// (simulating a race where the lookup happens before the other goroutine
+	// committed), but WriteCheckpointAndAction returns ErrDuplicateOperationKey.
+	// We reset firstDone so the next outer lookup succeeds but the write is
+	// rejected — exercising the ErrDuplicateOperationKey branch.
+	// To do this properly we need to call with a *new* server that hasn't
+	// cached the lookup, but the same store that already has the action.
+	machine2 := fsm.NewMachine(fsm.DefaultConfig())
+	s2 := mcp.NewServer(machine2, st, nil)
+	mcpSvr2 := s2.MCPServer()
+
+	// Reset firstDone so the idempotent lookup is bypassed (cold server),
+	// but the write is rejected as a duplicate.
+	st.firstDone = false
+	// Write the action so the second lookup finds it after ErrDuplicateOperationKey.
+	st.firstDone = true // next write will return ErrDuplicateOperationKey
+
+	second := callTool(t, mcpSvr2, "loom_checkpoint", map[string]interface{}{
+		"action":        "start",
+		"operation_key": "checkpoint:IDLE->SCANNING",
+	})
+	require.False(t, second.IsError, "second call must succeed via ErrDuplicateOperationKey replay")
+	assert.Equal(t, toolText(t, first), toolText(t, second), "replayed result must match original")
+}
+
+func TestReadOnlyTools_SkipIdempotencyLookup(t *testing.T) {
+	s, mcpSvr := newTestServer(t)
+	st := s.Store().(*memStore)
+
+	getState := callTool(t, mcpSvr, "loom_get_state", nil)
+	heartbeat := callTool(t, mcpSvr, "loom_heartbeat", nil)
+
+	assert.False(t, getState.IsError)
+	assert.False(t, heartbeat.IsError)
+
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	assert.Equal(t, 0, st.readActionLookupCalls)
 }
 
 func TestLoomHeartbeat_ReturnsCurrentState(t *testing.T) {

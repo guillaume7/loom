@@ -183,6 +183,93 @@ func (s *sqliteStore) WriteAction(ctx context.Context, action Action) error {
 	return err
 }
 
+// WriteCheckpointAndAction atomically persists a checkpoint update and appends
+// an action log entry in a single transaction. If the action's OperationKey
+// already exists the transaction is rolled back and ErrDuplicateOperationKey
+// is returned; neither the checkpoint nor the action is written.
+func (s *sqliteStore) WriteCheckpointAndAction(ctx context.Context, cp Checkpoint, action Action) error {
+	if cp.UpdatedAt.IsZero() {
+		cp.UpdatedAt = time.Now()
+	}
+	if action.CreatedAt.IsZero() {
+		action.CreatedAt = time.Now()
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	var txErr error
+	defer func() {
+		if txErr != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	_, txErr = tx.ExecContext(ctx,
+		`INSERT OR REPLACE INTO checkpoint
+			(id, state, phase, pr_number, issue_number, retry_count, updated_at)
+		VALUES (1, ?, ?, ?, ?, ?, ?)`,
+		cp.State, cp.Phase, cp.PRNumber, cp.IssueNumber, cp.RetryCount,
+		cp.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	)
+	if txErr != nil {
+		return txErr
+	}
+
+	_, txErr = tx.ExecContext(ctx,
+		`INSERT INTO action_log
+			(session_id, operation_key, state_before, state_after, event, detail, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		action.SessionID, action.OperationKey, action.StateBefore, action.StateAfter,
+		action.Event, action.Detail, action.CreatedAt.UTC().Format(time.RFC3339Nano),
+	)
+	if isDuplicateOperationKeyError(txErr) {
+		return ErrDuplicateOperationKey
+	}
+	if txErr != nil {
+		return txErr
+	}
+
+	txErr = tx.Commit()
+	return txErr
+}
+
+func (s *sqliteStore) ReadActionByOperationKey(ctx context.Context, operationKey string) (Action, error) {
+	var action Action
+	var createdAt string
+
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, session_id, operation_key, state_before, state_after, event, detail, created_at
+		FROM action_log
+		WHERE operation_key = ?`,
+		operationKey,
+	).Scan(
+		&action.ID,
+		&action.SessionID,
+		&action.OperationKey,
+		&action.StateBefore,
+		&action.StateAfter,
+		&action.Event,
+		&action.Detail,
+		&createdAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Action{}, ErrActionNotFound
+	}
+	if err != nil {
+		return Action{}, err
+	}
+
+	action.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAt)
+	if err != nil {
+		return Action{}, err
+	}
+
+	return action, nil
+}
+
 func (s *sqliteStore) ReadActions(ctx context.Context, limit int) ([]Action, error) {
 	if limit <= 0 {
 		return []Action{}, nil

@@ -17,6 +17,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -36,6 +37,12 @@ import (
 type FSM interface {
 	State() fsm.State
 	Transition(event fsm.Event) (fsm.State, error)
+	// TakeSnapshot returns an opaque snapshot of all mutable machine state.
+	// The snapshot must be passed to Rollback if the operation that follows
+	// the Transition call fails and the in-memory state must be undone.
+	TakeSnapshot() fsm.Snapshot
+	// Rollback restores the machine to the state captured by TakeSnapshot.
+	Rollback(snap fsm.Snapshot)
 }
 
 // Server is the Loom MCP server that exposes workflow tools.
@@ -190,12 +197,120 @@ func checkCtx(ctx context.Context, toolName string) (*mcplib.CallToolResult, boo
 	return nil, false
 }
 
+func marshalResultText(v interface{}) (string, error) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+func optionalStringArgument(req mcplib.CallToolRequest, name string) (string, bool, error) {
+	v, ok := req.Params.Arguments[name]
+	if !ok {
+		return "", false, nil
+	}
+	s, ok := v.(string)
+	if !ok || s == "" {
+		return "", false, fmt.Errorf("missing or invalid '%s' argument: must be a non-empty string", name)
+	}
+	return s, true, nil
+}
+
+func sessionIDFromContext(ctx context.Context) string {
+	session := mcpserver.ClientSessionFromContext(ctx)
+	if session == nil {
+		return ""
+	}
+	return session.SessionID()
+}
+
+func (s *Server) readActionByOperationKey(ctx context.Context, toolName, operationKey string) (store.Action, bool, *mcplib.CallToolResult) {
+	action, err := s.st.ReadActionByOperationKey(ctx, operationKey)
+	if errors.Is(err, store.ErrActionNotFound) {
+		return store.Action{}, false, nil
+	}
+	if err != nil {
+		slog.ErrorContext(ctx, "action log lookup error", "tool", toolName, "operation_key", operationKey, "error", err)
+		return store.Action{}, false, mcplib.NewToolResultError(fmt.Sprintf("failed to read action log: %v", err))
+	}
+	return action, true, nil
+}
+
+func (s *Server) writeActionOrReturnCached(ctx context.Context, toolName string, action store.Action) (*mcplib.CallToolResult, bool) {
+	err := s.st.WriteAction(ctx, action)
+	if err == nil {
+		return nil, false
+	}
+	if !errors.Is(err, store.ErrDuplicateOperationKey) {
+		slog.ErrorContext(ctx, "action log write error", "tool", toolName, "operation_key", action.OperationKey, "error", err)
+		return mcplib.NewToolResultError(fmt.Sprintf("failed to write action log: %v", err)), true
+	}
+
+	cached, found, lookupErr := s.readActionByOperationKey(ctx, toolName, action.OperationKey)
+	if lookupErr != nil {
+		return lookupErr, true
+	}
+	if !found {
+		return mcplib.NewToolResultError(fmt.Sprintf("duplicate operation key without cached result: %s", action.OperationKey)), true
+	}
+
+	slog.InfoContext(ctx, "returning cached tool result", "tool", toolName, "operation_key", action.OperationKey)
+	return mcplib.NewToolResultText(cached.Detail), true
+}
+
 func (s *Server) handleNextStep(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 	const toolName = "loom_next_step"
 	start := time.Now()
 
 	if res, cancelled := checkCtx(ctx, toolName); cancelled {
 		return res, nil
+	}
+
+	operationKey, hasOperationKey, err := optionalStringArgument(req, "operation_key")
+	if err != nil {
+		return mcplib.NewToolResultError(err.Error()), nil
+	}
+
+	if hasOperationKey {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+
+		cached, found, lookupErr := s.readActionByOperationKey(ctx, toolName, operationKey)
+		if lookupErr != nil {
+			return lookupErr, nil
+		}
+		if found {
+			slog.InfoContext(ctx, "tool completed", "tool", toolName, "operation_key", operationKey, "cached", true, "duration_ms", time.Since(start).Milliseconds())
+			return mcplib.NewToolResultText(cached.Detail), nil
+		}
+
+		currentState := s.machine.State()
+		slog.InfoContext(ctx, "tool called", "tool", toolName, "state", string(currentState))
+
+		result := NextStepResult{
+			State:       string(currentState),
+			Instruction: stateInstruction(currentState),
+		}
+		detail, marshalErr := marshalResultText(result)
+		if marshalErr != nil {
+			return mcplib.NewToolResultError(fmt.Sprintf("failed to marshal result: %v", marshalErr)), nil
+		}
+
+		action := store.Action{
+			SessionID:    sessionIDFromContext(ctx),
+			OperationKey: operationKey,
+			StateBefore:  string(currentState),
+			StateAfter:   string(currentState),
+			Event:        "next_step",
+			Detail:       detail,
+		}
+		if res, handled := s.writeActionOrReturnCached(ctx, toolName, action); handled {
+			return res, nil
+		}
+
+		slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(currentState), "duration_ms", time.Since(start).Milliseconds())
+		return mcplib.NewToolResultText(detail), nil
 	}
 
 	s.mu.RLock()
@@ -231,6 +346,92 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 	}
 	if actionStr == "" {
 		return mcplib.NewToolResultError("missing or invalid 'action' argument: must be a non-empty string"), nil
+	}
+
+	operationKey, hasOperationKey, err := optionalStringArgument(req, "operation_key")
+	if err != nil {
+		return mcplib.NewToolResultError(err.Error()), nil
+	}
+
+	if hasOperationKey {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+
+		previousState := s.machine.State()
+		s.lastActivity = s.clock.Now()
+		slog.InfoContext(ctx, "tool called", "tool", toolName, "state", string(previousState))
+
+		cached, found, lookupErr := s.readActionByOperationKey(ctx, toolName, operationKey)
+		if lookupErr != nil {
+			return lookupErr, nil
+		}
+		if found {
+			slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(previousState), "operation_key", operationKey, "cached", true, "duration_ms", time.Since(start).Milliseconds())
+			return mcplib.NewToolResultText(cached.Detail), nil
+		}
+
+		// Snapshot the FSM before transitioning so we can roll back if the
+		// subsequent store write fails. This guarantees that a retry with the
+		// same operation_key fires the event from the correct starting state.
+		snap := s.machine.TakeSnapshot()
+
+		newState, transErr := s.machine.Transition(fsm.Event(actionStr))
+		if transErr != nil {
+			slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(previousState), "duration_ms", time.Since(start).Milliseconds())
+			return mcplib.NewToolResultError(transErr.Error()), nil
+		}
+
+		cp := s.readCheckpoint(ctx, toolName)
+		result := CheckpointResult{
+			PreviousState: string(previousState),
+			NewState:      string(newState),
+			Phase:         cp.Phase,
+		}
+		detail, marshalErr := marshalResultText(result)
+		if marshalErr != nil {
+			return mcplib.NewToolResultError(fmt.Sprintf("failed to marshal result: %v", marshalErr)), nil
+		}
+
+		// Atomically persist checkpoint and action log entry so that a partial
+		// failure can never leave the store in a state where the checkpoint is
+		// written but the action log entry is absent. Either both are committed
+		// or neither is, making a retry with the same operation_key safe.
+		writeErr := s.st.WriteCheckpointAndAction(ctx,
+			store.Checkpoint{State: string(newState), Phase: cp.Phase},
+			store.Action{
+				SessionID:    sessionIDFromContext(ctx),
+				OperationKey: operationKey,
+				StateBefore:  string(previousState),
+				StateAfter:   string(newState),
+				Event:        actionStr,
+				Detail:       detail,
+			},
+		)
+		if writeErr != nil {
+			if errors.Is(writeErr, store.ErrDuplicateOperationKey) {
+				// A concurrent attempt already committed both writes; replay the
+				// cached result.
+				cached, found, lookupErr := s.readActionByOperationKey(ctx, toolName, operationKey)
+				if lookupErr != nil {
+					return lookupErr, nil
+				}
+				if !found {
+					return mcplib.NewToolResultError(fmt.Sprintf("duplicate operation key without cached result: %s", operationKey)), nil
+				}
+				slog.InfoContext(ctx, "returning cached tool result", "tool", toolName, "operation_key", operationKey)
+				return mcplib.NewToolResultText(cached.Detail), nil
+			}
+			// Non-duplicate write failure: roll back the in-memory FSM so that
+			// a retry with the same operation_key fires the event from the
+			// correct starting state instead of failing with an invalid transition.
+			s.machine.Rollback(snap)
+			slog.ErrorContext(ctx, "store write error", "tool", toolName, "state", string(newState), "error", writeErr)
+			slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(previousState), "duration_ms", time.Since(start).Milliseconds(), "error", writeErr)
+			return mcplib.NewToolResultError(fmt.Sprintf("failed to persist checkpoint: %v", writeErr)), nil
+		}
+
+		slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(newState), "duration_ms", time.Since(start).Milliseconds())
+		return mcplib.NewToolResultText(detail), nil
 	}
 
 	s.mu.Lock()
@@ -361,6 +562,9 @@ func (s *Server) MCPServer() *mcpserver.MCPServer {
 	srv.AddTool(
 		mcplib.NewTool("loom_next_step",
 			mcplib.WithDescription("Returns the current workflow state and the next action the agent should take"),
+			mcplib.WithString("operation_key",
+				mcplib.Description("Optional idempotency key used to return a cached result for retried calls"),
+			),
 		),
 		s.handleNextStep,
 	)
@@ -370,6 +574,9 @@ func (s *Server) MCPServer() *mcpserver.MCPServer {
 			mcplib.WithString("action",
 				mcplib.Required(),
 				mcplib.Description("The action to fire (e.g. start, pr_opened, ci_green, ci_red, review_approved, abort)"),
+			),
+			mcplib.WithString("operation_key",
+				mcplib.Description("Optional idempotency key used to return a cached result for retried calls"),
 			),
 		),
 		s.handleCheckpoint,

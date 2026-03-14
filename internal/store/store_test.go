@@ -49,6 +49,31 @@ func (s *memStore) WriteAction(_ context.Context, action store.Action) error {
 	return nil
 }
 
+func (s *memStore) WriteCheckpointAndAction(_ context.Context, cp store.Checkpoint, action store.Action) error {
+	for _, existing := range s.actions {
+		if existing.OperationKey == action.OperationKey {
+			return store.ErrDuplicateOperationKey
+		}
+	}
+	s.cp = cp
+	s.empty = false
+	if action.CreatedAt.IsZero() {
+		action.CreatedAt = time.Now().UTC()
+	}
+	action.ID = int64(len(s.actions) + 1)
+	s.actions = append(s.actions, action)
+	return nil
+}
+
+func (s *memStore) ReadActionByOperationKey(_ context.Context, operationKey string) (store.Action, error) {
+	for _, action := range s.actions {
+		if action.OperationKey == operationKey {
+			return action, nil
+		}
+	}
+	return store.Action{}, store.ErrActionNotFound
+}
+
 func (s *memStore) ReadActions(_ context.Context, limit int) ([]store.Action, error) {
 	if limit <= 0 {
 		return []store.Action{}, nil
@@ -297,6 +322,152 @@ func TestSQLiteStore_WriteAction_ReturnsDuplicateOperationKeyError(t *testing.T)
 	assert.Equal(t, first.SessionID, actions[0].SessionID)
 	assert.Equal(t, first.Detail, actions[0].Detail)
 	assert.Equal(t, first.CreatedAt, actions[0].CreatedAt)
+}
+
+// --------------------------------------------------------------------------
+// WriteCheckpointAndAction atomicity tests (TH2.E2.US3 fix)
+// --------------------------------------------------------------------------
+
+func TestSQLiteStore_WriteCheckpointAndAction_AtomicSuccess(t *testing.T) {
+	st := newMemDB(t)
+	ctx := context.Background()
+
+	cp := store.Checkpoint{State: "SCANNING", Phase: 1}
+	action := store.Action{
+		SessionID:    "s1",
+		OperationKey: "checkpoint:IDLE->SCANNING",
+		StateBefore:  "IDLE",
+		StateAfter:   "SCANNING",
+		Event:        "start",
+		Detail:       `{"previous_state":"IDLE","new_state":"SCANNING","phase":1}`,
+		CreatedAt:    time.Date(2026, 3, 13, 10, 0, 0, 0, time.UTC),
+	}
+	require.NoError(t, st.WriteCheckpointAndAction(ctx, cp, action))
+
+	gotCp, err := st.ReadCheckpoint(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, "SCANNING", gotCp.State)
+	assert.Equal(t, 1, gotCp.Phase)
+
+	gotAction, err := st.ReadActionByOperationKey(ctx, action.OperationKey)
+	require.NoError(t, err)
+	assert.Equal(t, action.StateBefore, gotAction.StateBefore)
+	assert.Equal(t, action.StateAfter, gotAction.StateAfter)
+	assert.Equal(t, action.Event, gotAction.Event)
+	assert.Equal(t, action.Detail, gotAction.Detail)
+}
+
+// TestSQLiteStore_WriteCheckpointAndAction_DuplicateKey_RollsBackCheckpoint is
+// the core atomicity regression test: when the action write fails with a
+// duplicate key, the checkpoint update in the same transaction is rolled back.
+// Previously WriteCheckpoint + WriteAction were called sequentially, creating
+// a window where the checkpoint was persisted but the action was not.
+func TestSQLiteStore_WriteCheckpointAndAction_DuplicateKey_RollsBackCheckpoint(t *testing.T) {
+	st := newMemDB(t)
+	ctx := context.Background()
+
+	// Persist a baseline checkpoint and an action with a known key.
+	require.NoError(t, st.WriteCheckpoint(ctx, store.Checkpoint{State: "SCANNING", Phase: 1}))
+	require.NoError(t, st.WriteAction(ctx, store.Action{
+		SessionID:    "s1",
+		OperationKey: "checkpoint:IDLE->SCANNING",
+		StateBefore:  "IDLE",
+		StateAfter:   "SCANNING",
+		Event:        "start",
+		Detail:       `{"previous_state":"IDLE","new_state":"SCANNING","phase":1}`,
+		CreatedAt:    time.Date(2026, 3, 13, 10, 0, 0, 0, time.UTC),
+	}))
+
+	// Now attempt to atomically advance the checkpoint to ISSUE_CREATED while
+	// re-using the existing operation key — the action write should fail with
+	// ErrDuplicateOperationKey and the checkpoint must be rolled back.
+	err := st.WriteCheckpointAndAction(ctx,
+		store.Checkpoint{State: "ISSUE_CREATED", Phase: 1},
+		store.Action{
+			SessionID:    "s2",
+			OperationKey: "checkpoint:IDLE->SCANNING", // duplicate
+			StateBefore:  "SCANNING",
+			StateAfter:   "ISSUE_CREATED",
+			Event:        "phase_identified",
+			Detail:       `{"previous_state":"SCANNING","new_state":"ISSUE_CREATED","phase":1}`,
+			CreatedAt:    time.Date(2026, 3, 13, 11, 0, 0, 0, time.UTC),
+		},
+	)
+	require.ErrorIs(t, err, store.ErrDuplicateOperationKey)
+
+	// Checkpoint must still be SCANNING — the update was rolled back atomically.
+	gotCp, err := st.ReadCheckpoint(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, "SCANNING", gotCp.State,
+		"checkpoint update must be rolled back when action write fails with duplicate key")
+
+	// The action log must still have exactly the original entry.
+	actions, err := st.ReadActions(ctx, 10)
+	require.NoError(t, err)
+	require.Len(t, actions, 1)
+	assert.Equal(t, "s1", actions[0].SessionID)
+}
+
+func TestSQLiteStore_WriteCheckpointAndAction_AutoSetsTimestamps(t *testing.T) {
+	st := newMemDB(t)
+	ctx := context.Background()
+
+	before := time.Now().UTC().Truncate(time.Second)
+	require.NoError(t, st.WriteCheckpointAndAction(ctx,
+		store.Checkpoint{State: "SCANNING", Phase: 1},
+		store.Action{
+			SessionID:    "s1",
+			OperationKey: "checkpoint:IDLE->SCANNING:ts",
+			StateBefore:  "IDLE",
+			StateAfter:   "SCANNING",
+			Event:        "start",
+			Detail:       "{}",
+		},
+	))
+
+	gotCp, err := st.ReadCheckpoint(ctx)
+	require.NoError(t, err)
+	assert.False(t, gotCp.UpdatedAt.IsZero(), "checkpoint UpdatedAt must be auto-set")
+	assert.True(t, !gotCp.UpdatedAt.Before(before), "checkpoint UpdatedAt must be >= write time")
+
+	gotAction, err := st.ReadActionByOperationKey(ctx, "checkpoint:IDLE->SCANNING:ts")
+	require.NoError(t, err)
+	assert.False(t, gotAction.CreatedAt.IsZero(), "action CreatedAt must be auto-set")
+	assert.True(t, !gotAction.CreatedAt.Before(before), "action CreatedAt must be >= write time")
+}
+
+func TestSQLiteStore_ReadActionByOperationKey_ReturnsMatch(t *testing.T) {
+	st := newMemDB(t)
+	ctx := context.Background()
+	want := store.Action{
+		SessionID:    "s1",
+		OperationKey: "checkpoint:IDLE->SCANNING",
+		StateBefore:  "IDLE",
+		StateAfter:   "SCANNING",
+		Event:        "start",
+		Detail:       `{"state":"SCANNING"}`,
+		CreatedAt:    time.Date(2026, 3, 13, 10, 0, 0, 0, time.UTC),
+	}
+
+	require.NoError(t, st.WriteAction(ctx, want))
+
+	got, err := st.ReadActionByOperationKey(ctx, want.OperationKey)
+	require.NoError(t, err)
+	assert.Positive(t, got.ID)
+	assert.Equal(t, want.SessionID, got.SessionID)
+	assert.Equal(t, want.OperationKey, got.OperationKey)
+	assert.Equal(t, want.StateBefore, got.StateBefore)
+	assert.Equal(t, want.StateAfter, got.StateAfter)
+	assert.Equal(t, want.Event, got.Event)
+	assert.Equal(t, want.Detail, got.Detail)
+	assert.Equal(t, want.CreatedAt, got.CreatedAt)
+}
+
+func TestSQLiteStore_ReadActionByOperationKey_ReturnsNotFound(t *testing.T) {
+	st := newMemDB(t)
+
+	_, err := st.ReadActionByOperationKey(context.Background(), "missing-operation")
+	require.ErrorIs(t, err, store.ErrActionNotFound)
 }
 
 func TestSQLiteStore_ReadActions_AppliesLimitAndNewestFirst(t *testing.T) {

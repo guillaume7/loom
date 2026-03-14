@@ -304,3 +304,42 @@ func (m *Machine) Transition(event Event) (State, error) {
 	m.state = newState
 	return m.state, nil
 }
+
+// Snapshot captures all mutable state of a Machine so it can be fully
+// restored by Rollback. It is an opaque value; callers must not inspect or
+// modify its fields.
+type Snapshot struct {
+	state                State
+	awaitingPRRetries    int
+	awaitingReadyRetries int
+	awaitingCIRetries    int
+	debugCycles          int
+	feedbackCycles       int
+}
+
+// TakeSnapshot returns an opaque snapshot of the machine's current mutable
+// state (including all retry/cycle counters). Pass the returned value to
+// Rollback if a subsequent operation needs to be undone.
+func (m *Machine) TakeSnapshot() Snapshot {
+	return Snapshot{
+		state:                m.state,
+		awaitingPRRetries:    m.awaitingPRRetries,
+		awaitingReadyRetries: m.awaitingReadyRetries,
+		awaitingCIRetries:    m.awaitingCIRetries,
+		debugCycles:          m.debugCycles,
+		feedbackCycles:       m.feedbackCycles,
+	}
+}
+
+// Rollback restores the machine to the state captured by a prior TakeSnapshot
+// call. It is intended to be called when a dependent operation (e.g. a store
+// write) fails, so that a retry fires the same event from the correct starting
+// state without leaving the machine permanently advanced.
+func (m *Machine) Rollback(snap Snapshot) {
+	m.state = snap.state
+	m.awaitingPRRetries = snap.awaitingPRRetries
+	m.awaitingReadyRetries = snap.awaitingReadyRetries
+	m.awaitingCIRetries = snap.awaitingCIRetries
+	m.debugCycles = snap.debugCycles
+	m.feedbackCycles = snap.feedbackCycles
+}

@@ -169,6 +169,35 @@ func (s *memStore) WriteAction(_ context.Context, action store.Action) error {
 	return nil
 }
 
+func (s *memStore) WriteCheckpointAndAction(_ context.Context, cp store.Checkpoint, action store.Action) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, existing := range s.actions {
+		if existing.OperationKey == action.OperationKey {
+			return store.ErrDuplicateOperationKey
+		}
+	}
+	s.cp = cp
+	s.empty = false
+	if action.CreatedAt.IsZero() {
+		action.CreatedAt = time.Now().UTC()
+	}
+	action.ID = int64(len(s.actions) + 1)
+	s.actions = append(s.actions, action)
+	return nil
+}
+
+func (s *memStore) ReadActionByOperationKey(_ context.Context, operationKey string) (store.Action, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, action := range s.actions {
+		if action.OperationKey == operationKey {
+			return action, nil
+		}
+	}
+	return store.Action{}, store.ErrActionNotFound
+}
+
 func (s *memStore) ReadActions(_ context.Context, limit int) ([]store.Action, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

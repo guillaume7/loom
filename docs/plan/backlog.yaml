@@ -1,7 +1,7 @@
 # Backlog — Core State File
 backlog:
   project: "loom"
-  last-updated: "2026-03-13T23:38:14Z"
+  last-updated: "2026-03-14T00:08:22Z"
   themes:
     # ── TH1: Loom v1 Core ────────────────────────────────────────────
     - id: TH1
@@ -99,7 +99,7 @@ backlog:
               depends-on: [TH2.E2.US1]
             - id: TH2.E2.US3
               title: "Idempotency check in MCP tool handlers"
-              status: todo
+              status: done
               file: docs/themes/TH2-agent-platform/epics/E2-action-log/user-stories/US3-idempotency-check.md
               depends-on: [TH2.E2.US2]
             - id: TH2.E2.US4

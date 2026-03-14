@@ -14,6 +14,9 @@ import (
 // existing idempotency key.
 var ErrDuplicateOperationKey = errors.New("duplicate operation key")
 
+// ErrActionNotFound indicates no action exists for the requested operation key.
+var ErrActionNotFound = errors.New("action not found")
+
 // Checkpoint is a point-in-time snapshot of the Loom workflow that is written
 // to durable storage after every state transition.
 type Checkpoint struct {
@@ -57,6 +60,15 @@ type Store interface {
 
 	// WriteAction appends an action log entry.
 	WriteAction(ctx context.Context, action Action) error
+
+	// WriteCheckpointAndAction atomically persists a checkpoint update and
+	// appends an action log entry in a single transaction. It returns
+	// ErrDuplicateOperationKey if action.OperationKey already exists in the log.
+	WriteCheckpointAndAction(ctx context.Context, cp Checkpoint, action Action) error
+
+	// ReadActionByOperationKey returns the action log entry for a single
+	// idempotency key.
+	ReadActionByOperationKey(ctx context.Context, operationKey string) (Action, error)
 
 	// ReadActions returns the most recent action log entries, ordered newest
 	// first. A limit of zero returns an empty, non-nil slice.

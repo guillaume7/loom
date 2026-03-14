@@ -61,6 +61,14 @@
 ### 2026-03-13T23:38:14Z
 - status-change: TH2.E2.US2 -> done
 - Context: Action log store methods approved after reset regression fix and verified locally.
+
+### 2026-03-13T23:38:31Z
+- status-change: TH2.E2.US3 -> in-progress
+- Context: Starting MCP idempotency enforcement using the new action log store methods.
+
+### 2026-03-14T00:08:22Z
+- status-change: TH2.E2.US3 -> done
+- Context: MCP idempotency enforcement approved after atomic write and FSM rollback fixes.
 2026-03-13T23:29:21Z | Subagent completed
 2026-03-13T23:30:27Z | Subagent completed
 2026-03-13T23:33:48Z | Subagent completed
@@ -68,3 +76,10 @@
 2026-03-13T23:35:28Z | Subagent completed
 2026-03-13T23:36:52Z | Subagent completed
 2026-03-13T23:38:07Z | Subagent completed
+2026-03-13T23:42:39Z | Subagent completed
+2026-03-13T23:44:46Z | Subagent completed
+2026-03-13T23:46:53Z | Subagent completed
+2026-03-13T23:54:25Z | Subagent completed
+2026-03-13T23:58:36Z | Subagent completed
+2026-03-14T00:04:39Z | Subagent completed
+2026-03-14T00:08:04Z | Subagent completed
