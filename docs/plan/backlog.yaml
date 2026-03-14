@@ -1,7 +1,7 @@
 # Backlog — Core State File
 backlog:
   project: "loom"
-  last-updated: "2026-03-14T17:35:16Z"
+  last-updated: "2026-03-14T17:37:45Z"
   themes:
     # ── TH1: Loom v1 Core ────────────────────────────────────────────
     - id: TH1
@@ -214,7 +214,7 @@ backlog:
         # E7 — Security Hardening (P2)
         - id: E7
           name: "Security Hardening"
-          status: in-progress
+          status: done
           depends-on: []
           stories:
             - id: TH2.E7.US1

@@ -125,3 +125,33 @@
 - integration/budget_exhaustion_test.go
 - docs/plan/backlog.yaml
 - docs/plan/session-log.md
+
+## Epic TH2.E7 — Security Hardening
+
+### Stories Completed
+- TH2.E7.US1 — GitHub token scope validation on startup
+- TH2.E7.US2 — MCP tool readOnlyHint annotations
+- TH2.E7.US3 — Config file permission warning
+
+### Key Changes
+- Added startup validation of GitHub token scopes (`repo` required, `read:org` warning-only) with a test bypass flag.
+- Added explicit MCP tool `readOnlyHint` annotations in tool registration for policy-aware client behavior.
+- Added startup warning for insecure `~/.loom/config.toml` permissions while keeping startup non-blocking.
+- Expanded command and client tests for token scope handling, annotation metadata, and config permission checks.
+
+### Files Modified
+- cmd/loom/cmd_start.go
+- cmd/loom/cmd_start_test.go
+- internal/github/client.go
+- internal/github/client_test.go
+- internal/mcp/handlers.go
+- internal/mcp/server_core_test.go
+- internal/mcp/server.go
+- internal/mcp/heartbeat_task.go
+- internal/mcp/elicitation_response.go
+- internal/mcp/server_test.go
+- integration/helpers_test.go
+- go.mod
+- go.sum
+- docs/plan/backlog.yaml
+- docs/plan/session-log.md
