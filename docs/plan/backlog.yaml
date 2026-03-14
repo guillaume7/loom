@@ -1,7 +1,7 @@
 # Backlog — Core State File
 backlog:
   project: "loom"
-  last-updated: "2026-03-14T15:43:48Z"
+  last-updated: "2026-03-14T15:44:57Z"
   themes:
     # ── TH1: Loom v1 Core ────────────────────────────────────────────
     - id: TH1
@@ -170,7 +170,7 @@ backlog:
         # E5 — MCP Tasks (P1)
         - id: E5
           name: "MCP Tasks"
-            status: in-progress
+            status: done
           depends-on: []
           stories:
             - id: TH2.E5.US1

@@ -66,3 +66,28 @@
 - cmd/loom/main_test.go
 - docs/plan/backlog.yaml
 - docs/plan/session-log.md
+
+## Epic TH2.E5 — MCP Tasks
+
+### Stories Completed
+- TH2.E5.US1 — MCP Task lifecycle event emission
+- TH2.E5.US2 — Heartbeat polling wrapped as MCP Task
+- TH2.E5.US3 — Client capability negotiation and fallback
+
+### Key Changes
+- Added reusable MCP Task lifecycle emitter for start/progress/done notifications.
+- Implemented heartbeat polling task flow with deterministic PR-based task IDs and CI status progress updates.
+- Added client capability negotiation at initialization and session-cached fallback to blocking heartbeat behavior.
+- Expanded MCP test harness to validate session initialization, emitted notifications, and capability-specific behavior.
+
+### Files Modified
+- internal/mcp/tasks.go
+- internal/mcp/tasks_test.go
+- internal/mcp/heartbeat_task.go
+- internal/mcp/heartbeat_task_test.go
+- internal/mcp/capabilities.go
+- internal/mcp/handlers.go
+- internal/mcp/server.go
+- internal/mcp/server_test.go
+- docs/plan/backlog.yaml
+- docs/plan/session-log.md
