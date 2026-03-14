@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"sync"
 	"time"
@@ -45,6 +44,12 @@ type FSM interface {
 	Rollback(snap fsm.Snapshot)
 }
 
+// resourceEntry holds a single registered MCP resource and its handler.
+type resourceEntry struct {
+	resource mcplib.Resource
+	handler  mcpserver.ResourceHandlerFunc
+}
+
 // Server is the Loom MCP server that exposes workflow tools.
 type Server struct {
 	mu      sync.RWMutex // guards all access to machine and lastActivity
@@ -56,6 +61,9 @@ type Server struct {
 	clock        Clock
 	monCfg       MonitorConfig
 	lastActivity time.Time // wall-clock time of the last loom_checkpoint call
+
+	// Resources registered via AddResource (E3).
+	resources []resourceEntry
 }
 
 // Option configures a Server.
@@ -90,6 +98,14 @@ func NewServer(machine FSM, st store.Store, gh loomgh.Client, opts ...Option) *S
 // Store returns the underlying store.Store. Exposed for use in tests that need
 // to read the checkpoint state after a RunStallCheck call.
 func (s *Server) Store() store.Store { return s.st }
+
+// AddResource registers an MCP resource and its handler on the Server.
+// Resources registered here are applied to every MCPServer built by MCPServer().
+func (s *Server) AddResource(resource mcplib.Resource, handler mcpserver.ResourceHandlerFunc) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.resources = append(s.resources, resourceEntry{resource: resource, handler: handler})
+}
 
 // CheckpointRequest is the typed input struct for loom_checkpoint.
 // Action is the spec-aligned field name (see US-4.3 acceptance criteria);
@@ -257,365 +273,4 @@ func (s *Server) writeActionOrReturnCached(ctx context.Context, toolName string,
 
 	slog.InfoContext(ctx, "returning cached tool result", "tool", toolName, "operation_key", action.OperationKey)
 	return mcplib.NewToolResultText(cached.Detail), true
-}
-
-func (s *Server) handleNextStep(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
-	const toolName = "loom_next_step"
-	start := time.Now()
-
-	if res, cancelled := checkCtx(ctx, toolName); cancelled {
-		return res, nil
-	}
-
-	operationKey, hasOperationKey, err := optionalStringArgument(req, "operation_key")
-	if err != nil {
-		return mcplib.NewToolResultError(err.Error()), nil
-	}
-
-	if hasOperationKey {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-
-		cached, found, lookupErr := s.readActionByOperationKey(ctx, toolName, operationKey)
-		if lookupErr != nil {
-			return lookupErr, nil
-		}
-		if found {
-			slog.InfoContext(ctx, "tool completed", "tool", toolName, "operation_key", operationKey, "cached", true, "duration_ms", time.Since(start).Milliseconds())
-			return mcplib.NewToolResultText(cached.Detail), nil
-		}
-
-		currentState := s.machine.State()
-		slog.InfoContext(ctx, "tool called", "tool", toolName, "state", string(currentState))
-
-		result := NextStepResult{
-			State:       string(currentState),
-			Instruction: stateInstruction(currentState),
-		}
-		detail, marshalErr := marshalResultText(result)
-		if marshalErr != nil {
-			return mcplib.NewToolResultError(fmt.Sprintf("failed to marshal result: %v", marshalErr)), nil
-		}
-
-		action := store.Action{
-			SessionID:    sessionIDFromContext(ctx),
-			OperationKey: operationKey,
-			StateBefore:  string(currentState),
-			StateAfter:   string(currentState),
-			Event:        "next_step",
-			Detail:       detail,
-		}
-		if res, handled := s.writeActionOrReturnCached(ctx, toolName, action); handled {
-			return res, nil
-		}
-
-		slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(currentState), "duration_ms", time.Since(start).Milliseconds())
-		return mcplib.NewToolResultText(detail), nil
-	}
-
-	s.mu.RLock()
-	currentState := s.machine.State()
-	s.mu.RUnlock()
-
-	slog.InfoContext(ctx, "tool called", "tool", toolName, "state", string(currentState))
-
-	result := NextStepResult{
-		State:       string(currentState),
-		Instruction: stateInstruction(currentState),
-	}
-
-	slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(currentState), "duration_ms", time.Since(start).Milliseconds())
-	return toolResultJSON(result), nil
-}
-
-func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
-	const toolName = "loom_checkpoint"
-	start := time.Now()
-
-	// Guard against cancelled context before acquiring any locks or mutating state.
-	if res, cancelled := checkCtx(ctx, toolName); cancelled {
-		return res, nil
-	}
-
-	// Decode the typed checkpoint request from generic MCP arguments using
-	// direct type assertions, avoiding an unnecessary JSON round-trip.
-	actionStr, _ := req.Params.Arguments["action"].(string)
-	if actionStr == "" {
-		// Accept "event" for backward compatibility.
-		actionStr, _ = req.Params.Arguments["event"].(string)
-	}
-	if actionStr == "" {
-		return mcplib.NewToolResultError("missing or invalid 'action' argument: must be a non-empty string"), nil
-	}
-
-	operationKey, hasOperationKey, err := optionalStringArgument(req, "operation_key")
-	if err != nil {
-		return mcplib.NewToolResultError(err.Error()), nil
-	}
-
-	if hasOperationKey {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-
-		previousState := s.machine.State()
-		s.lastActivity = s.clock.Now()
-		slog.InfoContext(ctx, "tool called", "tool", toolName, "state", string(previousState))
-
-		cached, found, lookupErr := s.readActionByOperationKey(ctx, toolName, operationKey)
-		if lookupErr != nil {
-			return lookupErr, nil
-		}
-		if found {
-			slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(previousState), "operation_key", operationKey, "cached", true, "duration_ms", time.Since(start).Milliseconds())
-			return mcplib.NewToolResultText(cached.Detail), nil
-		}
-
-		// Snapshot the FSM before transitioning so we can roll back if the
-		// subsequent store write fails. This guarantees that a retry with the
-		// same operation_key fires the event from the correct starting state.
-		snap := s.machine.TakeSnapshot()
-
-		newState, transErr := s.machine.Transition(fsm.Event(actionStr))
-		if transErr != nil {
-			slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(previousState), "duration_ms", time.Since(start).Milliseconds())
-			return mcplib.NewToolResultError(transErr.Error()), nil
-		}
-
-		cp := s.readCheckpoint(ctx, toolName)
-		result := CheckpointResult{
-			PreviousState: string(previousState),
-			NewState:      string(newState),
-			Phase:         cp.Phase,
-		}
-		detail, marshalErr := marshalResultText(result)
-		if marshalErr != nil {
-			return mcplib.NewToolResultError(fmt.Sprintf("failed to marshal result: %v", marshalErr)), nil
-		}
-
-		// Atomically persist checkpoint and action log entry so that a partial
-		// failure can never leave the store in a state where the checkpoint is
-		// written but the action log entry is absent. Either both are committed
-		// or neither is, making a retry with the same operation_key safe.
-		writeErr := s.st.WriteCheckpointAndAction(ctx,
-			store.Checkpoint{State: string(newState), Phase: cp.Phase},
-			store.Action{
-				SessionID:    sessionIDFromContext(ctx),
-				OperationKey: operationKey,
-				StateBefore:  string(previousState),
-				StateAfter:   string(newState),
-				Event:        actionStr,
-				Detail:       detail,
-			},
-		)
-		if writeErr != nil {
-			if errors.Is(writeErr, store.ErrDuplicateOperationKey) {
-				// A concurrent attempt already committed both writes; replay the
-				// cached result.
-				cached, found, lookupErr := s.readActionByOperationKey(ctx, toolName, operationKey)
-				if lookupErr != nil {
-					s.machine.Rollback(snap)
-					return lookupErr, nil
-				}
-				if !found {
-					s.machine.Rollback(snap)
-					return mcplib.NewToolResultError(fmt.Sprintf("duplicate operation key without cached result: %s", operationKey)), nil
-				}
-				slog.InfoContext(ctx, "returning cached tool result", "tool", toolName, "operation_key", operationKey)
-				return mcplib.NewToolResultText(cached.Detail), nil
-			}
-			// Non-duplicate write failure: roll back the in-memory FSM so that
-			// a retry with the same operation_key fires the event from the
-			// correct starting state instead of failing with an invalid transition.
-			s.machine.Rollback(snap)
-			slog.ErrorContext(ctx, "store write error", "tool", toolName, "state", string(newState), "error", writeErr)
-			slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(previousState), "duration_ms", time.Since(start).Milliseconds(), "error", writeErr)
-			return mcplib.NewToolResultError(fmt.Sprintf("failed to persist checkpoint: %v", writeErr)), nil
-		}
-
-		slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(newState), "duration_ms", time.Since(start).Milliseconds())
-		return mcplib.NewToolResultText(detail), nil
-	}
-
-	s.mu.Lock()
-	previousState := s.machine.State()
-	s.lastActivity = s.clock.Now() // Record activity time; resets the stall timer.
-	slog.InfoContext(ctx, "tool called", "tool", toolName, "state", string(previousState))
-	// Snapshot the FSM before transitioning so the in-memory state can be
-	// rolled back if the subsequent non-idempotent checkpoint write fails.
-	snap := s.machine.TakeSnapshot()
-	newState, transErr := s.machine.Transition(fsm.Event(actionStr))
-	if transErr != nil {
-		s.mu.Unlock()
-		slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(previousState), "duration_ms", time.Since(start).Milliseconds())
-		return mcplib.NewToolResultError(transErr.Error()), nil
-	}
-
-	cp := s.readCheckpoint(ctx, toolName)
-	if writeErr := s.st.WriteCheckpoint(ctx, store.Checkpoint{State: string(newState), Phase: cp.Phase}); writeErr != nil {
-		s.machine.Rollback(snap)
-		s.mu.Unlock()
-		slog.ErrorContext(ctx, "store write error", "tool", toolName, "state", string(newState), "error", writeErr)
-		slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(previousState), "duration_ms", time.Since(start).Milliseconds(), "error", writeErr)
-		return mcplib.NewToolResultError(fmt.Sprintf("failed to persist checkpoint: %v", writeErr)), nil
-	}
-	s.mu.Unlock()
-
-	result := CheckpointResult{
-		PreviousState: string(previousState),
-		NewState:      string(newState),
-		Phase:         cp.Phase,
-	}
-
-	slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(newState), "duration_ms", time.Since(start).Milliseconds())
-	return toolResultJSON(result), nil
-}
-
-func (s *Server) handleHeartbeat(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
-	const toolName = "loom_heartbeat"
-	start := time.Now()
-
-	if res, cancelled := checkCtx(ctx, toolName); cancelled {
-		return res, nil
-	}
-
-	s.mu.RLock()
-	currentState := s.machine.State()
-	s.mu.RUnlock()
-
-	slog.InfoContext(ctx, "tool called", "tool", toolName, "state", string(currentState))
-
-	cp := s.readCheckpoint(ctx, toolName)
-
-	gate := isGateState(currentState)
-	retry := 0
-	if gate {
-		retry = retryInSeconds
-	}
-	result := HeartbeatResult{
-		State:          string(currentState),
-		Phase:          cp.Phase,
-		Wait:           gate,
-		RetryInSeconds: retry,
-	}
-
-	slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(currentState), "duration_ms", time.Since(start).Milliseconds())
-	return toolResultJSON(result), nil
-}
-
-func (s *Server) handleGetState(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
-	const toolName = "loom_get_state"
-	start := time.Now()
-
-	if res, cancelled := checkCtx(ctx, toolName); cancelled {
-		return res, nil
-	}
-
-	s.mu.RLock()
-	currentState := s.machine.State()
-	s.mu.RUnlock()
-
-	slog.InfoContext(ctx, "tool called", "tool", toolName, "state", string(currentState))
-
-	cp := s.readCheckpoint(ctx, toolName)
-	result := GetStateResult{
-		State: string(currentState),
-		Phase: cp.Phase,
-	}
-
-	slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(currentState), "duration_ms", time.Since(start).Milliseconds())
-	return toolResultJSON(result), nil
-}
-
-func (s *Server) handleAbort(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
-	const toolName = "loom_abort"
-	start := time.Now()
-
-	// Guard against cancelled context before acquiring any locks or mutating state.
-	if res, cancelled := checkCtx(ctx, toolName); cancelled {
-		return res, nil
-	}
-
-	s.mu.Lock()
-	currentState := s.machine.State()
-	slog.InfoContext(ctx, "tool called", "tool", toolName, "state", string(currentState))
-	newState, transErr := s.machine.Transition(fsm.EventAbort)
-	s.mu.Unlock()
-
-	if transErr != nil {
-		// EventAbort is universally accepted; this branch is defensive only.
-		slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(currentState), "duration_ms", time.Since(start).Milliseconds())
-		return mcplib.NewToolResultError(transErr.Error()), nil
-	}
-
-	cp := s.readCheckpoint(ctx, toolName)
-	if writeErr := s.st.WriteCheckpoint(ctx, store.Checkpoint{State: string(newState), Phase: cp.Phase}); writeErr != nil {
-		slog.ErrorContext(ctx, "store write error", "tool", toolName, "state", string(newState), "error", writeErr)
-		slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(newState), "duration_ms", time.Since(start).Milliseconds(), "error", writeErr)
-		return mcplib.NewToolResultError(fmt.Sprintf("failed to persist abort state: %v", writeErr)), nil
-	}
-
-	result := AbortResult{State: string(newState)}
-
-	slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(newState), "duration_ms", time.Since(start).Milliseconds())
-	return toolResultJSON(result), nil
-}
-
-// MCPServer builds and returns a configured *server.MCPServer with all five
-// Loom tools registered. Each call returns a fresh MCPServer instance sharing
-// the same underlying FSM and store.
-func (s *Server) MCPServer() *mcpserver.MCPServer {
-	srv := mcpserver.NewMCPServer("loom", "0.1.0")
-
-	srv.AddTool(
-		mcplib.NewTool("loom_next_step",
-			mcplib.WithDescription("Returns the current workflow state and the next action the agent should take"),
-			mcplib.WithString("operation_key",
-				mcplib.Description("Optional idempotency key used to return a cached result for retried calls"),
-			),
-		),
-		s.handleNextStep,
-	)
-	srv.AddTool(
-		mcplib.NewTool("loom_checkpoint",
-			mcplib.WithDescription("Fires an event on the Loom FSM to advance the workflow and persists the new state"),
-			mcplib.WithString("action",
-				mcplib.Required(),
-				mcplib.Description("The action to fire (e.g. start, pr_opened, ci_green, ci_red, review_approved, abort)"),
-			),
-			mcplib.WithString("operation_key",
-				mcplib.Description("Optional idempotency key used to return a cached result for retried calls"),
-			),
-		),
-		s.handleCheckpoint,
-	)
-	srv.AddTool(
-		mcplib.NewTool("loom_heartbeat",
-			mcplib.WithDescription("Returns the current FSM state and phase as a health-check"),
-		),
-		s.handleHeartbeat,
-	)
-	srv.AddTool(
-		mcplib.NewTool("loom_get_state",
-			mcplib.WithDescription("Returns the current FSM state and epic phase (read-only)"),
-		),
-		s.handleGetState,
-	)
-	srv.AddTool(
-		mcplib.NewTool("loom_abort",
-			mcplib.WithDescription("Aborts the current workflow by transitioning the FSM to PAUSED"),
-		),
-		s.handleAbort,
-	)
-
-	return srv
-}
-
-// Serve starts the MCP stdio server, blocking until ctx is cancelled or an
-// error is encountered on stdin/stdout. It also starts the session monitor
-// goroutine (heartbeat + stall detection) before beginning to handle messages.
-func (s *Server) Serve(ctx context.Context, stdin io.Reader, stdout io.Writer) error {
-	s.startMonitor(ctx)
-	mcpSvr := s.MCPServer()
-	stdioSvr := mcpserver.NewStdioServer(mcpSvr)
-	return stdioSvr.Listen(ctx, stdin, stdout)
 }
