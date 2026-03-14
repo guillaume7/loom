@@ -1,3 +1,23 @@
+## Epic TH2.E4 — Agent Definitions
+
+### Stories Completed
+- TH2.E4.US1 — Orchestrator agent definition
+- TH2.E4.US2 — Gate agent definition
+- TH2.E4.US3 — Debug agent definition
+- TH2.E4.US4 — Merge agent definition
+
+### Key Changes
+- Added VS Code custom agent definition for the Loom orchestrator loop: drives FSM, checkpoints, and hands off to specialist agents.
+- Added read-only gate agent that evaluates PR merge readiness (CI, approvals, draft state, conflicts) and returns structured PASS/FAIL verdict.
+- Added debug agent that diagnoses CI failures, posts structured debug comments, and returns comment ID.
+- Added merge agent with minimal merge-only tool scope, respects branch protection, returns structured JSON result.
+
+### Files Modified
+- .github/agents/loom-orchestrator.agent.md
+- .github/agents/loom-gate.agent.md
+- .github/agents/loom-debug.agent.md
+- .github/agents/loom-merge.agent.md
+
 ## Epic TH2.E1 — Dependency Graph Engine
 
 ### Stories Completed
