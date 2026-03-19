@@ -58,13 +58,12 @@ func (s *Server) handleHeartbeat(ctx context.Context, req mcplib.CallToolRequest
 		return res, nil
 	}
 
-	s.mu.RLock()
-	currentState := s.machine.State()
-	s.mu.RUnlock()
+	cp, currentState, syncErr := s.syncMachineToCheckpoint(ctx, toolName)
+	if syncErr != nil {
+		return mcplib.NewToolResultError(syncErr.Error()), nil
+	}
 
 	slog.InfoContext(ctx, "tool called", "tool", toolName, "state", string(currentState))
-
-	cp := s.readCheckpoint(ctx, toolName)
 
 	gate := isGateState(currentState)
 	retry := 0

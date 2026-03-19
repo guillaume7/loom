@@ -24,6 +24,7 @@ type GitHubClient interface {
 	CloseIssue(ctx context.Context, issueNumber int) error
 	ListPRs(ctx context.Context, branch string) ([]*PR, error)
 	GetPR(ctx context.Context, prNumber int) (*PR, error)
+	MarkReadyForReview(ctx context.Context, prNumber int) error
 	GetCheckRuns(ctx context.Context, sha string) ([]*CheckRun, error)
 	MergePR(ctx context.Context, prNumber int, commitMessage string) error
 	RequestReview(ctx context.Context, prNumber int, reviewer string) error
@@ -436,6 +437,15 @@ func (c *HTTPClient) GetCheckRuns(ctx context.Context, sha string) ([]*CheckRun,
 		return nil, fmt.Errorf("getting check runs: %w", err)
 	}
 	return envelope.CheckRuns, nil
+}
+
+// MarkReadyForReview transitions a draft PR into ready-for-review state.
+func (c *HTTPClient) MarkReadyForReview(ctx context.Context, prNumber int) error {
+	endpoint := fmt.Sprintf("%s/pulls/%d/ready_for_review", c.repoBase(), prNumber)
+	if err := c.doRequest(ctx, http.MethodPost, endpoint, nil, nil); err != nil {
+		return fmt.Errorf("marking PR ready for review: %w", err)
+	}
+	return nil
 }
 
 // MergePR merges a pull request using the provided commit message.

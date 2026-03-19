@@ -49,9 +49,6 @@ func (s *Server) handleNextStep(ctx context.Context, req mcplib.CallToolRequest)
 	}
 
 	if hasOperationKey {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-
 		cached, found, lookupErr := s.readActionByOperationKey(ctx, toolName, operationKey)
 		if lookupErr != nil {
 			return lookupErr, nil
@@ -61,7 +58,10 @@ func (s *Server) handleNextStep(ctx context.Context, req mcplib.CallToolRequest)
 			return mcplib.NewToolResultText(cached.Detail), nil
 		}
 
-		currentState := s.machine.State()
+		_, currentState, syncErr := s.syncMachineToCheckpoint(ctx, toolName)
+		if syncErr != nil {
+			return mcplib.NewToolResultError(syncErr.Error()), nil
+		}
 		slog.InfoContext(ctx, "tool called", "tool", toolName, "state", string(currentState))
 
 		result := NextStepResult{
@@ -89,9 +89,10 @@ func (s *Server) handleNextStep(ctx context.Context, req mcplib.CallToolRequest)
 		return mcplib.NewToolResultText(detail), nil
 	}
 
-	s.mu.RLock()
-	currentState := s.machine.State()
-	s.mu.RUnlock()
+	_, currentState, syncErr := s.syncMachineToCheckpoint(ctx, toolName)
+	if syncErr != nil {
+		return mcplib.NewToolResultError(syncErr.Error()), nil
+	}
 
 	slog.InfoContext(ctx, "tool called", "tool", toolName, "state", string(currentState))
 
@@ -131,6 +132,11 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 	}
 
 	if hasOperationKey {
+		_, _, syncErr := s.syncMachineToCheckpoint(ctx, toolName)
+		if syncErr != nil {
+			return mcplib.NewToolResultError(syncErr.Error()), nil
+		}
+
 		s.mu.Lock()
 		defer s.mu.Unlock()
 
@@ -209,6 +215,11 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 		// or neither is, making a retry with the same operation_key safe.
 		nextCheckpoint := cp
 		nextCheckpoint.State = string(newState)
+		if newState == fsm.StatePaused {
+			nextCheckpoint.ResumeState = string(previousState)
+		} else {
+			nextCheckpoint.ResumeState = ""
+		}
 		nextCheckpoint.Phase = nextPhase
 		nextCheckpoint.RetryCount = nextRetryCount
 		writeErr := s.writeCheckpointAndAction(ctx,
@@ -269,6 +280,11 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 		return mcplib.NewToolResultText(detail), nil
 	}
 
+	_, _, syncErr := s.syncMachineToCheckpoint(ctx, toolName)
+	if syncErr != nil {
+		return mcplib.NewToolResultError(syncErr.Error()), nil
+	}
+
 	s.mu.Lock()
 	previousState := s.machine.State()
 	event := fsm.Event(actionStr)
@@ -323,6 +339,11 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 
 	nextCheckpoint := cp
 	nextCheckpoint.State = string(newState)
+	if newState == fsm.StatePaused {
+		nextCheckpoint.ResumeState = string(previousState)
+	} else {
+		nextCheckpoint.ResumeState = ""
+	}
 	nextCheckpoint.Phase = nextPhase
 	nextCheckpoint.RetryCount = nextRetryCount
 	if writeErr := s.writeCheckpoint(ctx, nextCheckpoint); writeErr != nil {
@@ -375,13 +396,13 @@ func (s *Server) handleGetState(ctx context.Context, req mcplib.CallToolRequest)
 		return res, nil
 	}
 
-	s.mu.RLock()
-	currentState := s.machine.State()
-	s.mu.RUnlock()
+	cp, currentState, syncErr := s.syncMachineToCheckpoint(ctx, toolName)
+	if syncErr != nil {
+		return mcplib.NewToolResultError(syncErr.Error()), nil
+	}
 
 	slog.InfoContext(ctx, "tool called", "tool", toolName, "state", string(currentState))
 
-	cp := s.readCheckpoint(ctx, toolName)
 	result := GetStateResult{
 		State: string(currentState),
 		Phase: cp.Phase,
@@ -398,6 +419,11 @@ func (s *Server) handleAbort(ctx context.Context, req mcplib.CallToolRequest) (*
 	// Guard against cancelled context before acquiring any locks or mutating state.
 	if res, cancelled := checkCtx(ctx, toolName); cancelled {
 		return res, nil
+	}
+
+	_, _, syncErr := s.syncMachineToCheckpoint(ctx, toolName)
+	if syncErr != nil {
+		return mcplib.NewToolResultError(syncErr.Error()), nil
 	}
 
 	s.mu.Lock()
@@ -421,6 +447,7 @@ func (s *Server) handleAbort(ctx context.Context, req mcplib.CallToolRequest) (*
 		return mcplib.NewToolResultError(fmt.Sprintf("failed to read checkpoint: %v", readErr)), nil
 	}
 	cp.State = string(newState)
+	cp.ResumeState = string(currentState)
 	if writeErr := s.writeCheckpoint(ctx, cp); writeErr != nil {
 		s.mu.Lock()
 		s.machine.Rollback(snap)

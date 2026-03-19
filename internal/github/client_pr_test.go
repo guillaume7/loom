@@ -99,6 +99,29 @@ func TestHTTPClient_GetCheckRuns_Error(t *testing.T) {
 	assert.Contains(t, err.Error(), "getting check runs")
 }
 
+func TestHTTPClient_MarkReadyForReview_Success(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodPost, r.Method)
+		assert.Contains(t, r.URL.Path, "/ready_for_review")
+		w.WriteHeader(http.StatusOK)
+	})
+	c := newTestClient(t, handler)
+
+	err := c.MarkReadyForReview(context.Background(), 7)
+	require.NoError(t, err)
+}
+
+func TestHTTPClient_MarkReadyForReview_Error(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"message":"Not Found"}`, http.StatusNotFound)
+	})
+	c := newTestClient(t, handler)
+
+	err := c.MarkReadyForReview(context.Background(), 999)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "marking PR ready for review")
+}
+
 func TestHTTPClient_MergePR_Success(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodPut, r.Method)

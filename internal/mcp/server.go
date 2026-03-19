@@ -39,6 +39,7 @@ import (
 type FSM interface {
 	State() fsm.State
 	Transition(event fsm.Event) (fsm.State, error)
+	Hydrate(state fsm.State) error
 	// TakeSnapshot returns an opaque snapshot of all mutable machine state.
 	// The snapshot must be passed to Rollback if the operation that follows
 	// the Transition call fails and the in-memory state must be undone.
@@ -137,8 +138,21 @@ func NewServer(machine FSM, st store.Store, gh loomgh.Client, opts ...Option) *S
 	for _, opt := range opts {
 		opt(s)
 	}
-	// Initialize lastActivity to now so a fresh server is not immediately stale.
+	// Initialize from persisted checkpoint so a fresh process reflects the last
+	// durable workflow state instead of always starting from IDLE.
 	s.lastActivity = s.clock.Now()
+	if cp, err := s.readCheckpointWithErr(context.Background()); err != nil {
+		slog.Warn("failed to hydrate server from checkpoint", "error", err)
+	} else {
+		if !cp.UpdatedAt.IsZero() {
+			s.lastActivity = cp.UpdatedAt
+		}
+		if cp.State != "" {
+			if err := s.machine.Hydrate(fsm.State(cp.State)); err != nil {
+				slog.Warn("failed to hydrate machine state from checkpoint", "state", cp.State, "error", err)
+			}
+		}
+	}
 	return s
 }
 
@@ -207,11 +221,11 @@ func stateInstruction(state fsm.State) string {
 	case fsm.StateAwaitingPR:
 		return "Poll GitHub for a PR opened by @copilot; call loom_checkpoint with action=pr_opened when found"
 	case fsm.StateAwaitingReady:
-		return "Wait for the PR to leave draft status; call loom_checkpoint with action=pr_ready when ready"
+		return "Inspect the PR draft state. If @copilot work is complete and the PR is still draft, mark it ready for review and call loom_checkpoint with action=pr_ready; otherwise wait for it to leave draft status"
 	case fsm.StateAwaitingCI:
 		return "Poll CI check runs; call loom_checkpoint with action=ci_green or action=ci_red"
 	case fsm.StateReviewing:
-		return "Request a review; call loom_checkpoint with action=review_approved or action=review_changes_requested"
+		return "Ensure a review is requested on the PR, then wait for a verdict; call loom_checkpoint with action=review_approved or action=review_changes_requested"
 	case fsm.StateDebugging:
 		return "Wait for @copilot to push a fix; call loom_checkpoint with action=fix_pushed"
 	case fsm.StateAddressingFeedback:
@@ -223,7 +237,7 @@ func stateInstruction(state fsm.State) string {
 	case fsm.StateComplete:
 		return "All phases complete \u2014 workflow finished"
 	case fsm.StatePaused:
-		return "Workflow paused \u2014 manual intervention required before resuming"
+		return "Workflow paused \u2014 resume or reconcile the checkpoint before continuing"
 	default:
 		return "Unknown state"
 	}

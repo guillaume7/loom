@@ -28,6 +28,13 @@ LOOP
 
 Use `loom_get_state` only for diagnosis/reconciliation. Use `loom_abort` if Loom state and live GitHub state cannot be reconciled safely.
 
+When Loom reports `AWAITING_READY`, do not passively poll forever if implementation is already complete:
+1. Inspect the live PR.
+2. If it is still draft and the Copilot coding run has finished, mark the PR ready for review.
+3. Checkpoint `pr_ready`.
+
+When Loom reports `REVIEWING`, ensure a review has actually been requested on the PR before only polling for approval or requested changes.
+
 ## Canonical Checkpoint Actions
 
 | Situation | Action |

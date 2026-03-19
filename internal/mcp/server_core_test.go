@@ -7,6 +7,7 @@ import (
 
 	"github.com/guillaume7/loom/internal/fsm"
 	"github.com/guillaume7/loom/internal/mcp"
+	"github.com/guillaume7/loom/internal/store"
 	mcplib "github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -90,6 +91,61 @@ func TestLoomNextStep_ReturnsStateAndInstruction(t *testing.T) {
 
 	assert.Equal(t, "IDLE", got.State)
 	assert.NotEmpty(t, got.Instruction)
+}
+
+func TestNewServer_HydratesMachineFromCheckpoint(t *testing.T) {
+	st := newMemStore()
+	require.NoError(t, st.WriteCheckpoint(context.Background(), store.Checkpoint{
+		State: "AWAITING_READY",
+		Phase: 3,
+	}))
+
+	s := mcp.NewServer(fsm.NewMachine(fsm.DefaultConfig()), st, nil)
+	mcpSvr := s.MCPServer()
+
+	result := callTool(t, mcpSvr, "loom_next_step", nil)
+	assert.False(t, result.IsError)
+
+	var got mcp.NextStepResult
+	require.NoError(t, json.Unmarshal([]byte(toolText(t, result)), &got))
+	assert.Equal(t, "AWAITING_READY", got.State)
+}
+
+func TestLoomNextStep_RehydratesFromCheckpointAfterOutOfBandChange(t *testing.T) {
+	st := newMemStore()
+	s := mcp.NewServer(fsm.NewMachine(fsm.DefaultConfig()), st, nil)
+	mcpSvr := s.MCPServer()
+
+	callTool(t, mcpSvr, "loom_checkpoint", map[string]interface{}{"action": "start"})
+	callTool(t, mcpSvr, "loom_checkpoint", map[string]interface{}{"action": "phase_identified"})
+	callTool(t, mcpSvr, "loom_checkpoint", map[string]interface{}{"action": "copilot_assigned"})
+	callTool(t, mcpSvr, "loom_checkpoint", map[string]interface{}{"action": "pr_opened"})
+
+	require.NoError(t, st.WriteCheckpoint(context.Background(), store.Checkpoint{State: "AWAITING_CI", Phase: 3}))
+
+	result := callTool(t, mcpSvr, "loom_next_step", nil)
+	assert.False(t, result.IsError)
+
+	var got mcp.NextStepResult
+	require.NoError(t, json.Unmarshal([]byte(toolText(t, result)), &got))
+	assert.Equal(t, "AWAITING_CI", got.State)
+	assert.Contains(t, got.Instruction, "ci_green")
+}
+
+func TestLoomGetState_RehydratesFromCheckpointAfterOutOfBandChange(t *testing.T) {
+	st := newMemStore()
+	s := mcp.NewServer(fsm.NewMachine(fsm.DefaultConfig()), st, nil)
+	mcpSvr := s.MCPServer()
+
+	require.NoError(t, st.WriteCheckpoint(context.Background(), store.Checkpoint{State: "AWAITING_READY", Phase: 4}))
+
+	result := callTool(t, mcpSvr, "loom_get_state", nil)
+	assert.False(t, result.IsError)
+
+	var got mcp.GetStateResult
+	require.NoError(t, json.Unmarshal([]byte(toolText(t, result)), &got))
+	assert.Equal(t, "AWAITING_READY", got.State)
+	assert.Equal(t, 4, got.Phase)
 }
 
 func TestLoomCheckpoint_ValidAction_AdvancesState(t *testing.T) {
