@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 
+	"github.com/google/uuid"
 	"github.com/guillaume7/loom/internal/config"
 	"github.com/guillaume7/loom/internal/fsm"
 	loomgh "github.com/guillaume7/loom/internal/github"
@@ -43,9 +45,19 @@ func newMCPCmd() *cobra.Command {
 				gh = loomgh.NewHTTPClient("https://api.github.com", cfg.Token, cfg.Owner, cfg.Repo)
 			}
 
-			srv := mcp.NewServer(machine, st, gh, mcp.WithSchedulerConfig(mcp.SchedulerConfig{
-				MaxParallel: cfg.MaxParallel,
-			}))
+			repo := ""
+			if cfg.Owner != "" && cfg.Repo != "" {
+				repo = fmt.Sprintf("%s/%s", cfg.Owner, cfg.Repo)
+			}
+
+			srv := mcp.NewServer(machine, st, gh,
+				mcp.WithSchedulerConfig(mcp.SchedulerConfig{
+					MaxParallel: cfg.MaxParallel,
+				}),
+				mcp.WithTraceSessionID(uuid.New().String()),
+				mcp.WithLoomVersion(version),
+				mcp.WithRepository(repo),
+			)
 
 			ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 			defer stop()

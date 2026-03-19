@@ -85,6 +85,11 @@ type Server struct {
 	spawner   agentspawn.Runner
 	schedCfg  SchedulerConfig
 	storyID   string
+
+	// Session traceability (E9).
+	traceSessionID string // unique ID for this server invocation's trace record
+	loomVersion    string // Loom binary version string (e.g. "0.1.0" or "dev")
+	repository     string // "owner/repo" of the target GitHub repository
 }
 
 // Option configures a Server.
@@ -116,6 +121,25 @@ func WithSchedulerConfig(cfg SchedulerConfig) Option {
 	return func(s *Server) {
 		s.schedCfg = normalizeSchedulerConfig(cfg)
 	}
+}
+
+// WithTraceSessionID sets the session identifier used for the E9 session
+// trace. When set, Serve() opens the trace on startup and closes it on exit.
+// When empty (the default) no session trace is written.
+func WithTraceSessionID(id string) Option {
+	return func(s *Server) { s.traceSessionID = id }
+}
+
+// WithLoomVersion sets the Loom binary version string recorded in the
+// session trace header. Typically injected from the ldflags version variable.
+func WithLoomVersion(v string) Option {
+	return func(s *Server) { s.loomVersion = v }
+}
+
+// WithRepository sets the "owner/repo" string recorded in the session trace
+// header. Typically formatted from config.Owner and config.Repo.
+func WithRepository(repo string) Option {
+	return func(s *Server) { s.repository = repo }
 }
 
 // NewServer constructs a Server with the provided dependencies.

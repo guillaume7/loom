@@ -13,9 +13,11 @@ import (
 // memStore is an in-memory Store used only in tests.
 // It satisfies the store.Store interface without any real I/O.
 type memStore struct {
-	cp      store.Checkpoint
-	actions []store.Action
-	empty   bool
+	cp          store.Checkpoint
+	actions     []store.Action
+	traces      []store.SessionTrace
+	traceEvents []store.TraceEvent
+	empty       bool
 }
 
 func newMemStore() *memStore { return &memStore{empty: true} }
@@ -92,11 +94,84 @@ func (s *memStore) ReadActions(_ context.Context, limit int) ([]store.Action, er
 func (s *memStore) DeleteAll(_ context.Context) error {
 	s.cp = store.Checkpoint{}
 	s.actions = nil
+	s.traces = nil
+	s.traceEvents = nil
 	s.empty = true
 	return nil
 }
 
 func (s *memStore) Close() error { return nil }
+
+func (s *memStore) OpenSessionTrace(_ context.Context, trace store.SessionTrace) error {
+	for _, t := range s.traces {
+		if t.SessionID == trace.SessionID {
+			return nil
+		}
+	}
+	if trace.Outcome == "" {
+		trace.Outcome = "in_progress"
+	}
+	s.traces = append(s.traces, trace)
+	return nil
+}
+
+func (s *memStore) AppendTraceEvent(_ context.Context, ev store.TraceEvent) error {
+	seq := 1
+	for _, e := range s.traceEvents {
+		if e.SessionID == ev.SessionID && e.Seq >= seq {
+			seq = e.Seq + 1
+		}
+	}
+	ev.Seq = seq
+	ev.ID = int64(len(s.traceEvents) + 1)
+	s.traceEvents = append(s.traceEvents, ev)
+	return nil
+}
+
+func (s *memStore) CloseSessionTrace(_ context.Context, sessionID, outcome string) error {
+	if outcome == "" {
+		outcome = "complete"
+	}
+	for i, t := range s.traces {
+		if t.SessionID == sessionID {
+			s.traces[i].EndedAt = time.Now()
+			s.traces[i].Outcome = outcome
+			return nil
+		}
+	}
+	return nil
+}
+
+func (s *memStore) ReadSessionTrace(_ context.Context, sessionID string) (store.SessionTrace, []store.TraceEvent, error) {
+	var found *store.SessionTrace
+	for i := range s.traces {
+		if s.traces[i].SessionID == sessionID {
+			found = &s.traces[i]
+			break
+		}
+	}
+	if found == nil {
+		return store.SessionTrace{}, nil, nil
+	}
+	var events []store.TraceEvent
+	for _, e := range s.traceEvents {
+		if e.SessionID == sessionID {
+			events = append(events, e)
+		}
+	}
+	return *found, events, nil
+}
+
+func (s *memStore) ListSessionTraces(_ context.Context, limit int) ([]store.SessionTrace, error) {
+	if limit <= 0 {
+		return []store.SessionTrace{}, nil
+	}
+	result := make([]store.SessionTrace, 0, limit)
+	for i := len(s.traces) - 1; i >= 0 && len(result) < limit; i-- {
+		result = append(result, s.traces[i])
+	}
+	return result, nil
+}
 
 func TestMemStore_ReadCheckpoint_ReturnsZeroValue_WhenEmpty(t *testing.T) {
 	s := newMemStore()

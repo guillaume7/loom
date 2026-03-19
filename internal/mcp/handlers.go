@@ -261,8 +261,24 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 				State:    previousState,
 				Event:    event,
 			}
+			s.appendTrace(ctx, store.TraceEvent{
+				Kind:      TraceKindIntervention,
+				FromState: string(previousState),
+				ToState:   string(newState),
+				Event:     actionStr,
+				Reason:    "budget exhaustion — elicitation prompt emitted",
+				PRNumber:  emitPRNumber,
+			})
 		} else {
 			s.activeElicitation = elicitationContext{}
+			s.appendTrace(ctx, store.TraceEvent{
+				Kind:        TraceKindTransition,
+				FromState:   string(previousState),
+				ToState:     string(newState),
+				Event:       actionStr,
+				PRNumber:    nextCheckpoint.PRNumber,
+				IssueNumber: nextCheckpoint.IssueNumber,
+			})
 		}
 
 		slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(newState), "duration_ms", time.Since(start).Milliseconds())
@@ -350,10 +366,26 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 			Event:    event,
 		}
 		s.mu.Unlock()
+		s.appendTrace(ctx, store.TraceEvent{
+			Kind:      TraceKindIntervention,
+			FromState: string(previousState),
+			ToState:   string(newState),
+			Event:     actionStr,
+			Reason:    "budget exhaustion — elicitation prompt emitted",
+			PRNumber:  emitPRNumber,
+		})
 	} else {
 		s.mu.Lock()
 		s.activeElicitation = elicitationContext{}
 		s.mu.Unlock()
+		s.appendTrace(ctx, store.TraceEvent{
+			Kind:        TraceKindTransition,
+			FromState:   string(previousState),
+			ToState:     string(newState),
+			Event:       actionStr,
+			PRNumber:    nextCheckpoint.PRNumber,
+			IssueNumber: nextCheckpoint.IssueNumber,
+		})
 	}
 
 	result := CheckpointResult{
@@ -431,6 +463,16 @@ func (s *Server) handleAbort(ctx context.Context, req mcplib.CallToolRequest) (*
 	}
 
 	result := AbortResult{State: string(newState)}
+
+	s.appendTrace(ctx, store.TraceEvent{
+		Kind:        TraceKindIntervention,
+		FromState:   string(currentState),
+		ToState:     string(newState),
+		Event:       string(fsm.EventAbort),
+		Reason:      "operator requested abort",
+		PRNumber:    cp.PRNumber,
+		IssueNumber: cp.IssueNumber,
+	})
 
 	slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(newState), "duration_ms", time.Since(start).Milliseconds())
 	return toolResultJSON(result), nil
@@ -650,6 +692,9 @@ func (s *Server) MCPServer() *mcpserver.MCPServer {
 		srv.AddResource(r.resource, r.handler)
 	}
 
+	// E9: session trace resources.
+	s.addTraceResources(srv)
+
 	return srv
 }
 
@@ -657,8 +702,191 @@ func (s *Server) MCPServer() *mcpserver.MCPServer {
 // error is encountered on stdin/stdout. It also starts the session monitor
 // goroutine (heartbeat + stall detection) before beginning to handle messages.
 func (s *Server) Serve(ctx context.Context, stdin io.Reader, stdout io.Writer) error {
+	s.openTrace(ctx)
 	s.startMonitor(ctx)
 	mcpSvr := s.MCPServer()
 	stdioSvr := mcpserver.NewStdioServer(mcpSvr)
-	return stdioSvr.Listen(ctx, stdin, stdout)
+	serveErr := stdioSvr.Listen(ctx, stdin, stdout)
+	outcome := traceOutcomeFromState(s.machine.State())
+	s.closeTrace(ctx, outcome)
+	return serveErr
+}
+
+// traceOutcomeFromState maps the current FSM state to a session trace outcome
+// string when the server shuts down.
+func traceOutcomeFromState(state fsm.State) string {
+	switch state {
+	case fsm.StateComplete:
+		return TraceOutcomeComplete
+	case fsm.StatePaused:
+		return TraceOutcomePaused
+	default:
+		return TraceOutcomeAborted
+	}
+}
+
+// addTraceResources registers the loom://trace and loom://trace/index MCP
+// resources for E9 session traceability.
+func (s *Server) addTraceResources(srv *mcpserver.MCPServer) {
+	srv.AddResource(
+		mcplib.Resource{
+			URI:         "loom://trace",
+			Name:        "Session Trace",
+			Description: "Human-readable Markdown session trace for the current run-loom session",
+			MIMEType:    "text/markdown",
+		},
+		func(_ context.Context, _ mcplib.ReadResourceRequest) ([]mcplib.ResourceContents, error) {
+			if s.traceSessionID == "" {
+				return []mcplib.ResourceContents{
+					mcplib.TextResourceContents{
+						URI:      "loom://trace",
+						MIMEType: "text/markdown",
+						Text:     "No active session trace. Start the server with a trace session ID to enable tracing.",
+					},
+				}, nil
+			}
+			ctx := context.Background()
+			trace, events, err := s.st.ReadSessionTrace(ctx, s.traceSessionID)
+			if err != nil {
+				return nil, fmt.Errorf("loom://trace: %w", err)
+			}
+			text := renderSessionTrace(trace, events)
+			return []mcplib.ResourceContents{
+				mcplib.TextResourceContents{
+					URI:      "loom://trace",
+					MIMEType: "text/markdown",
+					Text:     text,
+				},
+			}, nil
+		},
+	)
+
+	srv.AddResource(
+		mcplib.Resource{
+			URI:         "loom://trace/index",
+			Name:        "Session Trace Index",
+			Description: "Index of the most recent run-loom session traces (newest first)",
+			MIMEType:    "application/json",
+		},
+		func(_ context.Context, _ mcplib.ReadResourceRequest) ([]mcplib.ResourceContents, error) {
+			ctx := context.Background()
+			traces, err := s.st.ListSessionTraces(ctx, 50)
+			if err != nil {
+				return nil, fmt.Errorf("loom://trace/index: %w", err)
+			}
+			type entry struct {
+				SessionID  string `json:"session_id"`
+				LoomVer    string `json:"loom_ver"`
+				Repository string `json:"repository"`
+				StartedAt  string `json:"started_at"`
+				EndedAt    string `json:"ended_at,omitempty"`
+				Outcome    string `json:"outcome"`
+			}
+			entries := make([]entry, 0, len(traces))
+			for _, t := range traces {
+				e := entry{
+					SessionID:  t.SessionID,
+					LoomVer:    t.LoomVer,
+					Repository: t.Repository,
+					StartedAt:  t.StartedAt.UTC().Format(time.RFC3339),
+					Outcome:    t.Outcome,
+				}
+				if !t.EndedAt.IsZero() {
+					e.EndedAt = t.EndedAt.UTC().Format(time.RFC3339)
+				}
+				entries = append(entries, e)
+			}
+			payload, err := json.Marshal(entries)
+			if err != nil {
+				return nil, fmt.Errorf("loom://trace/index: %w", err)
+			}
+			return []mcplib.ResourceContents{
+				mcplib.TextResourceContents{
+					URI:      "loom://trace/index",
+					MIMEType: "application/json",
+					Text:     string(payload),
+				},
+			}, nil
+		},
+	)
+}
+
+// renderSessionTrace renders a SessionTrace and its events as Markdown.
+func renderSessionTrace(trace store.SessionTrace, events []store.TraceEvent) string {
+	var sb strings.Builder
+
+	sb.WriteString("# Session Trace\n\n")
+	sb.WriteString(fmt.Sprintf("**Session ID:** `%s`  \n", trace.SessionID))
+	sb.WriteString(fmt.Sprintf("**Loom version:** %s  \n", orDash(trace.LoomVer)))
+	sb.WriteString(fmt.Sprintf("**Repository:** %s  \n", orDash(trace.Repository)))
+	if !trace.StartedAt.IsZero() {
+		sb.WriteString(fmt.Sprintf("**Started:** %s  \n", trace.StartedAt.UTC().Format(time.RFC3339)))
+	}
+	if !trace.EndedAt.IsZero() {
+		sb.WriteString(fmt.Sprintf("**Ended:** %s  \n", trace.EndedAt.UTC().Format(time.RFC3339)))
+		dur := trace.EndedAt.Sub(trace.StartedAt).Round(time.Second)
+		sb.WriteString(fmt.Sprintf("**Duration:** %s  \n", dur))
+	} else {
+		sb.WriteString("**Ended:** _(in progress)_  \n")
+	}
+	sb.WriteString(fmt.Sprintf("**Outcome:** %s  \n", orDash(trace.Outcome)))
+
+	sb.WriteString("\n## Event Ledger\n\n")
+
+	if len(events) == 0 {
+		sb.WriteString("_No events recorded yet._\n")
+		return sb.String()
+	}
+
+	sb.WriteString("| # | Time | Kind | From | To | Event | Reason |\n")
+	sb.WriteString("|---|------|------|------|----|-------|--------|\n")
+	for _, ev := range events {
+		ts := ev.CreatedAt.UTC().Format("2006-01-02T15:04:05Z")
+		sb.WriteString(fmt.Sprintf("| %d | %s | %s | %s | %s | %s | %s |\n",
+			ev.Seq, ts, ev.Kind,
+			orDash(ev.FromState), orDash(ev.ToState),
+			orDash(ev.Event), orDash(ev.Reason),
+		))
+	}
+
+	// Summarise GitHub issue/PR touch points.
+	type ghRef struct {
+		num  int
+		kind string
+	}
+	seen := make(map[ghRef]bool)
+	var ghRefs []ghRef
+	for _, ev := range events {
+		if ev.PRNumber != 0 {
+			r := ghRef{num: ev.PRNumber, kind: "PR"}
+			if !seen[r] {
+				seen[r] = true
+				ghRefs = append(ghRefs, r)
+			}
+		}
+		if ev.IssueNumber != 0 {
+			r := ghRef{num: ev.IssueNumber, kind: "Issue"}
+			if !seen[r] {
+				seen[r] = true
+				ghRefs = append(ghRefs, r)
+			}
+		}
+	}
+	if len(ghRefs) > 0 {
+		sb.WriteString("\n## GitHub Ledger\n\n")
+		sb.WriteString("| Kind | Number |\n")
+		sb.WriteString("|------|--------|\n")
+		for _, r := range ghRefs {
+			sb.WriteString(fmt.Sprintf("| %s | #%d |\n", r.kind, r.num))
+		}
+	}
+
+	return sb.String()
+}
+
+func orDash(s string) string {
+	if s == "" {
+		return "—"
+	}
+	return s
 }

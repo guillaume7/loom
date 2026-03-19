@@ -259,3 +259,35 @@ backlog:
               status: done
               file: docs/themes/TH2-agent-platform/epics/E8-parallel-execution/user-stories/US4-dag-scheduling.md
               depends-on: [TH2.E8.US1, TH2.E8.US3]
+
+        # E9 — Run-Loom Session Traceability (P2)
+        - id: E9
+          name: "Run-Loom Session Traceability"
+          status: done
+          depends-on: [E2, E3]
+          stories:
+            - id: TH2.E9.US1
+              title: "Session trace header and append-only event model"
+              status: done
+              file: docs/themes/TH2-agent-platform/epics/E9-session-traceability/user-stories/US1-session-trace-header.md
+              depends-on: []
+            - id: TH2.E9.US2
+              title: "FSM transition and operator intervention ledger"
+              status: done
+              file: docs/themes/TH2-agent-platform/epics/E9-session-traceability/user-stories/US2-fsm-transition-ledger.md
+              depends-on: [TH2.E9.US1]
+            - id: TH2.E9.US3
+              title: "GitHub issue and PR evolution ledger"
+              status: done
+              file: docs/themes/TH2-agent-platform/epics/E9-session-traceability/user-stories/US3-github-ledger.md
+              depends-on: [TH2.E9.US2]
+            - id: TH2.E9.US4
+              title: "Human-readable session trace resource or tab"
+              status: done
+              file: docs/themes/TH2-agent-platform/epics/E9-session-traceability/user-stories/US4-trace-resource.md
+              depends-on: [TH2.E9.US3]
+            - id: TH2.E9.US5
+              title: "Session index, discoverability, and retention"
+              status: done
+              file: docs/themes/TH2-agent-platform/epics/E9-session-traceability/user-stories/US5-session-index.md
+              depends-on: [TH2.E9.US1]

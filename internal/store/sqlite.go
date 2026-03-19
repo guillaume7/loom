@@ -83,6 +83,37 @@ func migrate(db *sql.DB) error {
 		return err
 	}
 
+	// E9: Session trace tables.
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS session_trace (
+		id         INTEGER PRIMARY KEY AUTOINCREMENT,
+		session_id TEXT    NOT NULL UNIQUE,
+		loom_ver   TEXT    NOT NULL DEFAULT '',
+		repository TEXT    NOT NULL DEFAULT '',
+		started_at TEXT    NOT NULL,
+		ended_at   TEXT    NOT NULL DEFAULT '',
+		outcome    TEXT    NOT NULL DEFAULT 'in_progress'
+	)`)
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS trace_event (
+		id           INTEGER PRIMARY KEY AUTOINCREMENT,
+		session_id   TEXT    NOT NULL,
+		seq          INTEGER NOT NULL DEFAULT 0,
+		kind         TEXT    NOT NULL DEFAULT 'transition',
+		from_state   TEXT    NOT NULL DEFAULT '',
+		to_state     TEXT    NOT NULL DEFAULT '',
+		event        TEXT    NOT NULL DEFAULT '',
+		reason       TEXT    NOT NULL DEFAULT '',
+		pr_number    INTEGER NOT NULL DEFAULT 0,
+		issue_number INTEGER NOT NULL DEFAULT 0,
+		created_at   TEXT    NOT NULL
+	)`)
+	if err != nil {
+		return err
+	}
+
 	// Collect existing column names.
 	rows, err := db.Query("PRAGMA table_info(checkpoint)")
 	if err != nil {
@@ -391,6 +422,12 @@ func (s *sqliteStore) DeleteAll(ctx context.Context) error {
 	if _, err = tx.ExecContext(ctx, "DELETE FROM checkpoint"); err != nil {
 		return err
 	}
+	if _, err = tx.ExecContext(ctx, "DELETE FROM trace_event"); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, "DELETE FROM session_trace"); err != nil {
+		return err
+	}
 
 	err = tx.Commit()
 	return err
@@ -398,4 +435,157 @@ func (s *sqliteStore) DeleteAll(ctx context.Context) error {
 
 func (s *sqliteStore) Close() error {
 	return s.db.Close()
+}
+
+// ── Session trace (E9) ────────────────────────────────────────────────────
+
+func (s *sqliteStore) OpenSessionTrace(ctx context.Context, trace SessionTrace) error {
+	if trace.StartedAt.IsZero() {
+		trace.StartedAt = time.Now()
+	}
+	outcome := trace.Outcome
+	if outcome == "" {
+		outcome = "in_progress"
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO session_trace (session_id, loom_ver, repository, started_at, outcome)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(session_id) DO NOTHING`,
+		trace.SessionID,
+		trace.LoomVer,
+		trace.Repository,
+		trace.StartedAt.UTC().Format(time.RFC3339Nano),
+		outcome,
+	)
+	return err
+}
+
+func (s *sqliteStore) AppendTraceEvent(ctx context.Context, ev TraceEvent) error {
+	if ev.CreatedAt.IsZero() {
+		ev.CreatedAt = time.Now()
+	}
+	// Assign seq as one more than the current maximum for this session.
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO trace_event
+			(session_id, seq, kind, from_state, to_state, event, reason, pr_number, issue_number, created_at)
+		VALUES (?, COALESCE((SELECT MAX(seq) FROM trace_event WHERE session_id = ?), 0) + 1,
+		        ?, ?, ?, ?, ?, ?, ?, ?)`,
+		ev.SessionID, ev.SessionID,
+		ev.Kind, ev.FromState, ev.ToState, ev.Event, ev.Reason,
+		ev.PRNumber, ev.IssueNumber,
+		ev.CreatedAt.UTC().Format(time.RFC3339Nano),
+	)
+	return err
+}
+
+func (s *sqliteStore) CloseSessionTrace(ctx context.Context, sessionID, outcome string) error {
+	if outcome == "" {
+		outcome = "complete"
+	}
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE session_trace SET ended_at = ?, outcome = ? WHERE session_id = ?`,
+		time.Now().UTC().Format(time.RFC3339Nano),
+		outcome,
+		sessionID,
+	)
+	return err
+}
+
+func (s *sqliteStore) ReadSessionTrace(ctx context.Context, sessionID string) (SessionTrace, []TraceEvent, error) {
+	var trace SessionTrace
+	var startedAt, endedAt string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT session_id, loom_ver, repository, started_at, ended_at, outcome
+		FROM session_trace WHERE session_id = ?`,
+		sessionID,
+	).Scan(&trace.SessionID, &trace.LoomVer, &trace.Repository, &startedAt, &endedAt, &trace.Outcome)
+	if errors.Is(err, sql.ErrNoRows) {
+		return SessionTrace{}, nil, nil
+	}
+	if err != nil {
+		return SessionTrace{}, nil, err
+	}
+	if startedAt != "" {
+		trace.StartedAt, err = time.Parse(time.RFC3339Nano, startedAt)
+		if err != nil {
+			return SessionTrace{}, nil, err
+		}
+	}
+	if endedAt != "" {
+		trace.EndedAt, err = time.Parse(time.RFC3339Nano, endedAt)
+		if err != nil {
+			return SessionTrace{}, nil, err
+		}
+	}
+
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, session_id, seq, kind, from_state, to_state, event, reason, pr_number, issue_number, created_at
+		FROM trace_event WHERE session_id = ? ORDER BY seq ASC, id ASC`,
+		sessionID,
+	)
+	if err != nil {
+		return trace, nil, err
+	}
+	defer rows.Close()
+
+	var events []TraceEvent
+	for rows.Next() {
+		var ev TraceEvent
+		var createdAt string
+		if err := rows.Scan(&ev.ID, &ev.SessionID, &ev.Seq, &ev.Kind, &ev.FromState, &ev.ToState,
+			&ev.Event, &ev.Reason, &ev.PRNumber, &ev.IssueNumber, &createdAt); err != nil {
+			return trace, nil, err
+		}
+		ev.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAt)
+		if err != nil {
+			return trace, nil, err
+		}
+		events = append(events, ev)
+	}
+	if err := rows.Err(); err != nil {
+		return trace, nil, err
+	}
+
+	return trace, events, nil
+}
+
+func (s *sqliteStore) ListSessionTraces(ctx context.Context, limit int) ([]SessionTrace, error) {
+	if limit <= 0 {
+		return []SessionTrace{}, nil
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT session_id, loom_ver, repository, started_at, ended_at, outcome
+		FROM session_trace ORDER BY id DESC LIMIT ?`,
+		limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	traces := make([]SessionTrace, 0, limit)
+	for rows.Next() {
+		var t SessionTrace
+		var startedAt, endedAt string
+		if err := rows.Scan(&t.SessionID, &t.LoomVer, &t.Repository, &startedAt, &endedAt, &t.Outcome); err != nil {
+			return nil, err
+		}
+		if startedAt != "" {
+			t.StartedAt, err = time.Parse(time.RFC3339Nano, startedAt)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if endedAt != "" {
+			t.EndedAt, err = time.Parse(time.RFC3339Nano, endedAt)
+			if err != nil {
+				return nil, err
+			}
+		}
+		traces = append(traces, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return traces, nil
 }
