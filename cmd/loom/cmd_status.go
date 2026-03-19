@@ -42,7 +42,14 @@ func newStatusCmd() *cobra.Command {
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "State: %s\nPhase: %d\n", cp.State, cp.Phase)
+			if cp.State == string(storePausedState()) && cp.ResumeState != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "Resume State: %s\n", cp.ResumeState)
+			}
 			return nil
 		},
 	}
+}
+
+func storePausedState() string {
+	return "PAUSED"
 }

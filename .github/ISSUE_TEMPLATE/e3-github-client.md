@@ -1,26 +1,12 @@
----
 name: "E3 — GitHub Client"
-about: Implement a minimal GitHub REST API wrapper covering all operations needed by the Loom FSM, tested with httptest.
+about: Implement the minimal GitHub REST API wrapper Loom needs, fully tested with httptest.
 title: "E3: GitHub Client"
-labels: ["epic", "E3"]
+labels: ["epic", "E3", "TH1"]
 ---
-
-## Assigned Agents
-
-| Role | Agent | Required Skills |
-|---|---|---|
-| Owner | [Backend Developer](../agents/backend-developer.md) | [`loom-architecture`](../skills/loom-architecture.md) · [`go-standards`](../skills/go-standards.md) · [`tdd-workflow`](../skills/tdd-workflow.md) |
-| Support | [Test Engineer](../agents/test-engineer.md) | [`tdd-workflow`](../skills/tdd-workflow.md) · [`loom-architecture`](../skills/loom-architecture.md) |
 
 ## Goal
 
 Implement a minimal GitHub REST API wrapper that covers all operations needed by the Loom FSM, tested entirely with `httptest` — no real GitHub token required.
-
-## Description
-
-The FSM's gate checks (poll for PR, poll CI, check review status) and actions (create issue, assign @copilot, post comment, merge PR, create tag) all go through this package.
-
-The package must be driven by a `GitHubClient` interface, injectable from outside (enabling mock substitution in MCP tests).
 
 ## User Stories
 
@@ -32,10 +18,6 @@ The package must be driven by a `GitHubClient` interface, injectable from outsid
 - [ ] US-3.6 — Implement rate-limit handling (respect `X-RateLimit-Remaining`)
 - [ ] US-3.7 — `httptest`-based tests for all operations using recorded fixtures
 
-## Dependencies
-
-- E1 (project scaffold)
-
 ## Acceptance Criteria
 
 - [ ] `GitHubClient` interface defined in `internal/github/client.go`
@@ -44,7 +26,3 @@ The package must be driven by a `GitHubClient` interface, injectable from outsid
 - [ ] Rate-limit header respected: client backs off exponentially when below 10% remaining
 - [ ] All errors wrapped with context: `fmt.Errorf("creating issue: %w", err)`
 - [ ] `go test ./internal/github/... -race` exits 0
-
-## Notes
-
-<!-- Any additional context, design decisions, or blockers. -->

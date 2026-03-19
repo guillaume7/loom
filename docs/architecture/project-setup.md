@@ -17,7 +17,7 @@ loom/
 │   ├── copilot-instructions.md     # Workspace instructions
 │   └── skills/                     # Copilot skill definitions
 ├── .loom/                          # Runtime state (gitignored)
-│   ├── state.db                    # SQLite checkpoint + action log
+│   ├── state.db                    # SQLite checkpoint, action log, and session trace tables
 │   └── dependencies.yaml           # v2: Dependency DAG
 ├── cmd/
 │   └── loom/                       # CLI entry point (cobra commands)
@@ -127,9 +127,9 @@ Register Loom as an MCP server in `.github/copilot/mcp.json` (or `.vscode/mcp.js
 - Conventional commits with qualified story ID:
 
 ```
-feat(TH1.E4.US4): add loom://state MCP resource
-feat(TH1.E9.US1): create loom-orchestrator.agent.md
-fix(TH1.E2.US3): correct stall detection timeout
+feat(TH2.E3.US3): add loom://state MCP resource
+feat(TH2.E9.US4): expose session trace resource surface
+fix(TH2.E5.US3): correct task capability fallback
 ```
 
 ## 5. v2-Specific Setup

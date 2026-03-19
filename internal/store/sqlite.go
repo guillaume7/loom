@@ -54,6 +54,7 @@ func migrate(db *sql.DB) error {
 		id           INTEGER PRIMARY KEY,
 		story_id     TEXT    NOT NULL DEFAULT '',
 		state        TEXT    NOT NULL,
+		resume_state TEXT    NOT NULL DEFAULT '',
 		phase        INTEGER NOT NULL DEFAULT 0,
 		pr_number    INTEGER NOT NULL DEFAULT 0,
 		issue_number INTEGER NOT NULL DEFAULT 0,
@@ -111,6 +112,7 @@ func migrate(db *sql.DB) error {
 		ddl string
 	}{
 		{"story_id", "ALTER TABLE checkpoint ADD COLUMN story_id     TEXT    NOT NULL DEFAULT ''"},
+		{"resume_state", "ALTER TABLE checkpoint ADD COLUMN resume_state TEXT    NOT NULL DEFAULT ''"},
 		{"pr_number", "ALTER TABLE checkpoint ADD COLUMN pr_number    INTEGER NOT NULL DEFAULT 0"},
 		{"issue_number", "ALTER TABLE checkpoint ADD COLUMN issue_number INTEGER NOT NULL DEFAULT 0"},
 		{"retry_count", "ALTER TABLE checkpoint ADD COLUMN retry_count  INTEGER NOT NULL DEFAULT 0"},
@@ -142,13 +144,13 @@ func (s *sqliteStore) ReadCheckpointByStoryID(ctx context.Context, storyID strin
 	var cp Checkpoint
 	var updatedAt string
 	err := s.db.QueryRowContext(ctx,
-		`SELECT story_id, state, phase, pr_number, issue_number, retry_count, updated_at
+		`SELECT story_id, state, resume_state, phase, pr_number, issue_number, retry_count, updated_at
 		FROM checkpoint
 		WHERE story_id = ?
 		ORDER BY id DESC
 		LIMIT 1`,
 		storyID,
-	).Scan(&cp.StoryID, &cp.State, &cp.Phase, &cp.PRNumber, &cp.IssueNumber, &cp.RetryCount, &updatedAt)
+	).Scan(&cp.StoryID, &cp.State, &cp.ResumeState, &cp.Phase, &cp.PRNumber, &cp.IssueNumber, &cp.RetryCount, &updatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Checkpoint{}, nil
 	}
@@ -177,17 +179,18 @@ func (s *sqliteStore) WriteCheckpointByStoryID(ctx context.Context, storyID stri
 	}
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO checkpoint
-			(story_id, state, phase, pr_number, issue_number, retry_count, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
+			(story_id, state, resume_state, phase, pr_number, issue_number, retry_count, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(story_id) DO UPDATE SET
 			state = excluded.state,
+			resume_state = excluded.resume_state,
 			phase = excluded.phase,
 			pr_number = excluded.pr_number,
 			issue_number = excluded.issue_number,
 			retry_count = excluded.retry_count,
 			updated_at = excluded.updated_at`,
 		cp.StoryID,
-		cp.State, cp.Phase, cp.PRNumber, cp.IssueNumber, cp.RetryCount,
+		cp.State, cp.ResumeState, cp.Phase, cp.PRNumber, cp.IssueNumber, cp.RetryCount,
 		cp.UpdatedAt.UTC().Format(time.RFC3339Nano),
 	)
 	return err
@@ -249,17 +252,18 @@ func (s *sqliteStore) WriteCheckpointAndActionByStoryID(ctx context.Context, sto
 	cp.StoryID = storyID
 	_, txErr = tx.ExecContext(ctx,
 		`INSERT INTO checkpoint
-			(story_id, state, phase, pr_number, issue_number, retry_count, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
+			(story_id, state, resume_state, phase, pr_number, issue_number, retry_count, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(story_id) DO UPDATE SET
 			state = excluded.state,
+			resume_state = excluded.resume_state,
 			phase = excluded.phase,
 			pr_number = excluded.pr_number,
 			issue_number = excluded.issue_number,
 			retry_count = excluded.retry_count,
 			updated_at = excluded.updated_at`,
 		cp.StoryID,
-		cp.State, cp.Phase, cp.PRNumber, cp.IssueNumber, cp.RetryCount,
+		cp.State, cp.ResumeState, cp.Phase, cp.PRNumber, cp.IssueNumber, cp.RetryCount,
 		cp.UpdatedAt.UTC().Format(time.RFC3339Nano),
 	)
 	if txErr != nil {

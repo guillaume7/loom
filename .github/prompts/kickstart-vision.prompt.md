@@ -1,13 +1,15 @@
 ---
+name: "kickstart-vision"
 description: "Brainstorm and design the product vision interactively. Use when: starting a new product, defining MVP, brainstorming features, defining vision phases."
-agent: "ask"
+agent: "agent"
+tools: [read, edit, search, todo]
 ---
 
 ## Agents & Skills
 
 | Agent | Skills |
 |-------|--------|
-| Interactive (ask) | `the-copilot-build-method` |
+| @agent | `the-copilot-build-method` |
 
 Let's design the product vision together. I'll help you brainstorm and capture ideas in `docs/vision_of_product/`.
 

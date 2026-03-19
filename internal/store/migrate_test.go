@@ -173,6 +173,7 @@ func TestMigrate_AddsColumnsToOldSchema(t *testing.T) {
 	// Run the migration — should add the missing E7 columns.
 	require.NoError(t, migrate(db))
 	assert.Contains(t, tableColumns(t, db, "checkpoint"), "story_id")
+	assert.Contains(t, tableColumns(t, db, "checkpoint"), "resume_state")
 	assert.True(t, hasUniqueCheckpointStoryIDIndex(t, db), "checkpoint should have a unique index on story_id")
 
 	var storyID string
@@ -184,6 +185,7 @@ func TestMigrate_AddsColumnsToOldSchema(t *testing.T) {
 	st := &sqliteStore{db: db}
 	want := Checkpoint{
 		State:       "AWAITING_CI",
+		ResumeState: "",
 		Phase:       2,
 		PRNumber:    7,
 		IssueNumber: 3,
@@ -194,6 +196,7 @@ func TestMigrate_AddsColumnsToOldSchema(t *testing.T) {
 	got, err := st.ReadCheckpoint(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, want.State, got.State)
+	assert.Equal(t, want.ResumeState, got.ResumeState)
 	assert.Equal(t, want.Phase, got.Phase)
 	assert.Equal(t, want.PRNumber, got.PRNumber)
 	assert.Equal(t, want.IssueNumber, got.IssueNumber)

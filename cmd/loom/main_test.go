@@ -112,14 +112,36 @@ func TestMCPCmd_Help(t *testing.T) {
 }
 
 func TestPauseCmd_WritesCheckpoint(t *testing.T) {
-	t.Setenv("LOOM_DB_PATH", t.TempDir()+"/state.db")
+	dbPath := t.TempDir() + "/state.db"
+	t.Setenv("LOOM_DB_PATH", dbPath)
+
+	st, err := store.New(dbPath)
+	require.NoError(t, err)
+	require.NoError(t, st.WriteCheckpoint(context.Background(), store.Checkpoint{
+		State:       "AWAITING_READY",
+		Phase:       3,
+		PRNumber:    25,
+		IssueNumber: 24,
+	}))
+	require.NoError(t, st.Close())
+
 	var buf bytes.Buffer
 	cmd := newRootCmd()
 	cmd.SetOut(&buf)
 	cmd.SetArgs([]string{"pause"})
-	err := cmd.Execute()
+	err = cmd.Execute()
 	require.NoError(t, err)
 	assert.Contains(t, buf.String(), "Paused.")
+
+	st, err = store.New(dbPath)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, st.Close())
+	})
+	cp, err := st.ReadCheckpoint(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "PAUSED", cp.State)
+	assert.Equal(t, "AWAITING_READY", cp.ResumeState)
 }
 
 func TestResumeCmd_NothingToResume(t *testing.T) {
@@ -254,6 +276,45 @@ func TestResumeCmd_WithPausedCheckpoint_PrintsResuming(t *testing.T) {
 	st, err := store.New(dbPath)
 	require.NoError(t, err)
 	require.NoError(t, st.WriteCheckpoint(context.Background(), store.Checkpoint{
+		State:       "PAUSED",
+		ResumeState: "AWAITING_READY",
+		Phase:       1,
+	}))
+	require.NoError(t, st.Close())
+
+	var buf bytes.Buffer
+	cmd := newRootCmd()
+	cmd.SetOut(&buf)
+	cmd.SetArgs([]string{"resume"})
+	require.NoError(t, cmd.Execute())
+	assert.Contains(t, buf.String(), "Resuming from AWAITING_READY")
+
+	st, err = store.New(dbPath)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, st.Close())
+	})
+	cp, err := st.ReadCheckpoint(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "AWAITING_READY", cp.State)
+	assert.Equal(t, "", cp.ResumeState)
+}
+
+func TestResumeCmd_InfersResumeStateFromLastAction(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := dir + "/state.db"
+	t.Setenv("LOOM_DB_PATH", dbPath)
+
+	st, err := store.New(dbPath)
+	require.NoError(t, err)
+	require.NoError(t, st.WriteAction(context.Background(), store.Action{
+		SessionID:    "s1",
+		OperationKey: "checkpoint:AWAITING_READY->PAUSED",
+		StateBefore:  "AWAITING_READY",
+		StateAfter:   "PAUSED",
+		Event:        "abort",
+	}))
+	require.NoError(t, st.WriteCheckpoint(context.Background(), store.Checkpoint{
 		State: "PAUSED",
 		Phase: 1,
 	}))
@@ -264,5 +325,98 @@ func TestResumeCmd_WithPausedCheckpoint_PrintsResuming(t *testing.T) {
 	cmd.SetOut(&buf)
 	cmd.SetArgs([]string{"resume"})
 	require.NoError(t, cmd.Execute())
-	assert.Contains(t, buf.String(), "Resuming")
+	assert.Contains(t, buf.String(), "Resuming from AWAITING_READY")
+
+	st, err = store.New(dbPath)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, st.Close())
+	})
+	cp, err := st.ReadCheckpoint(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "AWAITING_READY", cp.State)
+}
+
+func TestResumeCmd_SkipsPausedSelfLoopAndUsesEarlierAction(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := dir + "/state.db"
+	t.Setenv("LOOM_DB_PATH", dbPath)
+
+	st, err := store.New(dbPath)
+	require.NoError(t, err)
+	require.NoError(t, st.WriteAction(context.Background(), store.Action{
+		SessionID:    "s1",
+		OperationKey: "checkpoint:AWAITING_READY->PAUSED",
+		StateBefore:  "AWAITING_READY",
+		StateAfter:   "PAUSED",
+		Event:        "abort",
+	}))
+	require.NoError(t, st.WriteAction(context.Background(), store.Action{
+		SessionID:    "s1",
+		OperationKey: "recheck-next-step-paused",
+		StateBefore:  "PAUSED",
+		StateAfter:   "PAUSED",
+		Event:        "next_step",
+	}))
+	require.NoError(t, st.WriteCheckpoint(context.Background(), store.Checkpoint{
+		State: "PAUSED",
+		Phase: 1,
+	}))
+	require.NoError(t, st.Close())
+
+	var buf bytes.Buffer
+	cmd := newRootCmd()
+	cmd.SetOut(&buf)
+	cmd.SetArgs([]string{"resume"})
+	require.NoError(t, cmd.Execute())
+	assert.Contains(t, buf.String(), "Resuming from AWAITING_READY")
+
+	st, err = store.New(dbPath)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, st.Close())
+	})
+	cp, err := st.ReadCheckpoint(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "AWAITING_READY", cp.State)
+	assert.Equal(t, "", cp.ResumeState)
+}
+
+func TestResumeCmd_IgnoresPausedResumeStateAndFallsBackToHistory(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := dir + "/state.db"
+	t.Setenv("LOOM_DB_PATH", dbPath)
+
+	st, err := store.New(dbPath)
+	require.NoError(t, err)
+	require.NoError(t, st.WriteAction(context.Background(), store.Action{
+		SessionID:    "s1",
+		OperationKey: "manual-recovery",
+		StateBefore:  "PAUSED",
+		StateAfter:   "AWAITING_READY",
+		Event:        "manual_recovery",
+	}))
+	require.NoError(t, st.WriteCheckpoint(context.Background(), store.Checkpoint{
+		State:       "PAUSED",
+		ResumeState: "PAUSED",
+		Phase:       1,
+	}))
+	require.NoError(t, st.Close())
+
+	var buf bytes.Buffer
+	cmd := newRootCmd()
+	cmd.SetOut(&buf)
+	cmd.SetArgs([]string{"resume"})
+	require.NoError(t, cmd.Execute())
+	assert.Contains(t, buf.String(), "Resuming from AWAITING_READY")
+
+	st, err = store.New(dbPath)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, st.Close())
+	})
+	cp, err := st.ReadCheckpoint(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "AWAITING_READY", cp.State)
+	assert.Equal(t, "", cp.ResumeState)
 }

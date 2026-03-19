@@ -107,7 +107,7 @@ func TestMemStore_ReadCheckpoint_ReturnsZeroValue_WhenEmpty(t *testing.T) {
 
 func TestMemStore_WriteAndReadCheckpoint_RoundTrip(t *testing.T) {
 	s := newMemStore()
-	want := store.Checkpoint{State: "SCANNING", Phase: 2}
+	want := store.Checkpoint{State: "SCANNING", ResumeState: "", Phase: 2}
 
 	err := s.WriteCheckpoint(context.Background(), want)
 	require.NoError(t, err)
@@ -153,6 +153,7 @@ func TestSQLiteStore_WriteAndReadCheckpoint_RoundTrip(t *testing.T) {
 	ts := time.Date(2026, 3, 9, 12, 0, 0, 0, time.UTC)
 	want := store.Checkpoint{
 		State:       "AWAITING_CI",
+		ResumeState: "",
 		Phase:       3,
 		PRNumber:    42,
 		IssueNumber: 7,

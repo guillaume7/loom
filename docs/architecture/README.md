@@ -8,7 +8,7 @@ Loom is a Go CLI tool and MCP server that orchestrates autonomous software
 development workflows. It bridges VS Code's multi-agent platform with GitHub's
 issue/PR lifecycle.
 
-```
+```text
                  ┌─────────────────────────────────────────┐
                  │        Human Operator                    │
                  │  (loom start | status | pause | resume) │
@@ -33,6 +33,7 @@ issue/PR lifecycle.
 │          loom_get_state · loom_abort                                  │
 │                                                                      │
 │  Resources:  loom://dependencies · loom://state · loom://log         │
+│              loom://sessions · loom://session/<id>                  │
 │                                                                      │
 │  Internals:  FSM │ Store (SQLite) │ GitHub Client │ Config │ Monitor │
 └──────────────────────────────────┬───────────────────────────────────┘
@@ -58,11 +59,11 @@ ambiguous states.
 ### 2.2 Layered Architecture
 
 | Layer | Responsibility | Technology |
-|-------|---------------|------------|
+| ------- | --------------- | ------------ |
 | **Agent Definitions** | Workflow personas with constrained tool sets and handoff wiring | `.github/agents/*.agent.md` |
 | **MCP Server** | Tool + resource surface between agents and Loom internals | Go, `mcp-go` library, stdio transport |
 | **Orchestration Core** | FSM, retry budgets, dependency DAG, session monitoring | Pure Go packages (`internal/fsm`, `internal/mcp`) |
-| **Persistence** | Checkpoint store, action log, dependency graph | SQLite via `modernc.org/sqlite` |
+| **Persistence** | Checkpoint store, action log, session trace, dependency graph | SQLite via `modernc.org/sqlite` |
 | **GitHub Integration** | REST API client with rate-limit handling | `google/go-github`, `net/http` |
 | **CLI** | Human operator commands | `spf13/cobra` |
 
@@ -71,13 +72,13 @@ ambiguous states.
 VP2 is **additive** over v1. No existing interface is removed or renamed.
 
 | v1 (ADR-001) | v2 (VP2) |
-|---|---|
+| --- | --- |
 | Single master Copilot session | Multiple custom agents with handoffs |
 | Workflow steps in one prompt | Workflow steps as agent handoff transitions |
 | Polling in LLM context | Polling in background agent + MCP Tasks |
 | Gate evaluation in LLM reasoning | Gate evaluation as isolated read-only subagent |
 | `PAUSED` + manual `loom resume` | MCP elicitation with structured choices |
-| No MCP resources | `loom://dependencies`, `loom://state`, `loom://log` |
+| No MCP resources | `loom://dependencies`, `loom://state`, `loom://log`, session trace resources |
 | Sequential story execution | Parallel execution via background agents + worktrees |
 
 ### 2.4 Key Invariants
@@ -92,11 +93,14 @@ VP2 is **additive** over v1. No existing interface is removed or renamed.
    write; the debug agent cannot merge.
 5. **Dependencies are machine-readable** — `.loom/dependencies.yaml` is the
    canonical store; MCP resources surface it to agents.
+6. **Session traces are derived audit artifacts** — they are append-only,
+   operator-facing observability surfaces backed by SQLite, not the source of
+   truth for orchestration state.
 
 ## 3. Cross-References
 
 | Document | Content |
-|----------|---------|
+| ---------- | --------- |
 | [tech-stack.md](tech-stack.md) | Technology choices and rationale |
 | [components.md](components.md) | Component breakdown and boundaries |
 | [data-model.md](data-model.md) | Data entities and persistence |
@@ -108,3 +112,4 @@ VP2 is **additive** over v1. No existing interface is removed or renamed.
 | [ADR-004](../ADRs/ADR-004-mcp-tasks-and-elicitation.md) | MCP Tasks and elicitation for resilient polling |
 | [ADR-005](../ADRs/ADR-005-parallel-execution.md) | Parallel execution via background agents and worktrees |
 | [ADR-006](../ADRs/ADR-006-security-model.md) | Security: tool eligibility, auth, org registry |
+| [ADR-007](../ADRs/ADR-007-session-trace-resource-and-storage.md) | Session trace storage, audit model, and operator surface |

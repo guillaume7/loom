@@ -125,6 +125,7 @@ func (s *Server) RunStallCheck(ctx context.Context) bool {
 		return false
 	}
 	cp.State = string(fsm.StatePaused)
+	cp.ResumeState = string(currentState)
 	if err := s.writeCheckpoint(ctx, cp); err != nil {
 		s.mu.Lock()
 		s.machine.Rollback(snap)

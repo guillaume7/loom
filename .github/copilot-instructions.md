@@ -22,6 +22,7 @@ Loom uses the **Copilot Autopilot process conventions** as its planning and impl
 - `docs/plan/backlog.yaml` — **single source of truth** for local autopilot orchestration state (pure YAML)
 - `docs/plan/session-log.md` — session history for resumability
 - Loom FSM checkpoints (SQLite + MCP tools) — source of truth for server-side PR weaving state
+- Loom session traces (SQLite + MCP resources) — append-only audit artifacts for `/run-loom` analysis; never the authoritative workflow state
 
 ## Agent Squad
 
@@ -51,6 +52,7 @@ Each topic below is owned by exactly one skill. See the skill for canonical deta
 ## Anti-Patterns
 
 - **Never hardcode state in agent memory** — always read/write `docs/plan/backlog.yaml` for local autopilot, and always ask Loom for next state in server-side mode
+- **Never treat a session trace as authoritative state** — the FSM checkpoint and SQLite store remain the source of truth; traces are observability artifacts
 - **Never skip the troubleshooter** — failed stories must be fixed before epic completion
 - **Never modify vision docs during Phase 4** — vision is frozen for the theme currently in execution (future VPs can be amended at user checkpoints)
 - **Never implement multiple stories in one agent session** — 1 story = 1 developer call

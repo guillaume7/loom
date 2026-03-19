@@ -218,6 +218,11 @@
 
 ### 2026-03-14T17:37:45Z
 - status-change: TH2.E7 -> done
+
+### 2026-03-19T19:29:41Z
+- status-change: TH2 -> in-progress
+- status-change: TH2.E9 -> todo
+- Context: Reopened TH2 planning to add the run-loom session traceability capability with a new P2 epic and five stories.
 - Context: Small epic closeout completed with full suite verification.
 
 ### 2026-03-14T17:40:49Z
@@ -279,3 +284,7 @@
 ### 2026-03-14T20:19:52Z
 - status-change: TH2 -> done
 - Context: Native Agent Platform theme completed; all TH2 backlog stories are now verified done.
+2026-03-19T19:25:15Z | Subagent completed
+2026-03-19T19:27:46Z | Subagent completed
+2026-03-19T20:34:41Z | Subagent completed
+2026-03-19T20:36:33Z | Subagent completed

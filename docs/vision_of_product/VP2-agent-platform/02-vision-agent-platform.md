@@ -547,7 +547,118 @@ the elicitation is how it surfaces to the operator.
 
 ---
 
-## 10. Implementation Roadmap
+## 10. New Capability: Run-Loom Session Trace
+
+Loom v2 should keep a persistent session trace tab for every `/run-loom`
+execution. The goal is not a dashboard for vanity metrics; it is an operator
+artifact for post-mortem analysis, reproducibility, and debugging.
+
+The trace tab is the human-readable companion to the structured JSON log. It
+should remain openable during the session and reviewable after the session,
+with enough context to answer:
+
+- Which Loom build executed this run?
+- What FSM states were traversed, and why?
+- Which GitHub issues and pull requests were involved?
+- How did their states evolve over time?
+- Which retries, pauses, elicitations, and operator interventions occurred?
+
+### 10.1 Operator Problem Statement
+
+Today, Loom exposes machine-readable state and logs, but a failed or surprising
+`/run-loom` session still requires reconstructing the narrative by correlating
+CLI output, MCP tool activity, and GitHub state by hand. That is too expensive
+for debugging intermittent failures, validating the FSM, and understanding
+cross-boundary behavior between Loom and GitHub.
+
+### 10.2 Primary Users
+
+- Loom operators running autonomous `/run-loom` sessions
+- Maintainers debugging FSM or MCP integration regressions
+- Release engineers validating behavior across Loom binary versions
+- Developers performing post-mortem analysis after a stalled or incorrect run
+
+### 10.3 Required Contents of the Trace Tab
+
+Every session trace must include a stable header with:
+
+- Loom binary version
+- Loom release tag
+- Session identifier
+- Repository owner/name
+- Start time, end time, and final session outcome
+
+The body of the tab must provide:
+
+1. A chronological event timeline of every meaningful Loom event.
+2. An FSM transition ledger with `from_state`, `to_state`, timestamp, and
+    transition reason.
+3. A GitHub entity ledger that tracks issues and pull requests involved in the
+    session and records how their states changed over time.
+4. Explicit markers for retries, exhausted budgets, elicitation prompts,
+    operator responses, and pause/resume boundaries.
+5. Enough source identifiers to correlate the human-readable trace with the
+    structured log and persisted SQLite checkpoints.
+
+### 10.4 GitHub State Transcription
+
+For each tracked issue and pull request, Loom should maintain a compact state
+form inside the trace tab. The purpose is to show evolution, not just the final
+snapshot.
+
+Minimum tracked fields:
+
+- GitHub entity type and number
+- Title / short label
+- First-seen timestamp
+- Current state and prior state
+- Draft/ready status for pull requests
+- Review state summary
+- CI/check summary
+- Mergeability / merged state
+- Closing reason or terminal outcome
+
+Each state change should be appended as a new trace entry so an operator can
+replay the session without querying GitHub again.
+
+### 10.5 Success Criteria
+
+This capability is successful when:
+
+- A maintainer can reconstruct a `/run-loom` session from a single tab without
+   switching between terminal logs, GitHub pages, and the database.
+- Every FSM transition visible in SQLite also appears in the trace tab with a
+   human-readable reason.
+- The header always identifies the exact Loom build via version and release
+   tag.
+- Issue and PR evolution is visible as a sequence of state changes, not only as
+   final snapshots.
+- A failed session can be analyzed after the fact even if GitHub state has
+   since changed.
+
+### 10.6 Constraints and Open Questions
+
+Constraints:
+
+- The trace must be append-only or otherwise auditable; post-hoc mutation
+   weakens post-mortem value.
+- It must not become the source of truth for orchestration state; SQLite and
+   the FSM remain authoritative.
+- It must scale to long sessions without becoming unreadable or excessively
+   expensive to maintain.
+
+Open questions:
+
+- Should the tab be backed by a dedicated MCP resource such as
+   `loom://session/<id>` or generated as a Markdown/virtual document?
+- Should GitHub state be recorded as full snapshots, field-level diffs, or a
+   hybrid model?
+- How long should session traces be retained, and should Loom export them as
+   release/debug artifacts?
+
+---
+
+## 11. Implementation Roadmap
 
 Priority order follows the gap analysis recommendations, now mapped to the
 new primitives.
@@ -561,6 +672,7 @@ new primitives.
 | P1 | MCP Task wrapping for `loom_heartbeat` polling calls | Gap 1 |
 | P2 | MCP elicitation schema for budget-exhaustion choices | Gap 5 |
 | P2 | `loom://state` and `loom://log` MCP resources | Gap 4 (observability) |
+| P2 | Session trace resource/tab with header metadata, FSM transitions, and GitHub issue/PR state evolution | Gap 4 (post-mortem observability) |
 | P2 | MCP server instructions with phase summary + dependency digest | Gap 3 |
 | P3 | Background agent spawning for parallel user story execution | Throughput |
 | P3 | Git worktree isolation per background session | Gap 4 (concurrency) |
@@ -569,7 +681,7 @@ new primitives.
 
 ---
 
-## 11. What Has Not Changed
+## 12. What Has Not Changed
 
 The following remain exactly as specified in `01-vision.md`:
 
@@ -588,7 +700,7 @@ existing interface is removed or renamed.
 
 ---
 
-## 12. Relationship to Epics
+## 13. Relationship to Epics
 
 The existing epic/user-story hierarchy maps cleanly to the P0–P4 roadmap:
 
@@ -597,10 +709,10 @@ The existing epic/user-story hierarchy maps cleanly to the P0–P4 roadmap:
 | E1 — Project Foundation | Done | `.loom/dependencies.yaml` schema (P0) |
 | E2 — State Machine | Done | MCP Task wrapping for poll calls (P1) |
 | E3 — GitHub Client | Done | No new work |
-| E4 — MCP Server | Active | MCP resources (P2), elicitation (P2), server instructions (P2) |
+| E4 — MCP Server | Active | MCP resources (P2), elicitation (P2), session trace surface (P2), server instructions (P2) |
 | E5 — CLI | Active | No new work |
 | E6 — Session Management | Planned | Background agent spawning (P3), worktree isolation (P3) |
-| E7 — Checkpointing | Planned | `loom://state` resource (P2) |
+| E7 — Checkpointing | Planned | `loom://state` resource (P2), session correlation identifiers for trace replay (P2) |
 | E8 — Integration Hardening | Planned | Org MCP registry (P3), tool eligibility policy (P3) |
 
 New epics warranted by v2:

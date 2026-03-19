@@ -39,8 +39,12 @@ func newPauseCmd() *cobra.Command {
 			}
 
 			if err := st.WriteCheckpoint(ctx, store.Checkpoint{
-				State: string(fsm.StatePaused),
-				Phase: cp.Phase,
+				State:       string(fsm.StatePaused),
+				ResumeState: resumableState(cp),
+				Phase:       cp.Phase,
+				PRNumber:    cp.PRNumber,
+				IssueNumber: cp.IssueNumber,
+				RetryCount:  cp.RetryCount,
 			}); err != nil {
 				return err
 			}

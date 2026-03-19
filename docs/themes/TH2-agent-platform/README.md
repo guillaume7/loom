@@ -8,10 +8,13 @@ Transform Loom from a single-session MCP tool into a multi-agent orchestration
 platform, leveraging VS Code's custom agents, handoffs, subagents, MCP resources,
 MCP Tasks, and MCP elicitations.
 
+This theme now also carries operator-grade `/run-loom` session traceability so
+every autonomous run can be reconstructed from one append-only session surface.
+
 ## Epics
 
 | Epic | Name | Priority | Description |
-|------|------|----------|-------------|
+| ----- | ----- | ---------- | ------------- |
 | E1 | Dependency Graph Engine | P0 | `internal/depgraph` package; `.loom/dependencies.yaml` schema |
 | E2 | Action Log & Idempotency | P0 | `action_log` SQLite table; idempotency enforcement |
 | E3 | MCP Resources | P2 | `loom://dependencies`, `loom://state`, `loom://log`; server instructions |
@@ -20,15 +23,17 @@ MCP Tasks, and MCP elicitations.
 | E6 | MCP Elicitation | P2 | Structured elicitation on budget exhaustion |
 | E7 | Security Hardening | P2 | Token validation, tool annotations, config permissions |
 | E8 | Parallel Execution | P3 | Background agents, worktrees, DAG-aware scheduling |
+| E9 | Run-Loom Session Traceability | P2 | Append-only per-session trace surface with run header, FSM ledger, GitHub issue/PR evolution, and operator intervention markers |
 
 ## Dependency Graph
 
-```
+```text
 E1 (depgraph) ─────────┬──→ E3 (resources)
 E2 (action log) ────────┘
 E4 (agents)             (independent)
 E5 (MCP tasks) ──→ E6 (elicitation)
 E7 (security)           (independent)
+E2 + E3 + E5 + E6 ──→ E9 (session traceability)
 E1 + E4 + E6 ──→ E8 (parallel execution)
 ```
 
@@ -36,4 +41,10 @@ E1 + E4 + E6 ──→ E8 (parallel execution)
 
 - **Wave 1** (parallel): E1, E2, E4, E5, E7
 - **Wave 2** (after Wave 1 deps): E3 (needs E1+E2), E6 (needs E5)
-- **Wave 3** (after E1+E4+E6): E8
+- **Wave 3** (after E2+E3+E5+E6): E9
+- **Wave 4** (after E1+E4+E6): E8
+
+## Planning Note
+
+TH2 was previously completed for the original VP2 scope. Adding E9 reopens the
+theme in planning so the backlog can accurately track this additive capability.

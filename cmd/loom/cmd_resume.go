@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -42,8 +43,54 @@ func newResumeCmd() *cobra.Command {
 				return nil
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "Resuming from %s\n", cp.State)
+			resumeState, err := inferResumeState(context.Background(), st, cp)
+			if err != nil {
+				return err
+			}
+
+			cp.State = resumeState
+			cp.ResumeState = ""
+			if err := st.WriteCheckpoint(context.Background(), cp); err != nil {
+				return err
+			}
+
+			fmt.Fprintf(cmd.OutOrStdout(), "Resuming from %s\n", resumeState)
 			return nil
 		},
 	}
+}
+
+func inferResumeState(ctx context.Context, st store.Store, cp store.Checkpoint) (string, error) {
+	if cp.ResumeState != "" && cp.ResumeState != string(fsm.StatePaused) {
+		return cp.ResumeState, nil
+	}
+
+	actions, err := st.ReadActions(ctx, 200)
+	if err != nil {
+		return "", err
+	}
+	if len(actions) == 0 {
+		return "", errors.New("paused checkpoint has no resume state and no action history to infer from")
+	}
+
+	for _, action := range actions {
+		if action.StateAfter == string(fsm.StatePaused) {
+			if action.StateBefore != "" && action.StateBefore != string(fsm.StatePaused) {
+				return action.StateBefore, nil
+			}
+			continue
+		}
+		if action.StateAfter != "" {
+			return action.StateAfter, nil
+		}
+	}
+
+	return "", errors.New("paused checkpoint has no resumable state")
+}
+
+func resumableState(cp store.Checkpoint) string {
+	if cp.State == string(fsm.StatePaused) {
+		return cp.ResumeState
+	}
+	return cp.State
 }

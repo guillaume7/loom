@@ -24,7 +24,7 @@ Loom is a **local-first CLI tool**. It runs on the developer's machine (or in a 
 
 | File | Location | Lifecycle |
 |------|----------|-----------|
-| `state.db` | `.loom/state.db` (project root) | Created on first `loom start`; survives restarts |
+| `state.db` | `.loom/state.db` (project root) | Created on first `loom start`; stores checkpoints, action log, and session traces across restarts |
 | `dependencies.yaml` | `.loom/dependencies.yaml` | Created by orchestrator or developer |
 | `config.toml` | `~/.loom/config.toml` | Per-user, machine-scoped |
 | `loom.log` | `~/.loom/loom.log` | Append-only structured JSON log |
@@ -37,6 +37,7 @@ Loom is a **local-first CLI tool**. It runs on the developer's machine (or in a 
 | Stall detection | Monitor goroutine (5 min timeout → PAUSED) | Automatic |
 | Heartbeat | `loom_heartbeat` MCP tool (auto-approved) | Orchestrator agent |
 | Action history | `loom log` CLI / `loom://log` MCP resource | Human / agent |
+| Session trace | `loom://sessions` and `loom://session/<id>` MCP resources | Human / agent |
 | OS notification | VS Code notification on PAUSED | Human |
 
 ### 2.3 Recovery Procedures
@@ -47,6 +48,7 @@ Loom is a **local-first CLI tool**. It runs on the developer's machine (or in a 
 | Agent session lost | `loom start` spawns new agent session; checkpoint is intact |
 | Context window exhausted | `loom_checkpoint` before each step; new session resumes from checkpoint |
 | Retry budget exhausted | MCP elicitation → operator chooses skip/reassign/pause |
+| Unexpected run behavior | Open the retained session trace to replay FSM, GitHub, and operator events from one artifact |
 | SQLite corruption | `loom reset` + manual re-creation (rare; WAL mode reduces risk) |
 
 ## 3. Organization-Level Deployment (P3)

@@ -111,6 +111,7 @@ func (s *Server) handleElicitationResponse(ctx context.Context, req mcplib.CallT
 
 	if writeErr := s.writeCheckpoint(ctx, store.Checkpoint{
 		State:       string(newState),
+		ResumeState: string(previousStateIfPaused(newState, previousState)),
 		Phase:       nextPhase,
 		PRNumber:    nextPRNumber,
 		IssueNumber: cp.IssueNumber,
@@ -150,4 +151,11 @@ func (s *Server) handleElicitationResponse(ctx context.Context, req mcplib.CallT
 
 	slog.InfoContext(ctx, "tool completed", "tool", toolName, "action", action, "state", string(newState), "duration_ms", time.Since(start).Milliseconds())
 	return toolResultJSON(result), nil
+}
+
+func previousStateIfPaused(newState fsm.State, previousState fsm.State) fsm.State {
+	if newState == fsm.StatePaused {
+		return previousState
+	}
+	return ""
 }

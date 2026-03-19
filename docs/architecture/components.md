@@ -4,7 +4,7 @@
 
 ## Component Map
 
-```
+```text
 ┌────────────────────────────────────────────────────────────────┐
 │  Agent Layer (.github/agents/)          [not Go — declarative] │
 │  ┌──────────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐  │
@@ -42,7 +42,7 @@
 │  GitHub Integration (internal/github)                          │
 │  HTTPClient → GitHub REST API                                  │
 └────────────────────────────────────────────────────────────────┘
-```
+```text
 
 ---
 
@@ -64,15 +64,16 @@
 ### 2. MCP Server (`internal/mcp`)
 
 - **Responsibility**: Expose Loom's tools, resources, tasks, and elicitations over MCP stdio.
-- **Interface**: MCP protocol (stdio transport). Five tools, three resources, task lifecycle events, elicitation schema.
+- **Interface**: MCP protocol (stdio transport). Five tools, five resources, task lifecycle events, elicitation schema.
 - **Data ownership**: None directly — delegates to Store and FSM.
 - **Dependencies**: FSM, Store, GitHub Client, DepGraph, Monitor.
 - **Sub-components**:
   - **Tools**: `loom_next_step`, `loom_checkpoint`, `loom_heartbeat`, `loom_get_state`, `loom_abort`.
-  - **Resources** (v2): `loom://dependencies`, `loom://state`, `loom://log`.
+  - **Resources** (v2): `loom://dependencies`, `loom://state`, `loom://log`, `loom://sessions`, `loom://session/<id>`.
   - **Tasks** (v2): MCP Task wrapping for long-running `loom_heartbeat` polls.
   - **Elicitation** (v2): Structured schema on budget exhaustion.
   - **Server Instructions** (v2): Phase summary + dependency digest injected into base prompt.
+  - **Session Trace Rendering** (v2): Human-readable per-session trace surface with run header, FSM ledger, and GitHub entity evolution.
 - **ADR**: [ADR-003](../ADRs/ADR-003-mcp-resources.md), [ADR-004](../ADRs/ADR-004-mcp-tasks-and-elicitation.md)
 
 ### 3. FSM (`internal/fsm`)
@@ -94,10 +95,10 @@
 ### 5. Store (`internal/store`)
 
 - **Responsibility**: Persist and retrieve workflow checkpoints, action log entries.
-- **Interface**: `ReadCheckpoint`, `WriteCheckpoint`, `DeleteAll`, `Close` (existing). v2 adds: `WriteAction`, `ReadActions(limit)`.
+- **Interface**: `ReadCheckpoint`, `WriteCheckpoint`, `DeleteAll`, `Close` (existing). v2 adds: `WriteAction`, `ReadActions(limit)`, `CreateSessionRun`, `AppendTraceEvent`, `ListSessionRuns`, `ReadSessionTrace`.
 - **Data ownership**: SQLite database at `.loom/state.db`.
 - **Dependencies**: `modernc.org/sqlite`.
-- **v2 additions**: Action log table for idempotency keys and structured event history.
+- **v2 additions**: Action log table for idempotency keys, plus session trace tables for operator-facing replay and post-mortem analysis.
 
 ### 6. Monitor (`internal/mcp/monitor.go`)
 
@@ -141,3 +142,4 @@
 4. **Store owns all durable state** — no other component writes to SQLite directly.
 5. **DepGraph owns `.loom/dependencies.yaml`** — other components read the parsed graph, not the raw YAML.
 6. **GitHub Client never mutates FSM state** — it returns results; the MCP server decides the FSM event.
+7. **Session trace is append-only** — existing trace entries are never rewritten; retained traces are removed only by whole-session retention rules.

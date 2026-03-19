@@ -129,6 +129,38 @@ func (m *Machine) State() State {
 	return m.state
 }
 
+// Hydrate restores the machine to a persisted checkpoint state.
+// It is intended for process restarts, not in-band workflow transitions.
+func (m *Machine) Hydrate(state State) error {
+	switch state {
+	case "":
+		m.state = StateIdle
+	case StateIdle,
+		StateScanning,
+		StateIssueCreated,
+		StateAwaitingPR,
+		StateAwaitingReady,
+		StateAwaitingCI,
+		StateReviewing,
+		StateDebugging,
+		StateAddressingFeedback,
+		StateMerging,
+		StateRefactoring,
+		StateComplete,
+		StatePaused:
+		m.state = state
+	default:
+		return fmt.Errorf("unknown state %q", state)
+	}
+
+	m.awaitingPRRetries = 0
+	m.awaitingReadyRetries = 0
+	m.awaitingCIRetries = 0
+	m.debugCycles = 0
+	m.feedbackCycles = 0
+	return nil
+}
+
 // invalidTransition returns a descriptive error for an event that is not valid
 // in the machine's current state.
 func (m *Machine) invalidTransition(event Event) error {

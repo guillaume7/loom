@@ -2,8 +2,8 @@
   "servers": {
     "loom": {
       "type": "stdio",
-      "command": "go",
-      "args": ["run", "${workspaceFolder}/cmd/loom", "mcp"]
+      "command": "/home/guillaume-riflet/git/loom/.loom/bin/loom",
+      "args": ["mcp"]
     },
     "context7": {
       "type": "stdio",

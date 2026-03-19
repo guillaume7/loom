@@ -73,6 +73,9 @@ func newStartCmd() *cobra.Command {
 			}
 
 			machine := fsm.NewMachine(fsm.DefaultConfig())
+			if err := machine.Hydrate(fsm.State(cp.State)); err != nil {
+				return err
+			}
 			if cp.State != "" {
 				fmt.Fprintf(cmd.OutOrStdout(), "Resuming from %s\n", cp.State)
 			} else {
@@ -83,8 +86,12 @@ func newStartCmd() *cobra.Command {
 			<-ctx.Done()
 
 			if err := st.WriteCheckpoint(context.Background(), store.Checkpoint{
-				State: string(fsm.StatePaused),
-				Phase: cp.Phase,
+				State:       string(fsm.StatePaused),
+				ResumeState: resumableState(cp),
+				Phase:       cp.Phase,
+				PRNumber:    cp.PRNumber,
+				IssueNumber: cp.IssueNumber,
+				RetryCount:  cp.RetryCount,
 			}); err != nil {
 				slog.Error("failed to write PAUSED checkpoint on shutdown", "error", err)
 			}

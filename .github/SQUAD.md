@@ -9,7 +9,7 @@ This directory contains the **agent definitions** and **shared skills** for the 
 | Agent | File | Primary Responsibility |
 |---|---|---|
 | **Orchestrator** | [`agents/orchestrator.md`](agents/orchestrator.md) | Coordinates work, enforces implementation order, tracks progress |
-| **Loom MCP Operator** | [`agents/loom-mcp-operator.md`](agents/loom-mcp-operator.md) | Drives the persistent local master session via Loom MCP tools |
+| **Loom MCP Operator** | [`agents/loom-mcp-operator.agent.md`](agents/loom-mcp-operator.agent.md) | Drives the persistent local master session via Loom MCP tools |
 | **Product Manager** | [`agents/product-manager.md`](agents/product-manager.md) | Owns backlog, acceptance criteria, scope decisions |
 | **Architect** | [`agents/architect.md`](agents/architect.md) | Module boundaries, Go interfaces, ADRs, MCP protocol design |
 | **Backend Developer** | [`agents/backend-developer.md`](agents/backend-developer.md) | Go implementation: FSM, GitHub client, MCP server, store |

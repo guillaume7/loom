@@ -21,10 +21,6 @@ func (s *Server) syncMachineToCheckpoint(ctx context.Context, toolName string) (
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !cp.UpdatedAt.IsZero() && cp.UpdatedAt.After(s.lastActivity) {
-		s.lastActivity = cp.UpdatedAt
-	}
-
 	currentState := s.machine.State()
 	if cp.State == "" {
 		return cp, currentState, nil

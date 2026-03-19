@@ -25,6 +25,9 @@ type Checkpoint struct {
 	StoryID string
 	// State is the serialised FSM state at the time of the checkpoint.
 	State string
+	// ResumeState is the workflow state to restore when a PAUSED checkpoint is
+	// resumed. It is empty for all non-paused checkpoints.
+	ResumeState string
 	// Phase is the current epic phase number being processed.
 	Phase int
 	// PRNumber is the GitHub pull-request number associated with the current

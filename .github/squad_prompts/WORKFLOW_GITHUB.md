@@ -53,7 +53,7 @@ All of these are automatically available to the Copilot coding agent when it is 
 ### Loom-Specific Master Session
 
 When running **Loom itself** from VS Code, use the persistent master session as
-the **Loom MCP Operator** defined in `.github/agents/loom-mcp-operator.md` and
+the **Loom MCP Operator** defined in `.github/agents/loom-mcp-operator.agent.md` and
 apply `.github/skills/loom-mcp-loop.md`.
 
 This session is distinct from the GitHub-side `@copilot` coding agent. Its job

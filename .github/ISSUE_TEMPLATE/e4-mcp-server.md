@@ -1,25 +1,12 @@
----
 name: "E4 — MCP Server"
-about: Expose the FSM and GitHub client through a standards-compliant MCP stdio server callable from a VS Code Copilot session.
+about: Expose the FSM and GitHub client through a standards-compliant MCP stdio server with five callable tools.
 title: "E4: MCP Server"
-labels: ["epic", "E4"]
+labels: ["epic", "E4", "TH1"]
 ---
-
-## Assigned Agents
-
-| Role | Agent | Required Skills |
-|---|---|---|
-| Owner | [Backend Developer](../agents/backend-developer.md) | [`loom-architecture`](../skills/loom-architecture.md) · [`go-standards`](../skills/go-standards.md) · [`tdd-workflow`](../skills/tdd-workflow.md) |
 
 ## Goal
 
 Expose the FSM and GitHub client through a standards-compliant MCP stdio server that a VS Code Copilot session can call.
-
-## Description
-
-The MCP server wires together `internal/fsm`, `internal/github`, and `internal/store` into 5 callable tools. Tool handlers must be fully testable (round-trip tool call tests) without a live VS Code session.
-
-The server uses `github.com/mark3labs/mcp-go`.
 
 ## User Stories
 
@@ -31,11 +18,6 @@ The server uses `github.com/mark3labs/mcp-go`.
 - [ ] US-4.6 — Implement `loom_abort` tool
 - [ ] US-4.7 — Round-trip tests for all 5 tools
 
-## Dependencies
-
-- E2 (FSM)
-- E3 (GitHub client)
-
 ## Acceptance Criteria
 
 - [ ] All 5 tools registered and callable
@@ -46,7 +28,3 @@ The server uses `github.com/mark3labs/mcp-go`.
 - [ ] `loom_checkpoint` with an invalid action returns an error (not panics)
 - [ ] Round-trip tests pass with injected mock FSM and mock GitHub client
 - [ ] `go test ./internal/mcp/... -race` exits 0
-
-## Notes
-
-<!-- Any additional context, design decisions, or blockers. -->
