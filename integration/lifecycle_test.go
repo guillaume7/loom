@@ -23,6 +23,7 @@ func TestFullLifecycle_ThreePhases(t *testing.T) {
 	var issueCount atomic.Int32
 	var prListCount atomic.Int32
 	var checkRunCount atomic.Int32
+	var reviewRequestCount atomic.Int32
 	var reviewCount atomic.Int32
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -67,6 +68,7 @@ func TestFullLifecycle_ThreePhases(t *testing.T) {
 
 		// Request review
 		case r.Method == http.MethodPost && r.URL.Path == "/repos/owner/repo/pulls/1/requested_reviewers":
+			reviewRequestCount.Add(1)
 			w.WriteHeader(http.StatusOK)
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{})
 
@@ -87,7 +89,7 @@ func TestFullLifecycle_ThreePhases(t *testing.T) {
 		case r.Method == http.MethodPost && r.URL.Path == "/repos/owner/repo/git/refs":
 			w.WriteHeader(http.StatusCreated)
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"ref": "refs/tags/v1.0.0",
+				"ref":    "refs/tags/v1.0.0",
 				"object": map[string]interface{}{"sha": "abc123"},
 			})
 
@@ -133,9 +135,10 @@ func TestFullLifecycle_ThreePhases(t *testing.T) {
 		case "SCANNING":
 			// Phase 1 and 2: create issue and advance; phase 3: all done.
 			if scanCount < 2 {
-				_, err := ghClient.CreateIssue(ctx, "Phase issue", "", nil)
+				issue, err := ghClient.CreateIssue(ctx, "Phase issue", "", nil)
 				require.NoError(t, err)
-				checkpoint(t, mcpSvr, "phase_identified")
+				r := callTool(t, mcpSvr, "loom_checkpoint", map[string]interface{}{"action": "phase_identified", "issue_number": issue.Number})
+				require.False(t, r.IsError, "phase_identified failed: %s", toolText(t, r))
 				scanCount++
 			} else {
 				checkpoint(t, mcpSvr, "all_phases_done")
@@ -148,7 +151,8 @@ func TestFullLifecycle_ThreePhases(t *testing.T) {
 			prs, err := ghClient.ListPRs(ctx, "")
 			require.NoError(t, err)
 			if len(prs) > 0 {
-				checkpoint(t, mcpSvr, "pr_opened")
+				r := callTool(t, mcpSvr, "loom_checkpoint", map[string]interface{}{"action": "pr_opened", "pr_number": prs[0].Number})
+				require.False(t, r.IsError, "pr_opened failed: %s", toolText(t, r))
 			} else {
 				checkpoint(t, mcpSvr, "timeout")
 			}
@@ -223,5 +227,6 @@ done:
 	assert.Positive(t, issueCount.Load(), "expected at least one issue to be created")
 	assert.Positive(t, prListCount.Load(), "expected at least one PR list call")
 	assert.Positive(t, checkRunCount.Load(), "expected at least one check-run call")
+	assert.Positive(t, reviewRequestCount.Load(), "expected at least one review request call")
 	assert.Positive(t, reviewCount.Load(), "expected at least one review status call")
 }

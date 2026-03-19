@@ -14,6 +14,8 @@ Drive the repository through the full workflow by repeating:
 2. Perform exactly one corresponding GitHub action.
 3. Checkpoint the completed action back into Loom.
 
+When the GitHub action reveals a concrete issue or PR number, include it in the checkpoint so later states can act on the same resource deterministically.
+
 ## Core Loop
 
 ```text
@@ -32,6 +34,10 @@ When Loom reports `AWAITING_READY`, do not passively poll forever if implementat
 1. Inspect the live PR.
 2. If it is still draft and the Copilot coding run has finished, mark the PR ready for review.
 3. Checkpoint `pr_ready`.
+
+When Loom reports `AWAITING_PR` and you discover the PR number, checkpoint `pr_opened` with `pr_number`.
+
+When Loom creates or identifies an issue outside the Go runtime, checkpoint the corresponding action with `issue_number`.
 
 When Loom reports `REVIEWING`, ensure a review has actually been requested on the PR before only polling for approval or requested changes.
 

@@ -33,7 +33,7 @@ Setup error response must include these operator steps:
 Start the canonical Loom loop and continue until Loom reports `COMPLETE` or transitions to `PAUSED`:
 1. Call `loom_next_step`
 2. Execute exactly one corresponding GitHub-side workflow step
-3. Call `loom_checkpoint` with the canonical action
+3. Call `loom_checkpoint` with the canonical action, including `pr_number` or `issue_number` whenever that step discovered the concrete GitHub resource
 4. While waiting on async gates, call `loom_heartbeat` every 30 seconds
 
 Interpret async gates with product intent:

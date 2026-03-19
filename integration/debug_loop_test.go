@@ -21,6 +21,7 @@ import (
 // call and success on subsequent calls.
 func TestDebugLoop(t *testing.T) {
 	var checkRunCalls atomic.Int32
+	var reviewRequestCount atomic.Int32
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -67,6 +68,7 @@ func TestDebugLoop(t *testing.T) {
 			}
 
 		case r.Method == http.MethodPost && r.URL.Path == "/repos/owner/repo/pulls/1/requested_reviewers":
+			reviewRequestCount.Add(1)
 			w.WriteHeader(http.StatusOK)
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{})
 
@@ -110,9 +112,10 @@ func TestDebugLoop(t *testing.T) {
 			checkpoint(t, mcpSvr, "start")
 
 		case "SCANNING":
-			_, err := ghClient.CreateIssue(ctx, "Debug issue", "", nil)
+			issue, err := ghClient.CreateIssue(ctx, "Debug issue", "", nil)
 			require.NoError(t, err)
-			checkpoint(t, mcpSvr, "phase_identified")
+			r := callTool(t, mcpSvr, "loom_checkpoint", map[string]interface{}{"action": "phase_identified", "issue_number": issue.Number})
+			require.False(t, r.IsError, "phase_identified failed: %s", toolText(t, r))
 
 		case "ISSUE_CREATED":
 			checkpoint(t, mcpSvr, "copilot_assigned")
@@ -121,7 +124,8 @@ func TestDebugLoop(t *testing.T) {
 			prs, err := ghClient.ListPRs(ctx, "")
 			require.NoError(t, err)
 			if len(prs) > 0 {
-				checkpoint(t, mcpSvr, "pr_opened")
+				r := callTool(t, mcpSvr, "loom_checkpoint", map[string]interface{}{"action": "pr_opened", "pr_number": prs[0].Number})
+				require.False(t, r.IsError, "pr_opened failed: %s", toolText(t, r))
 			} else {
 				checkpoint(t, mcpSvr, "timeout")
 			}
@@ -169,6 +173,7 @@ done:
 	assert.True(t, reached, "expected FSM to reach MERGING")
 	assert.Equal(t, int32(2), checkRunCalls.Load(),
 		"expected exactly 2 check-run calls: one failure, one success")
+	assert.Positive(t, reviewRequestCount.Load(), "expected at least one review request call")
 
 	// Verify store reflects the post-merge SCANNING state.
 	cp, err := st.ReadCheckpoint(ctx)

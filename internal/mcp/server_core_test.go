@@ -3,6 +3,7 @@ package mcp_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/guillaume7/loom/internal/fsm"
@@ -12,6 +13,24 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type reviewRequestGitHubClientMock struct {
+	requestedPRs []int
+	err          error
+}
+
+func (m *reviewRequestGitHubClientMock) Ping(context.Context) error { return nil }
+
+func (m *reviewRequestGitHubClientMock) RequestReview(_ context.Context, prNumber int, reviewer string) error {
+	if m.err != nil {
+		return m.err
+	}
+	if reviewer != "copilot" {
+		return errors.New("unexpected reviewer")
+	}
+	m.requestedPRs = append(m.requestedPRs, prNumber)
+	return nil
+}
 
 func TestNewServer_ReturnsNonNil(t *testing.T) {
 	s := mcp.NewServer(fsm.NewMachine(fsm.DefaultConfig()), newMemStore(), nil)
@@ -207,6 +226,60 @@ func TestLoomCheckpoint_StoreWriteFailure_ReturnsError(t *testing.T) {
 		"action": "start",
 	})
 	assert.True(t, result.IsError, "expected tool error when store write fails")
+}
+
+func TestLoomCheckpoint_CIGreen_RequestsCopilotReview(t *testing.T) {
+	machine := fsm.NewMachine(fsm.DefaultConfig())
+	st := newMemStore()
+	reviewer := &reviewRequestGitHubClientMock{}
+	s := mcp.NewServer(machine, st, reviewer)
+	mcpSvr := s.MCPServer()
+
+	for _, action := range []string{"start", "phase_identified", "copilot_assigned", "pr_opened", "pr_ready"} {
+		result := callTool(t, mcpSvr, "loom_checkpoint", map[string]interface{}{"action": action})
+		require.False(t, result.IsError, "failed to advance with action %q: %s", action, toolText(t, result))
+	}
+	require.NoError(t, st.WriteCheckpoint(context.Background(), store.Checkpoint{State: "AWAITING_CI", PRNumber: 42, Phase: 3}))
+
+	result := callTool(t, mcpSvr, "loom_checkpoint", map[string]interface{}{"action": "ci_green"})
+	require.False(t, result.IsError)
+
+	var got mcp.CheckpointResult
+	require.NoError(t, json.Unmarshal([]byte(toolText(t, result)), &got))
+	assert.Equal(t, "AWAITING_CI", got.PreviousState)
+	assert.Equal(t, "REVIEWING", got.NewState)
+	require.Len(t, reviewer.requestedPRs, 1)
+	assert.Equal(t, 42, reviewer.requestedPRs[0])
+
+	cp, err := st.ReadCheckpoint(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "REVIEWING", cp.State)
+	assert.Equal(t, 42, cp.PRNumber)
+}
+
+func TestLoomCheckpoint_CIGreen_RequestReviewFailure_RollsBackState(t *testing.T) {
+	machine := fsm.NewMachine(fsm.DefaultConfig())
+	st := newMemStore()
+	reviewer := &reviewRequestGitHubClientMock{err: errors.New("review API down")}
+	s := mcp.NewServer(machine, st, reviewer)
+	mcpSvr := s.MCPServer()
+
+	for _, action := range []string{"start", "phase_identified", "copilot_assigned", "pr_opened", "pr_ready"} {
+		result := callTool(t, mcpSvr, "loom_checkpoint", map[string]interface{}{"action": action})
+		require.False(t, result.IsError, "failed to advance with action %q: %s", action, toolText(t, result))
+	}
+	require.NoError(t, st.WriteCheckpoint(context.Background(), store.Checkpoint{State: "AWAITING_CI", PRNumber: 42, Phase: 3}))
+
+	result := callTool(t, mcpSvr, "loom_checkpoint", map[string]interface{}{"action": "ci_green"})
+	require.True(t, result.IsError)
+	assert.Contains(t, toolText(t, result), "failed to request Copilot review")
+
+	cp, err := st.ReadCheckpoint(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "AWAITING_CI", cp.State)
+	assert.Equal(t, 42, cp.PRNumber)
+	assert.Equal(t, fsm.StateAwaitingCI, machine.State())
+	assert.Empty(t, reviewer.requestedPRs)
 }
 
 func TestLoomCheckpoint_NonIdempotentStoreWriteFailure_RollsBackFSM(t *testing.T) {

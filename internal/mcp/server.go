@@ -61,6 +61,12 @@ type elicitationContext struct {
 	Event    fsm.Event
 }
 
+type reviewRequestingClient interface {
+	RequestReview(ctx context.Context, prNumber int, reviewer string) error
+}
+
+const copilotReviewer = "copilot"
+
 // Server is the Loom MCP server that exposes workflow tools.
 type Server struct {
 	mu                 sync.RWMutex // guards all access to machine and lastActivity
@@ -172,8 +178,10 @@ func (s *Server) AddResource(resource mcplib.Resource, handler mcpserver.Resourc
 // Action is the spec-aligned field name (see US-4.3 acceptance criteria);
 // Event is accepted for backward compatibility when Action is absent.
 type CheckpointRequest struct {
-	Action string `json:"action"`
-	Event  string `json:"event"`
+	Action      string `json:"action"`
+	Event       string `json:"event"`
+	PRNumber    int    `json:"pr_number"`
+	IssueNumber int    `json:"issue_number"`
 }
 
 // NextStepResult is returned by loom_next_step.

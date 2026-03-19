@@ -130,6 +130,14 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 	if err != nil {
 		return mcplib.NewToolResultError(err.Error()), nil
 	}
+	prNumber, hasPRNumber, err := optionalIntArgument(req, "pr_number")
+	if err != nil {
+		return mcplib.NewToolResultError(err.Error()), nil
+	}
+	issueNumber, hasIssueNumber, err := optionalIntArgument(req, "issue_number")
+	if err != nil {
+		return mcplib.NewToolResultError(err.Error()), nil
+	}
 
 	if hasOperationKey {
 		_, _, syncErr := s.syncMachineToCheckpoint(ctx, toolName)
@@ -191,6 +199,18 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 		}
 		nextPhase := cp.Phase
 		nextRetryCount := cp.RetryCount
+		nextPRNumber := cp.PRNumber
+		if hasPRNumber {
+			nextPRNumber = prNumber
+		}
+		nextIssueNumber := cp.IssueNumber
+		if hasIssueNumber {
+			nextIssueNumber = issueNumber
+		}
+		if requestErr := s.requestReviewIfEnteringReviewing(ctx, previousState, newState, nextPRNumber); requestErr != nil {
+			s.machine.Rollback(snap)
+			return mcplib.NewToolResultError(requestErr.Error()), nil
+		}
 		detail := ""
 		if event == fsm.EventSkipStory {
 			nextPhase = cp.Phase + 1
@@ -221,6 +241,8 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 			nextCheckpoint.ResumeState = ""
 		}
 		nextCheckpoint.Phase = nextPhase
+		nextCheckpoint.PRNumber = nextPRNumber
+		nextCheckpoint.IssueNumber = nextIssueNumber
 		nextCheckpoint.RetryCount = nextRetryCount
 		writeErr := s.writeCheckpointAndAction(ctx,
 			nextCheckpoint,
@@ -330,6 +352,19 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 	}
 	nextPhase := cp.Phase
 	nextRetryCount := cp.RetryCount
+	nextPRNumber := cp.PRNumber
+	if hasPRNumber {
+		nextPRNumber = prNumber
+	}
+	nextIssueNumber := cp.IssueNumber
+	if hasIssueNumber {
+		nextIssueNumber = issueNumber
+	}
+	if requestErr := s.requestReviewIfEnteringReviewing(ctx, previousState, newState, nextPRNumber); requestErr != nil {
+		s.machine.Rollback(snap)
+		s.mu.Unlock()
+		return mcplib.NewToolResultError(requestErr.Error()), nil
+	}
 	detail := ""
 	if event == fsm.EventSkipStory {
 		nextPhase = cp.Phase + 1
@@ -345,6 +380,8 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 		nextCheckpoint.ResumeState = ""
 	}
 	nextCheckpoint.Phase = nextPhase
+	nextCheckpoint.PRNumber = nextPRNumber
+	nextCheckpoint.IssueNumber = nextIssueNumber
 	nextCheckpoint.RetryCount = nextRetryCount
 	if writeErr := s.writeCheckpoint(ctx, nextCheckpoint); writeErr != nil {
 		s.machine.Rollback(snap)
@@ -386,6 +423,23 @@ func (s *Server) handleCheckpoint(ctx context.Context, req mcplib.CallToolReques
 
 	slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(newState), "duration_ms", time.Since(start).Milliseconds())
 	return toolResultJSON(result), nil
+}
+
+func (s *Server) requestReviewIfEnteringReviewing(ctx context.Context, previousState, newState fsm.State, prNumber int) error {
+	if previousState != fsm.StateAwaitingCI || newState != fsm.StateReviewing {
+		return nil
+	}
+	if prNumber <= 0 {
+		return nil
+	}
+	reviewer, ok := s.gh.(reviewRequestingClient)
+	if !ok {
+		return nil
+	}
+	if err := reviewer.RequestReview(ctx, prNumber, copilotReviewer); err != nil {
+		return fmt.Errorf("failed to request Copilot review for PR #%d: %w", prNumber, err)
+	}
+	return nil
 }
 
 func (s *Server) handleGetState(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
@@ -499,6 +553,12 @@ func (s *Server) MCPServer() *mcpserver.MCPServer {
 			),
 			mcplib.WithString("operation_key",
 				mcplib.Description("Optional idempotency key used to return a cached result for retried calls"),
+			),
+			mcplib.WithNumber("pr_number",
+				mcplib.Description("Optional pull request number to persist alongside the checkpoint when the action observes a PR"),
+			),
+			mcplib.WithNumber("issue_number",
+				mcplib.Description("Optional issue number to persist alongside the checkpoint when the action observes an issue"),
 			),
 		),
 		s.handleCheckpoint,
