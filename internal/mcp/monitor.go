@@ -10,10 +10,12 @@ package mcp
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/guillaume7/loom/internal/fsm"
+	"github.com/guillaume7/loom/internal/store"
 )
 
 // Clock provides the current time. Inject a fake implementation in tests
@@ -135,6 +137,15 @@ func (s *Server) RunStallCheck(ctx context.Context) bool {
 			"previous_state", string(currentState),
 			"elapsed", elapsed,
 		)
+		s.appendTrace(ctx, store.TraceEvent{
+			Kind:        TraceKindSystem,
+			FromState:   string(currentState),
+			ToState:     string(fsm.StatePaused),
+			Event:       "stall_detected",
+			Reason:      fmt.Sprintf("no loom_checkpoint received for %s (timeout: %s)", elapsed.Round(time.Second), s.monCfg.StallTimeout),
+			PRNumber:    cp.PRNumber,
+			IssueNumber: cp.IssueNumber,
+		})
 	}
 
 	return true
