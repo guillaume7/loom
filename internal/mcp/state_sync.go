@@ -18,6 +18,11 @@ func (s *Server) syncMachineToCheckpoint(ctx context.Context, toolName string) (
 		return store.Checkpoint{}, "", fmt.Errorf("failed to read checkpoint: %w", err)
 	}
 
+	activityAt := cp.UpdatedAt
+	if activityAt.IsZero() {
+		activityAt = s.clock.Now()
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -35,6 +40,7 @@ func (s *Server) syncMachineToCheckpoint(ctx context.Context, toolName string) (
 		return cp, currentState, fmt.Errorf("failed to hydrate machine state from checkpoint: %w", err)
 	}
 
+	s.lastActivity = activityAt
 	s.activeElicitation = elicitationContext{}
 	slog.InfoContext(ctx, "rehydrated machine from checkpoint", "tool", toolName, "state", cp.State)
 	return cp, desiredState, nil

@@ -9,6 +9,7 @@ import (
 
 	"github.com/guillaume7/loom/internal/fsm"
 	"github.com/guillaume7/loom/internal/mcp"
+	"github.com/guillaume7/loom/internal/store"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -210,6 +211,45 @@ func TestRunStallCheck_TOCTOU_CheckpointArrivesBeforeLock_ReturnsFalse(t *testin
 	cp, err := s.Store().ReadCheckpoint(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, "AWAITING_PR", cp.State)
+}
+
+func TestRunStallCheck_ResumeRefreshesStallTimerFromCheckpoint(t *testing.T) {
+	clk := newFakeClock()
+	st := newMemStore()
+	require.NoError(t, st.WriteCheckpoint(context.Background(), store.Checkpoint{
+		State:       "PAUSED",
+		ResumeState: "AWAITING_CI",
+		Phase:       1,
+		UpdatedAt:   clk.Now().Add(-10 * time.Minute),
+	}))
+
+	machine := fsm.NewMachine(fsm.DefaultConfig())
+	s := mcp.NewServer(machine, st, nil, mcp.WithClock(clk))
+	mcpSvr := s.MCPServer()
+
+	// Simulate an external `loom resume` rewriting the checkpoint while the
+	// long-lived MCP server process is still running.
+	require.NoError(t, st.WriteCheckpoint(context.Background(), store.Checkpoint{
+		State:     "AWAITING_CI",
+		Phase:     1,
+		PRNumber:  25,
+		UpdatedAt: clk.Now(),
+	}))
+
+	result := callTool(t, mcpSvr, "loom_next_step", nil)
+	assert.False(t, result.IsError)
+
+	var got mcp.NextStepResult
+	require.NoError(t, json.Unmarshal([]byte(toolText(t, result)), &got))
+	assert.Equal(t, "AWAITING_CI", got.State)
+
+	stalled := s.RunStallCheck(context.Background())
+	assert.False(t, stalled, "expected no immediate stall after rehydrating from a freshly resumed checkpoint")
+
+	cp, err := s.Store().ReadCheckpoint(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "AWAITING_CI", cp.State)
+	assert.Equal(t, 25, cp.PRNumber)
 }
 
 // --------------------------------------------------------------------------
