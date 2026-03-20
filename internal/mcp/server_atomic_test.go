@@ -10,6 +10,7 @@ import (
 
 	"github.com/guillaume7/loom/internal/fsm"
 	"github.com/guillaume7/loom/internal/mcp"
+	loomruntime "github.com/guillaume7/loom/internal/runtime"
 	"github.com/guillaume7/loom/internal/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -360,16 +361,48 @@ func TestLoomGetState_ReturnsState(t *testing.T) {
 	assert.NotEmpty(t, got.State)
 }
 
-func TestLoomAbort_TransitionsToPaused(t *testing.T) {
+func TestLoomAbort_RejectsMissingRecoverableState(t *testing.T) {
 	_, mcpSvr := newTestServer(t)
 
 	result := callTool(t, mcpSvr, "loom_abort", nil)
+	assert.True(t, result.IsError)
+	assert.Contains(t, toolText(t, result), loomruntime.ErrNothingToPause.Error())
+	
+}
+
+func TestLoomAbort_WritesAuditedOperatorPauseRecords(t *testing.T) {
+	s, mcpSvr := newTestServer(t)
+	st := s.Store().(*memStore)
+	require.NoError(t, st.WriteCheckpoint(context.Background(), store.Checkpoint{State: "AWAITING_CI", Phase: 2, PRNumber: 42}))
+
+	result, _ := callToolWithSession(t, mcpSvr, "loom_abort", nil)
 	assert.False(t, result.IsError)
 
 	var got mcp.AbortResult
 	require.NoError(t, json.Unmarshal([]byte(toolText(t, result)), &got))
 
 	assert.Equal(t, "PAUSED", got.State)
+
+	cp, err := st.ReadCheckpoint(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "PAUSED", cp.State)
+	assert.Equal(t, "AWAITING_CI", cp.ResumeState)
+
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	require.Len(t, st.actions, 1)
+	assert.Equal(t, "manual_override_pause", st.actions[0].Event)
+	assert.Equal(t, "AWAITING_CI", st.actions[0].StateBefore)
+	assert.Equal(t, "PAUSED", st.actions[0].StateAfter)
+
+	require.Len(t, st.externalEvents, 1)
+	assert.Equal(t, "operator", st.externalEvents[0].EventSource)
+	assert.Equal(t, "manual_override.pause", st.externalEvents[0].EventKind)
+
+	require.Len(t, st.policyDecisions, 1)
+	assert.Equal(t, "operator_override", st.policyDecisions[0].DecisionKind)
+	assert.Equal(t, "pause", st.policyDecisions[0].Verdict)
+	assert.Equal(t, st.externalEvents[0].CorrelationID, st.policyDecisions[0].CorrelationID)
 }
 
 func TestServer_RaceCondition(t *testing.T) {

@@ -24,12 +24,14 @@ import (
 // E8: Coverage — handleAbort store failure, startMonitor goroutine, Serve
 // --------------------------------------------------------------------------
 
-// failingAbortStore fails on all writes, used to test handleAbort error path.
+// failingAbortStore fails the atomic checkpoint+action write used by audited
+// manual overrides so handleAbort returns an error without partial persistence.
 type failingAbortStore struct {
 	memStore
 }
 
-func (s *failingAbortStore) WriteCheckpoint(_ context.Context, _ store.Checkpoint) error {
+
+func (s *failingAbortStore) WriteCheckpointAndAction(_ context.Context, _ store.Checkpoint, _ store.Action) error {
 	return errors.New("simulated abort store failure")
 }
 
@@ -38,11 +40,17 @@ func (s *failingAbortStore) Close() error { return nil }
 func TestLoomAbort_StoreWriteFailure_ReturnsError(t *testing.T) {
 	machine := fsm.NewMachine(fsm.DefaultConfig())
 	st := &failingAbortStore{}
+	require.NoError(t, st.WriteCheckpoint(context.Background(), store.Checkpoint{State: "AWAITING_CI", Phase: 2, PRNumber: 42}))
 	s := mcp.NewServer(machine, st, nil)
 	mcpSvr := s.MCPServer()
 
 	result := callTool(t, mcpSvr, "loom_abort", nil)
 	assert.True(t, result.IsError, "expected tool error when abort store write fails")
+
+	cp, err := st.ReadCheckpoint(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "AWAITING_CI", cp.State)
+	assert.Empty(t, cp.ResumeState)
 }
 
 // TestServe_CancelledContext verifies that Serve returns without error when

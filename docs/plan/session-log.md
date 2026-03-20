@@ -219,6 +219,10 @@
 ### 2026-03-14T17:37:45Z
 - status-change: TH2.E7 -> done
 
+### 2026-03-20T22:10:00Z
+- story: TH3.E1.US4
+- Context: Fixed the reviewer-found MCP manual-override regression so story-scoped `loom_abort` and `pause_epic` writes stay on the scoped checkpoint while preserving audited runtime-control records; added scoped MCP regression coverage.
+
 ### 2026-03-19T19:29:41Z
 - status-change: TH2 -> in-progress
 - status-change: TH2.E9 -> todo
@@ -339,6 +343,10 @@
 - status-change: TH3.E1.US4 -> done
 - Context: Centralized manual pause/resume overrides in the runtime controller, made CLI and MCP pause paths auditable with operator intent records, and preserved correlation context across resume.
 
+### 2026-03-20T21:53:00Z
+- status-change: TH3.E1.US4 -> in-progress
+- Context: Reviewer requested one more change because scoped MCP regression coverage currently proves loom_abort but not the scoped pause_epic path that uses the same manual-override routing.
+
 ### 2026-03-20T20:56:00Z
 - status-change: TH3.E1.US4 -> in-progress
 - Context: Reviewer requested changes because pause can create an unrecoverable paused checkpoint when no resumable state exists, resume mutates checkpoint and audit state before controller recovery succeeds, and regression coverage is missing for those failure modes and the MCP pause_epic audit path.
@@ -346,9 +354,33 @@
 ### 2026-03-20T21:05:00Z
 - status-change: TH3.E1.US4 -> done
 - Context: Fixed the reviewer-requested pause/resume failure modes by rejecting non-recoverable pauses, validating controller recovery before persisting resume overrides, releasing partially acquired leases on failed resume attempts, and adding regressions for those paths plus MCP pause_epic audit records.
+
+### 2026-03-20T21:10:00Z
+- status-change: TH3.E1.US4 -> in-progress
+- Context: Epic closeout review requested changes because the loom_abort MCP path still bypasses the runtime manual-override flow and therefore misses the audited operator control records required for end-to-end operator pause semantics.
+
+### 2026-03-20T21:40:00Z
+- status-change: TH3.E1.US4 -> done
+- Context: Routed loom_abort through runtime manual override handling so MCP pause uses the same audited operator-control path as CLI and elicitation pause, and added MCP regressions for operator audit records plus recoverable pause semantics.
+
+### 2026-03-20T21:41:00Z
+- status-change: TH3.E1.US4 -> in-progress
+- Context: Reviewer requested changes because the loom_abort MCP rework bypassed story-scoped checkpoint routing and could pause the default checkpoint instead of the intended scoped story checkpoint in MCP story runs.
+
+### 2026-03-20T22:30:00Z
+- status-change: TH3.E1.US4 -> done
+- Context: Added the final reviewer-requested regression proving story-scoped MCP `pause_epic` pauses only the scoped checkpoint, leaves the default checkpoint untouched, and preserves audited manual-override records on the scoped session.
 2026-03-20T20:03:32Z | Subagent completed
 2026-03-20T20:05:09Z | Subagent completed
 2026-03-20T20:11:40Z | Subagent completed
 2026-03-20T20:16:43Z | Subagent completed
 2026-03-20T20:21:58Z | Subagent completed
 2026-03-20T20:23:51Z | Subagent completed
+2026-03-20T20:25:56Z | Subagent completed
+2026-03-20T20:28:53Z | Subagent completed
+2026-03-20T20:32:30Z | Subagent completed
+2026-03-20T20:34:27Z | Subagent completed
+2026-03-20T20:38:10Z | Subagent completed
+2026-03-20T20:40:15Z | Subagent completed
+2026-03-20T20:43:04Z | Subagent completed
+2026-03-20T20:44:14Z | Subagent completed

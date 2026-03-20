@@ -5,7 +5,7 @@
 //   - loom_checkpoint:  fires an FSM event and persists the new state
 //   - loom_heartbeat:   health-check returning current state, phase, and wait guidance
 //   - loom_get_state:   read-only view of the current state and phase
-//   - loom_abort:       universally transitions the FSM to PAUSED
+//   - loom_abort:       requests an audited operator pause via the runtime controller
 //   - loom_elicitation_response: handles operator response when elicitation is active
 //
 // Session management (E6) is handled by monitor.go: Clock interface,

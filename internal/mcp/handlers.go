@@ -13,6 +13,7 @@ import (
 
 	"github.com/guillaume7/loom/internal/depgraph"
 	"github.com/guillaume7/loom/internal/fsm"
+	loomruntime "github.com/guillaume7/loom/internal/runtime"
 	"github.com/guillaume7/loom/internal/store"
 	mcplib "github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
@@ -482,6 +483,7 @@ func (s *Server) handleGetState(ctx context.Context, req mcplib.CallToolRequest)
 func (s *Server) handleAbort(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 	const toolName = "loom_abort"
 	start := time.Now()
+	_ = req
 
 	// Guard against cancelled context before acquiring any locks or mutating state.
 	if res, cancelled := checkCtx(ctx, toolName); cancelled {
@@ -495,33 +497,25 @@ func (s *Server) handleAbort(ctx context.Context, req mcplib.CallToolRequest) (*
 
 	s.mu.Lock()
 	currentState := s.machine.State()
-	slog.InfoContext(ctx, "tool called", "tool", toolName, "state", string(currentState))
-	snap := s.machine.TakeSnapshot()
-	newState, transErr := s.machine.Transition(fsm.EventAbort)
 	s.mu.Unlock()
+	slog.InfoContext(ctx, "tool called", "tool", toolName, "state", string(currentState))
 
-	if transErr != nil {
-		// EventAbort is universally accepted; this branch is defensive only.
-		slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(currentState), "duration_ms", time.Since(start).Milliseconds())
-		return mcplib.NewToolResultError(transErr.Error()), nil
+	controller := loomruntime.NewController(s.runtimeStore(), loomruntime.DefaultConfig())
+	lifecycle, err := controller.ApplyManualOverride(ctx, loomruntime.ManualOverrideRequest{
+		Action:      loomruntime.ManualOverridePause,
+		Source:      "mcp",
+		RequestedBy: sessionIDFromContext(ctx),
+		Reason:      "paused via loom_abort",
+	})
+	if err != nil {
+		slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(currentState), "duration_ms", time.Since(start).Milliseconds(), "error", err)
+		return mcplib.NewToolResultError(err.Error()), nil
 	}
 
-	cp, readErr := s.readCheckpointWithErr(ctx)
-	if readErr != nil {
-		s.mu.Lock()
-		s.machine.Rollback(snap)
-		s.mu.Unlock()
-		return mcplib.NewToolResultError(fmt.Sprintf("failed to read checkpoint: %v", readErr)), nil
-	}
-	cp.State = string(newState)
-	cp.ResumeState = string(currentState)
-	if writeErr := s.writeCheckpoint(ctx, cp); writeErr != nil {
-		s.mu.Lock()
-		s.machine.Rollback(snap)
-		s.mu.Unlock()
-		slog.ErrorContext(ctx, "store write error", "tool", toolName, "state", string(newState), "error", writeErr)
-		slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(newState), "duration_ms", time.Since(start).Milliseconds(), "error", writeErr)
-		return mcplib.NewToolResultError(fmt.Sprintf("failed to persist abort state: %v", writeErr)), nil
+	_, newState, syncErr := s.syncMachineToCheckpoint(ctx, toolName)
+	if syncErr != nil {
+		slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", lifecycle.WorkflowState, "duration_ms", time.Since(start).Milliseconds(), "error", syncErr)
+		return mcplib.NewToolResultError(syncErr.Error()), nil
 	}
 
 	result := AbortResult{State: string(newState)}
@@ -558,20 +552,22 @@ func (s *Server) MCPServer() *mcpserver.MCPServer {
 	)
 	srv.AddTool(
 		mcplib.NewTool("loom_checkpoint",
-			mcplib.WithDescription("Fires an event on the Loom FSM to advance the workflow and persists the new state"),
+			mcplib.WithDescription("Persists a workflow checkpoint after applying an FSM event"),
 			mcplib.WithReadOnlyHintAnnotation(false),
 			mcplib.WithString("action",
-				mcplib.Required(),
-				mcplib.Description("The action to fire (e.g. start, pr_opened, ci_green, ci_red, review_approved, abort)"),
+				mcplib.Description("FSM event to apply, for example start, pr_opened, ci_green, or merged"),
+			),
+			mcplib.WithString("event",
+				mcplib.Description("Deprecated alias for action, accepted for backward compatibility"),
 			),
 			mcplib.WithString("operation_key",
 				mcplib.Description("Optional idempotency key used to return a cached result for retried calls"),
 			),
 			mcplib.WithNumber("pr_number",
-				mcplib.Description("Optional pull request number to persist alongside the checkpoint when the action observes a PR"),
+				mcplib.Description("Optional pull request number to persist with the checkpoint"),
 			),
 			mcplib.WithNumber("issue_number",
-				mcplib.Description("Optional issue number to persist alongside the checkpoint when the action observes an issue"),
+				mcplib.Description("Optional issue number to persist with the checkpoint"),
 			),
 		),
 		s.handleCheckpoint,

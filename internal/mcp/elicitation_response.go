@@ -111,7 +111,7 @@ func (s *Server) handleElicitationResponse(ctx context.Context, req mcplib.CallT
 	}
 
 	if action == "pause_epic" {
-		controller := loomruntime.NewController(s.st, loomruntime.DefaultConfig())
+		controller := loomruntime.NewController(s.runtimeStore(), loomruntime.DefaultConfig())
 		if _, writeErr := controller.ApplyManualOverride(ctx, loomruntime.ManualOverrideRequest{
 			Action:      loomruntime.ManualOverridePause,
 			Source:      "mcp",
