@@ -1,8 +1,8 @@
-# Loom v2 — Tech Stack
+# Loom Runtime-First Architecture — Tech Stack
 
-> Traces to: [VP2 §11](../vision_of_product/VP2-agent-platform/02-vision-agent-platform.md) (what has not changed) and [VP2 §3](../vision_of_product/VP2-agent-platform/02-vision-agent-platform.md) (revised architecture)
+> Traces to: [VP3](../vision_of_product/VP3-runtime-first/03-vision-runtime-first.md), [ADR-008](../ADRs/ADR-008-runtime-first-control-plane-and-wake-model.md), [ADR-009](../ADRs/ADR-009-deterministic-runtime-policy-engine.md), [ADR-010](../ADRs/ADR-010-bounded-agent-jobs-and-run-locking.md)
 
-## Retained from v1
+## Retained From Earlier Versions
 
 These choices are unchanged from ADR-001. Rationale is documented there.
 
@@ -17,16 +17,16 @@ These choices are unchanged from ADR-001. Rationale is documented there.
 | Configuration | `pelletier/go-toml/v2` | 2.2+ | TOML parsing for `~/.loom/config.toml` |
 | Testing | `stretchr/testify` | 1.9+ | Assertions and mocking |
 
-## New in v2
+## Runtime-First Additions
 
 | Component | Technology | Rationale | ADR |
 |-----------|-----------|-----------|-----|
-| Agent definitions | `.github/agents/*.agent.md` (VS Code custom agents) | Declarative, version-controlled, portable to GitHub cloud | ADR-002 |
-| Dependency schema | `.loom/dependencies.yaml` (YAML) | Machine-readable DAG; consumed by Go binary and MCP resource | ADR-003 |
-| MCP resources | `mcp-go` resource registration | Expose dependencies, state, log to any agent session | ADR-003 |
-| MCP Tasks | MCP spec 2025-11-25 task lifecycle | Resilient long-running polls; client disconnect/reconnect | ADR-004 |
-| MCP elicitation | MCP spec elicitation schema | Structured human-in-the-loop on budget exhaustion | ADR-004 |
-| YAML parsing | `gopkg.in/yaml.v3` (already indirect dep) | Parse `.loom/dependencies.yaml` | ADR-003 |
+| Runtime controller | Go packages under `internal/` | Preserve single-binary local-first execution | ADR-008 |
+| Wake schedules | SQLite tables + Go scheduler loop | Durable resumptions without active session heartbeat | ADR-008 |
+| Policy engine | Pure Go evaluation code | Deterministic gate and escalation decisions | ADR-009 |
+| Lock management | SQLite lease model | Safe resume and concurrency control | ADR-010 |
+| Agent jobs | `.github/agents/*.agent.md` + MCP | Keep AI assistance bounded and replaceable | ADR-010 |
+| Replay harness | JSON/YAML fixtures derived from runtime observations | Reproduce stalled runs locally | ADR-009 |
 
 ## Dependency Policy
 
@@ -34,6 +34,18 @@ These choices are unchanged from ADR-001. Rationale is documented there.
 - **Lockfile** (`go.sum`) is committed and verified on CI.
 - **Updates** are reviewed at epic boundaries. Security patches via Dependabot.
 - **Major version bumps** require an ADR.
+
+## Runtime Mode Choice
+
+Detailed comparison, rationale, and workflow impact are recorded in
+[TH3.E1.US1 runtime mode decision](../themes/TH3-runtime-first-reengineering/epics/E1-runtime-kernel-foundation/runtime-mode-decision.md).
+
+- **Chosen baseline**: resumable local runner owned by the Go binary.
+- **Deferred additive option**: long-lived local daemon for teams that want
+	always-on runtime behavior.
+- **Signal model**: polling-first with a future hybrid event path. VP3 planning
+	keeps polling as the guaranteed baseline while allowing GitHub event adapters
+	to be added without changing checkpoint truth.
 
 ## Explicitly Not Chosen
 
@@ -44,3 +56,4 @@ These choices are unchanged from ADR-001. Rationale is documented there.
 | PostgreSQL / external database | SQLite is sufficient; no network dependency needed |
 | gRPC for MCP transport | MCP spec uses stdio/SSE; gRPC is non-standard |
 | Protobuf for dependency schema | YAML is human-readable and editable; protobuf adds tooling overhead |
+| Agent session as primary control plane | Fails the VP3 liveness requirement under long waits |

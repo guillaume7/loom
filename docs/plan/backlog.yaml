@@ -1,7 +1,7 @@
 # Backlog — Core State File
 backlog:
   project: "loom"
-  last-updated: "2026-03-19T19:29:41Z"
+  last-updated: "2026-03-20T19:39:04Z"
   themes:
     # ── TH1: Loom v1 Core ────────────────────────────────────────────
     - id: TH1
@@ -291,3 +291,136 @@ backlog:
               status: todo
               file: docs/themes/TH2-agent-platform/epics/E9-session-traceability/user-stories/US5-trace-index-retention.md
               depends-on: [TH2.E9.US4]
+
+    # ── TH3: Runtime-First Reengineering ────────────────────────────
+    - id: TH3
+      name: "Runtime-First Reengineering"
+      status: in-progress
+      vision-ref: docs/vision_of_product/VP3-runtime-first/
+      depends-on: [TH1]
+      epics:
+        - id: E1
+          name: "Runtime Kernel Foundation"
+          status: in-progress
+          depends-on: []
+          stories:
+            - id: TH3.E1.US1
+              title: "Runtime mode decision spike"
+              status: done
+              file: docs/themes/TH3-runtime-first-reengineering/epics/E1-runtime-kernel-foundation/user-stories/US1-runtime-mode-decision-spike.md
+              depends-on: []
+            - id: TH3.E1.US2
+              title: "Persisted run state and wake record model"
+              status: todo
+              file: docs/themes/TH3-runtime-first-reengineering/epics/E1-runtime-kernel-foundation/user-stories/US2-persisted-run-state-and-wake-record-model.md
+              depends-on: [TH3.E1.US1]
+            - id: TH3.E1.US3
+              title: "Background controller lifecycle"
+              status: todo
+              file: docs/themes/TH3-runtime-first-reengineering/epics/E1-runtime-kernel-foundation/user-stories/US3-background-controller-lifecycle.md
+              depends-on: [TH3.E1.US2]
+            - id: TH3.E1.US4
+              title: "Pause and manual override controls"
+              status: todo
+              file: docs/themes/TH3-runtime-first-reengineering/epics/E1-runtime-kernel-foundation/user-stories/US4-pause-and-manual-override-controls.md
+              depends-on: [TH3.E1.US3]
+        - id: E2
+          name: "Wake-Up and Resumption"
+          status: todo
+          depends-on: [E1]
+          stories:
+            - id: TH3.E2.US1
+              title: "Wake-up queue and timers"
+              status: todo
+              file: docs/themes/TH3-runtime-first-reengineering/epics/E2-wake-up-and-resumption/user-stories/US1-wake-up-queue-and-timers.md
+              depends-on: [TH3.E1.US2]
+            - id: TH3.E2.US2
+              title: "Poll-driven resumptions"
+              status: todo
+              file: docs/themes/TH3-runtime-first-reengineering/epics/E2-wake-up-and-resumption/user-stories/US2-poll-driven-resumptions.md
+              depends-on: [TH3.E2.US1]
+            - id: TH3.E2.US3
+              title: "GitHub event adapters"
+              status: todo
+              file: docs/themes/TH3-runtime-first-reengineering/epics/E2-wake-up-and-resumption/user-stories/US3-github-event-adapters.md
+              depends-on: [TH3.E2.US1]
+            - id: TH3.E2.US4
+              title: "Resume deduplication"
+              status: todo
+              file: docs/themes/TH3-runtime-first-reengineering/epics/E2-wake-up-and-resumption/user-stories/US4-resume-deduplication.md
+              depends-on: [TH3.E2.US2, TH3.E2.US3]
+        - id: E3
+          name: "Deterministic Policy Engine"
+          status: todo
+          depends-on: [E1]
+          stories:
+            - id: TH3.E3.US1
+              title: "Runtime observation model"
+              status: todo
+              file: docs/themes/TH3-runtime-first-reengineering/epics/E3-deterministic-policy-engine/user-stories/US1-runtime-observation-model.md
+              depends-on: [TH3.E1.US2]
+            - id: TH3.E3.US2
+              title: "CI review and merge policy decisions"
+              status: todo
+              file: docs/themes/TH3-runtime-first-reengineering/epics/E3-deterministic-policy-engine/user-stories/US2-ci-review-and-merge-policy-decisions.md
+              depends-on: [TH3.E3.US1]
+            - id: TH3.E3.US3
+              title: "Escalation and wait outcome taxonomy"
+              status: todo
+              file: docs/themes/TH3-runtime-first-reengineering/epics/E3-deterministic-policy-engine/user-stories/US3-escalation-and-wait-outcome-taxonomy.md
+              depends-on: [TH3.E3.US1]
+            - id: TH3.E3.US4
+              title: "Policy evaluation audit trail"
+              status: todo
+              file: docs/themes/TH3-runtime-first-reengineering/epics/E3-deterministic-policy-engine/user-stories/US4-policy-evaluation-audit-trail.md
+              depends-on: [TH3.E3.US2, TH3.E3.US3]
+        - id: E4
+          name: "Locking and Recovery"
+          status: todo
+          depends-on: [E2, E3]
+          stories:
+            - id: TH3.E4.US1
+              title: "Runtime lease and ownership claims"
+              status: todo
+              file: docs/themes/TH3-runtime-first-reengineering/epics/E4-locking-and-recovery/user-stories/US1-runtime-lease-and-ownership-claims.md
+              depends-on: [TH3.E1.US2]
+            - id: TH3.E4.US2
+              title: "PR-scoped locking"
+              status: todo
+              file: docs/themes/TH3-runtime-first-reengineering/epics/E4-locking-and-recovery/user-stories/US2-pr-scoped-locking.md
+              depends-on: [TH3.E4.US1]
+            - id: TH3.E4.US3
+              title: "Lease expiry and recovery"
+              status: todo
+              file: docs/themes/TH3-runtime-first-reengineering/epics/E4-locking-and-recovery/user-stories/US3-lease-expiry-and-recovery.md
+              depends-on: [TH3.E4.US1, TH3.E2.US4]
+            - id: TH3.E4.US4
+              title: "Resume conflict handling"
+              status: todo
+              file: docs/themes/TH3-runtime-first-reengineering/epics/E4-locking-and-recovery/user-stories/US4-resume-conflict-handling.md
+              depends-on: [TH3.E4.US2, TH3.E4.US3, TH3.E3.US4]
+        - id: E5
+          name: "Replay and Bounded Agent Jobs"
+          status: todo
+          depends-on: [E2, E3, E4]
+          stories:
+            - id: TH3.E5.US1
+              title: "Deterministic replay fixtures"
+              status: todo
+              file: docs/themes/TH3-runtime-first-reengineering/epics/E5-replay-and-bounded-agent-jobs/user-stories/US1-deterministic-replay-fixtures.md
+              depends-on: [TH3.E2.US2, TH3.E2.US3, TH3.E3.US4]
+            - id: TH3.E5.US2
+              title: "Bounded agent job contract"
+              status: todo
+              file: docs/themes/TH3-runtime-first-reengineering/epics/E5-replay-and-bounded-agent-jobs/user-stories/US2-bounded-agent-job-contract.md
+              depends-on: [TH3.E1.US3, TH3.E4.US1]
+            - id: TH3.E5.US3
+              title: "Agent failure containment"
+              status: todo
+              file: docs/themes/TH3-runtime-first-reengineering/epics/E5-replay-and-bounded-agent-jobs/user-stories/US3-agent-failure-containment.md
+              depends-on: [TH3.E5.US2, TH3.E4.US4]
+            - id: TH3.E5.US4
+              title: "Replay-driven runtime regression suite"
+              status: todo
+              file: docs/themes/TH3-runtime-first-reengineering/epics/E5-replay-and-bounded-agent-jobs/user-stories/US4-replay-driven-runtime-regression-suite.md
+              depends-on: [TH3.E5.US1, TH3.E5.US3]
