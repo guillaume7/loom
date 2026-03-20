@@ -2,11 +2,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
 	"github.com/guillaume7/loom/internal/config"
-	"github.com/guillaume7/loom/internal/fsm"
+	loomruntime "github.com/guillaume7/loom/internal/runtime"
 	"github.com/guillaume7/loom/internal/store"
 	"github.com/spf13/cobra"
 )
@@ -33,24 +34,24 @@ func newPauseCmd() *cobra.Command {
 			}()
 
 			ctx := context.Background()
-			cp, err := st.ReadCheckpoint(ctx)
+			controller := loomruntime.NewController(st, loomruntime.DefaultConfig())
+			lifecycle, err := controller.ApplyManualOverride(ctx, loomruntime.ManualOverrideRequest{
+				Action:      loomruntime.ManualOverridePause,
+				Source:      "cli",
+				RequestedBy: "loom pause",
+				Reason:      "operator requested pause",
+			})
 			if err != nil {
-				return err
-			}
-
-			if err := st.WriteCheckpoint(ctx, store.Checkpoint{
-				State:       string(fsm.StatePaused),
-				ResumeState: resumableState(cp),
-				Phase:       cp.Phase,
-				PRNumber:    cp.PRNumber,
-				IssueNumber: cp.IssueNumber,
-				RetryCount:  cp.RetryCount,
-			}); err != nil {
+				if errors.Is(err, loomruntime.ErrNothingToPause) {
+					fmt.Fprintln(cmd.OutOrStdout(), "Nothing to pause")
+					return nil
+				}
 				return err
 			}
 
 			slog.Info("paused by operator")
 			fmt.Fprintln(cmd.OutOrStdout(), "Paused.")
+			printControllerLifecycle(cmd.OutOrStdout(), lifecycle)
 			return nil
 		},
 	}

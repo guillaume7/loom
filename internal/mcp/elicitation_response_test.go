@@ -236,6 +236,26 @@ func TestLoomElicitationResponse_PauseEpic_TransitionsPaused(t *testing.T) {
 	cp, err := st.ReadCheckpoint(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, "PAUSED", cp.State)
+	assert.Equal(t, "AWAITING_CI", cp.ResumeState)
+
+	actions, err := st.ReadActions(context.Background(), 10)
+	require.NoError(t, err)
+	require.Len(t, actions, 1)
+	assert.Equal(t, "manual_override_pause", actions[0].Event)
+	assert.Contains(t, actions[0].Detail, "paused epic via elicitation response")
+
+	events, err := st.ReadExternalEvents(context.Background(), "default", 10)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, "manual_override.pause", events[0].EventKind)
+	assert.Equal(t, "operator", events[0].EventSource)
+
+	decisions, err := st.ReadPolicyDecisions(context.Background(), "default", 10)
+	require.NoError(t, err)
+	require.Len(t, decisions, 1)
+	assert.Equal(t, "operator_override", decisions[0].DecisionKind)
+	assert.Equal(t, "pause", decisions[0].Verdict)
+	assert.Equal(t, events[0].CorrelationID, decisions[0].CorrelationID)
 }
 
 func TestLoomElicitationResponse_InvalidAction_ReturnsClearErrorAndKeepsActive(t *testing.T) {

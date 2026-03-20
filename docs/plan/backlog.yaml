@@ -1,7 +1,7 @@
 # Backlog — Core State File
 backlog:
   project: "loom"
-  last-updated: "2026-03-20T20:20:00Z"
+  last-updated: "2026-03-20T21:05:00Z"
   themes:
     # ── TH1: Loom v1 Core ────────────────────────────────────────────
     - id: TH1
@@ -321,7 +321,7 @@ backlog:
               depends-on: [TH3.E1.US2]
             - id: TH3.E1.US4
               title: "Pause and manual override controls"
-              status: todo
+              status: done
               file: docs/themes/TH3-runtime-first-reengineering/epics/E1-runtime-kernel-foundation/user-stories/US4-pause-and-manual-override-controls.md
               depends-on: [TH3.E1.US3]
         - id: E2

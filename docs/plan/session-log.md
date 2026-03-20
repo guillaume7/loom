@@ -330,5 +330,25 @@
 ### 2026-03-20T20:20:00Z
 - status-change: TH3.E1.US3 -> done
 - Context: Reworked wake-claim recovery so expired leases do not hide due wakes permanently, made loom://state rehydrate from persisted checkpoint before rendering, and added regression tests for both reviewer-blocking failure modes.
+
+### 2026-03-20T20:21:00Z
+- status-change: TH3.E1.US4 -> in-progress
+- Context: Selected the next eligible TH3 story after TH3.E1.US3 approval and commit; starting pause and manual override controls.
+
+### 2026-03-20T20:55:00Z
+- status-change: TH3.E1.US4 -> done
+- Context: Centralized manual pause/resume overrides in the runtime controller, made CLI and MCP pause paths auditable with operator intent records, and preserved correlation context across resume.
+
+### 2026-03-20T20:56:00Z
+- status-change: TH3.E1.US4 -> in-progress
+- Context: Reviewer requested changes because pause can create an unrecoverable paused checkpoint when no resumable state exists, resume mutates checkpoint and audit state before controller recovery succeeds, and regression coverage is missing for those failure modes and the MCP pause_epic audit path.
+
+### 2026-03-20T21:05:00Z
+- status-change: TH3.E1.US4 -> done
+- Context: Fixed the reviewer-requested pause/resume failure modes by rejecting non-recoverable pauses, validating controller recovery before persisting resume overrides, releasing partially acquired leases on failed resume attempts, and adding regressions for those paths plus MCP pause_epic audit records.
 2026-03-20T20:03:32Z | Subagent completed
 2026-03-20T20:05:09Z | Subagent completed
+2026-03-20T20:11:40Z | Subagent completed
+2026-03-20T20:16:43Z | Subagent completed
+2026-03-20T20:21:58Z | Subagent completed
+2026-03-20T20:23:51Z | Subagent completed

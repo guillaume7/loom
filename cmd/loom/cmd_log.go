@@ -52,15 +52,18 @@ func newLogCmd() *cobra.Command {
 			}
 
 			for _, action := range actions {
-				fmt.Fprintf(
-					cmd.OutOrStdout(),
-					"%s %s %s -> %s %s\n",
+				line := fmt.Sprintf(
+					"%s %s %s -> %s %s",
 					action.CreatedAt.UTC().Format(time.RFC3339),
 					action.OperationKey,
 					action.StateBefore,
 					action.StateAfter,
 					action.Event,
 				)
+				if action.Detail != "" {
+					line += " " + action.Detail
+				}
+				fmt.Fprintln(cmd.OutOrStdout(), line)
 			}
 
 			return nil

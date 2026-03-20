@@ -95,15 +95,15 @@ func newStartCmd() *cobra.Command {
 			// Block until a signal is received, then write a PAUSED checkpoint.
 			<-ctx.Done()
 
-			if err := st.WriteCheckpoint(context.Background(), store.Checkpoint{
-				State:       string(fsm.StatePaused),
-				ResumeState: resumableState(cp),
-				Phase:       cp.Phase,
-				PRNumber:    cp.PRNumber,
-				IssueNumber: cp.IssueNumber,
-				RetryCount:  cp.RetryCount,
+			if _, err := controller.ApplyManualOverride(context.Background(), loomruntime.ManualOverrideRequest{
+				Action:      loomruntime.ManualOverridePause,
+				Source:      "signal",
+				RequestedBy: "loom start",
+				Reason:      "received shutdown signal",
 			}); err != nil {
-				slog.Error("failed to write PAUSED checkpoint on shutdown", "error", err)
+				if !errors.Is(err, loomruntime.ErrNothingToPause) {
+					slog.Error("failed to write PAUSED checkpoint on shutdown", "error", err)
+				}
 			}
 			if _, err := controller.Shutdown(context.Background()); err != nil {
 				slog.Error("failed to expire controller lease on shutdown", "error", err)

@@ -155,3 +155,68 @@ func TestSQLiteStore_DeleteAllClearsRuntimeRecords(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, decisions)
 }
+
+func TestSQLiteStore_WriteRuntimeControl_PersistsAuditTrailAtomically(t *testing.T) {
+	st := newMemDB(t)
+	ctx := context.Background()
+	now := time.Date(2026, 3, 20, 14, 0, 0, 0, time.UTC)
+
+	writer, ok := st.(store.RuntimeControlWriter)
+	require.True(t, ok)
+	require.NoError(t, writer.WriteRuntimeControl(ctx, store.RuntimeControlRecord{
+		Checkpoint: store.Checkpoint{
+			State:       "PAUSED",
+			ResumeState: "AWAITING_CI",
+			Phase:       3,
+			PRNumber:    42,
+			UpdatedAt:   now,
+		},
+		Action: store.Action{
+			SessionID:    "default",
+			OperationKey: "manual_override:pause:default:1",
+			StateBefore:  "AWAITING_CI",
+			StateAfter:   "PAUSED",
+			Event:        "manual_override_pause",
+			Detail:       `{"correlation_id":"corr-1"}`,
+			CreatedAt:    now,
+		},
+		ExternalEvent: store.ExternalEvent{
+			SessionID:     "default",
+			EventSource:   "operator",
+			EventKind:     "manual_override.pause",
+			CorrelationID: "corr-1",
+			Payload:       `{"correlation_id":"corr-1"}`,
+			ObservedAt:    now,
+		},
+		PolicyDecision: store.PolicyDecision{
+			SessionID:     "default",
+			CorrelationID: "corr-1",
+			DecisionKind:  "operator_override",
+			Verdict:       "pause",
+			InputHash:     "manual_override:default:pause:corr-1",
+			Detail:        `{"correlation_id":"corr-1"}`,
+			CreatedAt:     now,
+		},
+	}))
+
+	cp, err := st.ReadCheckpoint(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, "PAUSED", cp.State)
+	assert.Equal(t, "AWAITING_CI", cp.ResumeState)
+
+	actions, err := st.ReadActions(ctx, 10)
+	require.NoError(t, err)
+	require.Len(t, actions, 1)
+	assert.Equal(t, "manual_override_pause", actions[0].Event)
+
+	events, err := st.ReadExternalEvents(ctx, "default", 10)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, "corr-1", events[0].CorrelationID)
+
+	decisions, err := st.ReadPolicyDecisions(ctx, "default", 10)
+	require.NoError(t, err)
+	require.Len(t, decisions, 1)
+	assert.Equal(t, "pause", decisions[0].Verdict)
+	assert.Equal(t, "corr-1", decisions[0].CorrelationID)
+}

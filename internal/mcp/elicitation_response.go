@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/guillaume7/loom/internal/fsm"
+	loomruntime "github.com/guillaume7/loom/internal/runtime"
 	"github.com/guillaume7/loom/internal/store"
 	mcplib "github.com/mark3labs/mcp-go/mcp"
 )
@@ -109,7 +110,18 @@ func (s *Server) handleElicitationResponse(ctx context.Context, req mcplib.CallT
 		return mcplib.NewToolResultError(transErr.Error()), nil
 	}
 
-	if writeErr := s.writeCheckpoint(ctx, store.Checkpoint{
+	if action == "pause_epic" {
+		controller := loomruntime.NewController(s.st, loomruntime.DefaultConfig())
+		if _, writeErr := controller.ApplyManualOverride(ctx, loomruntime.ManualOverrideRequest{
+			Action:      loomruntime.ManualOverridePause,
+			Source:      "mcp",
+			RequestedBy: sessionIDFromContext(ctx),
+			Reason:      detail,
+		}); writeErr != nil {
+			s.machine.Rollback(snap)
+			return mcplib.NewToolResultError(fmt.Sprintf("failed to persist checkpoint: %v", writeErr)), nil
+		}
+	} else if writeErr := s.writeCheckpoint(ctx, store.Checkpoint{
 		State:       string(newState),
 		ResumeState: string(previousStateIfPaused(newState, previousState)),
 		Phase:       nextPhase,

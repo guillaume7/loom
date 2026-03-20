@@ -107,6 +107,21 @@ type PolicyDecision struct {
 	CreatedAt     time.Time
 }
 
+// RuntimeControlRecord captures an operator-driven control mutation together
+// with its audit trail. Implementations may persist these records atomically.
+type RuntimeControlRecord struct {
+	Checkpoint     Checkpoint
+	Action         Action
+	ExternalEvent  ExternalEvent
+	PolicyDecision PolicyDecision
+}
+
+// RuntimeControlWriter persists an operator control mutation and its audit
+// records in one durable write when supported by the store implementation.
+type RuntimeControlWriter interface {
+	WriteRuntimeControl(ctx context.Context, record RuntimeControlRecord) error
+}
+
 // Store persists and retrieves Loom workflow checkpoints.
 type Store interface {
 	// ReadCheckpoint returns the most recent persisted Checkpoint.

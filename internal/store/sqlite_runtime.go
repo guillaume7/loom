@@ -8,6 +8,113 @@ import (
 	"time"
 )
 
+func (s *sqliteStore) WriteRuntimeControl(ctx context.Context, record RuntimeControlRecord) error {
+	now := time.Now().UTC()
+	if record.Checkpoint.UpdatedAt.IsZero() {
+		record.Checkpoint.UpdatedAt = now
+	}
+	if record.Action.CreatedAt.IsZero() {
+		record.Action.CreatedAt = now
+	}
+	if record.ExternalEvent.ObservedAt.IsZero() {
+		record.ExternalEvent.ObservedAt = now
+	}
+	if record.PolicyDecision.CreatedAt.IsZero() {
+		record.PolicyDecision.CreatedAt = now
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	var txErr error
+	defer func() {
+		if txErr != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	_, txErr = tx.ExecContext(ctx,
+		`INSERT INTO checkpoint
+			(story_id, state, resume_state, phase, pr_number, issue_number, retry_count, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(story_id) DO UPDATE SET
+			state = excluded.state,
+			resume_state = excluded.resume_state,
+			phase = excluded.phase,
+			pr_number = excluded.pr_number,
+			issue_number = excluded.issue_number,
+			retry_count = excluded.retry_count,
+			updated_at = excluded.updated_at`,
+		record.Checkpoint.StoryID,
+		record.Checkpoint.State,
+		record.Checkpoint.ResumeState,
+		record.Checkpoint.Phase,
+		record.Checkpoint.PRNumber,
+		record.Checkpoint.IssueNumber,
+		record.Checkpoint.RetryCount,
+		record.Checkpoint.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	)
+	if txErr != nil {
+		return txErr
+	}
+
+	_, txErr = tx.ExecContext(ctx,
+		`INSERT INTO action_log
+			(session_id, operation_key, state_before, state_after, event, detail, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		record.Action.SessionID,
+		record.Action.OperationKey,
+		record.Action.StateBefore,
+		record.Action.StateAfter,
+		record.Action.Event,
+		record.Action.Detail,
+		record.Action.CreatedAt.UTC().Format(time.RFC3339Nano),
+	)
+	if isDuplicateOperationKeyError(txErr) {
+		return ErrDuplicateOperationKey
+	}
+	if txErr != nil {
+		return txErr
+	}
+
+	_, txErr = tx.ExecContext(ctx,
+		`INSERT INTO external_event
+			(session_id, event_source, event_kind, external_id, correlation_id, payload, observed_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		record.ExternalEvent.SessionID,
+		record.ExternalEvent.EventSource,
+		record.ExternalEvent.EventKind,
+		record.ExternalEvent.ExternalID,
+		record.ExternalEvent.CorrelationID,
+		record.ExternalEvent.Payload,
+		formatDBTime(record.ExternalEvent.ObservedAt),
+	)
+	if txErr != nil {
+		return txErr
+	}
+
+	_, txErr = tx.ExecContext(ctx,
+		`INSERT INTO policy_decision
+			(session_id, correlation_id, decision_kind, verdict, input_hash, detail, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		record.PolicyDecision.SessionID,
+		record.PolicyDecision.CorrelationID,
+		record.PolicyDecision.DecisionKind,
+		record.PolicyDecision.Verdict,
+		record.PolicyDecision.InputHash,
+		record.PolicyDecision.Detail,
+		formatDBTime(record.PolicyDecision.CreatedAt),
+	)
+	if txErr != nil {
+		return txErr
+	}
+
+	txErr = tx.Commit()
+	return txErr
+}
+
 func ensureRuntimeTables(db *sql.DB) error {
 	statements := []string{
 		`CREATE TABLE IF NOT EXISTS wake_schedule (

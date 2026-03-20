@@ -115,6 +115,10 @@ func (c *Controller) Start(ctx context.Context) (Lifecycle, error) {
 	if err != nil {
 		return Lifecycle{}, err
 	}
+	return c.startWithCheckpoint(ctx, cp)
+}
+
+func (c *Controller) startWithCheckpoint(ctx context.Context, cp store.Checkpoint) (Lifecycle, error) {
 	now := c.cfg.Now().UTC()
 	leaseKey := LeaseKey(cp)
 	lease, leaseActive, err := c.readLease(ctx, leaseKey, now)

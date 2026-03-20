@@ -142,6 +142,21 @@ func TestPauseCmd_WritesCheckpoint(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "PAUSED", cp.State)
 	assert.Equal(t, "AWAITING_READY", cp.ResumeState)
+
+	actions, err := st.ReadActions(context.Background(), 10)
+	require.NoError(t, err)
+	require.Len(t, actions, 1)
+	assert.Equal(t, "manual_override_pause", actions[0].Event)
+
+	events, err := st.ReadExternalEvents(context.Background(), "default", 10)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, "manual_override.pause", events[0].EventKind)
+
+	decisions, err := st.ReadPolicyDecisions(context.Background(), "default", 10)
+	require.NoError(t, err)
+	require.Len(t, decisions, 1)
+	assert.Equal(t, "pause", decisions[0].Verdict)
 }
 
 func TestResumeCmd_NothingToResume(t *testing.T) {
@@ -300,6 +315,11 @@ func TestResumeCmd_WithPausedCheckpoint_PrintsResuming(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "AWAITING_READY", cp.State)
 	assert.Equal(t, "", cp.ResumeState)
+
+	decisions, err := st.ReadPolicyDecisions(context.Background(), "default", 10)
+	require.NoError(t, err)
+	require.Len(t, decisions, 1)
+	assert.Equal(t, "resume", decisions[0].Verdict)
 }
 
 func TestResumeCmd_InfersResumeStateFromLastAction(t *testing.T) {
