@@ -140,6 +140,15 @@ func hasUniqueCheckpointStoryIDIndex(t *testing.T, db *sql.DB) bool {
 	return false
 }
 
+func rowCount(t *testing.T, db *sql.DB, table string) int {
+	t.Helper()
+
+	var count int
+	err := db.QueryRow(`SELECT COUNT(*) FROM ` + table).Scan(&count)
+	require.NoError(t, err)
+	return count
+}
+
 func TestMigrate_CreatesActionLogTableOnFreshDB(t *testing.T) {
 	db := openPinnedMemDB(t)
 
@@ -147,11 +156,31 @@ func TestMigrate_CreatesActionLogTableOnFreshDB(t *testing.T) {
 
 	assert.True(t, tableExists(t, db, "checkpoint"))
 	assert.True(t, tableExists(t, db, "action_log"))
+	assert.True(t, tableExists(t, db, "wake_schedule"))
+	assert.True(t, tableExists(t, db, "external_event"))
+	assert.True(t, tableExists(t, db, "runtime_lease"))
+	assert.True(t, tableExists(t, db, "policy_decision"))
 	assert.Equal(t,
 		[]string{"id", "session_id", "operation_key", "state_before", "state_after", "event", "detail", "created_at"},
 		tableColumns(t, db, "action_log"),
 	)
 	assert.True(t, hasUniqueOperationKeyIndex(t, db), "action_log should have a unique index on operation_key")
+	assert.Equal(t,
+		[]string{"id", "session_id", "wake_kind", "due_at", "dedupe_key", "payload", "claimed_at", "created_at"},
+		tableColumns(t, db, "wake_schedule"),
+	)
+	assert.Equal(t,
+		[]string{"id", "session_id", "event_source", "event_kind", "external_id", "correlation_id", "payload", "observed_at"},
+		tableColumns(t, db, "external_event"),
+	)
+	assert.Equal(t,
+		[]string{"lease_key", "holder_id", "scope", "expires_at", "created_at", "renewed_at"},
+		tableColumns(t, db, "runtime_lease"),
+	)
+	assert.Equal(t,
+		[]string{"id", "session_id", "correlation_id", "decision_kind", "verdict", "input_hash", "detail", "created_at"},
+		tableColumns(t, db, "policy_decision"),
+	)
 }
 
 // TestMigrate_AddsColumnsToOldSchema verifies that migrate() adds the E7
@@ -273,10 +302,82 @@ func TestMigrate_Idempotent(t *testing.T) {
 	db := openPinnedMemDB(t)
 	require.NoError(t, migrate(db))
 	beforeColumns := tableColumns(t, db, "action_log")
+	beforeWakeColumns := tableColumns(t, db, "wake_schedule")
+	beforeExternalEventColumns := tableColumns(t, db, "external_event")
+	beforeRuntimeLeaseColumns := tableColumns(t, db, "runtime_lease")
+	beforePolicyDecisionColumns := tableColumns(t, db, "policy_decision")
 	beforeHasIndex := hasUniqueOperationKeyIndex(t, db)
 	beforeHasCheckpointStoryIDIndex := hasUniqueCheckpointStoryIDIndex(t, db)
 	require.NoError(t, migrate(db)) // second call must not fail
 	assert.Equal(t, beforeColumns, tableColumns(t, db, "action_log"))
+	assert.Equal(t, beforeWakeColumns, tableColumns(t, db, "wake_schedule"))
+	assert.Equal(t, beforeExternalEventColumns, tableColumns(t, db, "external_event"))
+	assert.Equal(t, beforeRuntimeLeaseColumns, tableColumns(t, db, "runtime_lease"))
+	assert.Equal(t, beforePolicyDecisionColumns, tableColumns(t, db, "policy_decision"))
 	assert.Equal(t, beforeHasIndex, hasUniqueOperationKeyIndex(t, db))
 	assert.Equal(t, beforeHasCheckpointStoryIDIndex, hasUniqueCheckpointStoryIDIndex(t, db))
+}
+
+func TestMigrate_PreservesExistingCheckpointAndTraceRows(t *testing.T) {
+	db := openPinnedMemDB(t)
+
+	_, err := db.Exec(`CREATE TABLE checkpoint (
+		id         INTEGER PRIMARY KEY,
+		state      TEXT    NOT NULL,
+		phase      INTEGER NOT NULL DEFAULT 0,
+		updated_at TEXT    NOT NULL DEFAULT ''
+	)`)
+	require.NoError(t, err)
+	_, err = db.Exec(`CREATE TABLE action_log (
+		id            INTEGER PRIMARY KEY AUTOINCREMENT,
+		session_id    TEXT    NOT NULL,
+		operation_key TEXT    NOT NULL,
+		state_before  TEXT    NOT NULL,
+		state_after   TEXT    NOT NULL,
+		event         TEXT    NOT NULL,
+		detail        TEXT    NOT NULL DEFAULT '',
+		created_at    TEXT    NOT NULL
+	)`)
+	require.NoError(t, err)
+	_, err = db.Exec(`CREATE TABLE session_run (
+		session_id   TEXT PRIMARY KEY,
+		loom_version TEXT NOT NULL,
+		repo_owner   TEXT NOT NULL,
+		repo_name    TEXT NOT NULL,
+		started_at   TEXT NOT NULL
+	)`)
+	require.NoError(t, err)
+	_, err = db.Exec(`CREATE TABLE session_trace_event (
+		id              INTEGER PRIMARY KEY AUTOINCREMENT,
+		session_id      TEXT NOT NULL,
+		event_kind      TEXT NOT NULL,
+		sequence_number INTEGER NOT NULL,
+		payload         TEXT NOT NULL DEFAULT '',
+		created_at      TEXT NOT NULL
+	)`)
+	require.NoError(t, err)
+
+	_, err = db.Exec(`INSERT INTO checkpoint (id, state, phase, updated_at) VALUES (1, 'AWAITING_CI', 3, '2026-03-20T10:00:00Z')`)
+	require.NoError(t, err)
+	_, err = db.Exec(`INSERT INTO session_run (session_id, loom_version, repo_owner, repo_name, started_at) VALUES ('s1', 'v0.1.0', 'acme', 'loom', '2026-03-20T09:00:00Z')`)
+	require.NoError(t, err)
+	_, err = db.Exec(`INSERT INTO session_trace_event (session_id, event_kind, sequence_number, payload, created_at) VALUES ('s1', 'session_started', 1, '{}', '2026-03-20T09:00:01Z')`)
+	require.NoError(t, err)
+
+	require.NoError(t, migrate(db))
+
+	assert.Equal(t, 1, rowCount(t, db, "checkpoint"))
+	assert.Equal(t, 1, rowCount(t, db, "session_run"))
+	assert.Equal(t, 1, rowCount(t, db, "session_trace_event"))
+
+	var state string
+	var phase int
+	err = db.QueryRow(`SELECT state, phase FROM checkpoint WHERE id = 1`).Scan(&state, &phase)
+	require.NoError(t, err)
+	assert.Equal(t, "AWAITING_CI", state)
+	assert.Equal(t, 3, phase)
+	assert.True(t, tableExists(t, db, "wake_schedule"))
+	assert.True(t, tableExists(t, db, "external_event"))
+	assert.True(t, tableExists(t, db, "runtime_lease"))
+	assert.True(t, tableExists(t, db, "policy_decision"))
 }

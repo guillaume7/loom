@@ -84,6 +84,10 @@ func migrate(db *sql.DB) error {
 		return err
 	}
 
+	if err := ensureRuntimeTables(db); err != nil {
+		return err
+	}
+
 	// Collect existing column names.
 	rows, err := db.Query("PRAGMA table_info(checkpoint)")
 	if err != nil {
@@ -390,6 +394,18 @@ func (s *sqliteStore) DeleteAll(ctx context.Context) error {
 	}()
 
 	if _, err = tx.ExecContext(ctx, "DELETE FROM action_log"); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, "DELETE FROM policy_decision"); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, "DELETE FROM runtime_lease"); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, "DELETE FROM external_event"); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, "DELETE FROM wake_schedule"); err != nil {
 		return err
 	}
 	if _, err = tx.ExecContext(ctx, "DELETE FROM checkpoint"); err != nil {

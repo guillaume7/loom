@@ -13,12 +13,21 @@ import (
 // memStore is an in-memory Store used only in tests.
 // It satisfies the store.Store interface without any real I/O.
 type memStore struct {
-	cp      store.Checkpoint
-	actions []store.Action
-	empty   bool
+	cp              store.Checkpoint
+	actions         []store.Action
+	wakes           []store.WakeSchedule
+	externalEvents  []store.ExternalEvent
+	runtimeLeases   map[string]store.RuntimeLease
+	policyDecisions []store.PolicyDecision
+	empty           bool
 }
 
-func newMemStore() *memStore { return &memStore{empty: true} }
+func newMemStore() *memStore {
+	return &memStore{
+		empty:         true,
+		runtimeLeases: make(map[string]store.RuntimeLease),
+	}
+}
 
 func (s *memStore) ReadCheckpoint(_ context.Context) (store.Checkpoint, error) {
 	if s.empty {
@@ -89,9 +98,121 @@ func (s *memStore) ReadActions(_ context.Context, limit int) ([]store.Action, er
 	return actions, nil
 }
 
+func (s *memStore) UpsertWakeSchedule(_ context.Context, wake store.WakeSchedule) error {
+	for index, existing := range s.wakes {
+		if existing.DedupeKey == wake.DedupeKey {
+			s.wakes[index] = wake
+			return nil
+		}
+	}
+	if wake.CreatedAt.IsZero() {
+		wake.CreatedAt = time.Now().UTC()
+	}
+	wake.ID = int64(len(s.wakes) + 1)
+	s.wakes = append(s.wakes, wake)
+	return nil
+}
+
+func (s *memStore) ReadWakeSchedules(_ context.Context, sessionID string, limit int) ([]store.WakeSchedule, error) {
+	if limit <= 0 {
+		return []store.WakeSchedule{}, nil
+	}
+	wakes := make([]store.WakeSchedule, 0, len(s.wakes))
+	for _, wake := range s.wakes {
+		if sessionID != "" && wake.SessionID != sessionID {
+			continue
+		}
+		wakes = append(wakes, wake)
+	}
+	if limit > len(wakes) {
+		limit = len(wakes)
+	}
+	return wakes[:limit], nil
+}
+
+func (s *memStore) WriteExternalEvent(_ context.Context, event store.ExternalEvent) error {
+	if event.ObservedAt.IsZero() {
+		event.ObservedAt = time.Now().UTC()
+	}
+	event.ID = int64(len(s.externalEvents) + 1)
+	s.externalEvents = append(s.externalEvents, event)
+	return nil
+}
+
+func (s *memStore) ReadExternalEvents(_ context.Context, sessionID string, limit int) ([]store.ExternalEvent, error) {
+	if limit <= 0 {
+		return []store.ExternalEvent{}, nil
+	}
+	events := make([]store.ExternalEvent, 0, len(s.externalEvents))
+	for index := len(s.externalEvents) - 1; index >= 0; index-- {
+		event := s.externalEvents[index]
+		if sessionID != "" && event.SessionID != sessionID {
+			continue
+		}
+		events = append(events, event)
+		if len(events) == limit {
+			break
+		}
+	}
+	return events, nil
+}
+
+func (s *memStore) UpsertRuntimeLease(_ context.Context, lease store.RuntimeLease) error {
+	if s.runtimeLeases == nil {
+		s.runtimeLeases = make(map[string]store.RuntimeLease)
+	}
+	if lease.CreatedAt.IsZero() {
+		lease.CreatedAt = time.Now().UTC()
+	}
+	if lease.RenewedAt.IsZero() {
+		lease.RenewedAt = lease.CreatedAt
+	}
+	s.runtimeLeases[lease.LeaseKey] = lease
+	return nil
+}
+
+func (s *memStore) ReadRuntimeLease(_ context.Context, leaseKey string) (store.RuntimeLease, error) {
+	lease, ok := s.runtimeLeases[leaseKey]
+	if !ok {
+		return store.RuntimeLease{}, store.ErrRuntimeLeaseNotFound
+	}
+	return lease, nil
+}
+
+func (s *memStore) WritePolicyDecision(_ context.Context, decision store.PolicyDecision) error {
+	if decision.CreatedAt.IsZero() {
+		decision.CreatedAt = time.Now().UTC()
+	}
+	decision.ID = int64(len(s.policyDecisions) + 1)
+	s.policyDecisions = append(s.policyDecisions, decision)
+	return nil
+}
+
+func (s *memStore) ReadPolicyDecisions(_ context.Context, sessionID string, limit int) ([]store.PolicyDecision, error) {
+	if limit <= 0 {
+		return []store.PolicyDecision{}, nil
+	}
+	decisions := make([]store.PolicyDecision, 0, len(s.policyDecisions))
+	for index := len(s.policyDecisions) - 1; index >= 0; index-- {
+		decision := s.policyDecisions[index]
+		if sessionID != "" && decision.SessionID != sessionID {
+			continue
+		}
+		decisions = append(decisions, decision)
+		if len(decisions) == limit {
+			break
+		}
+	}
+	return decisions, nil
+}
+
 func (s *memStore) DeleteAll(_ context.Context) error {
 	s.cp = store.Checkpoint{}
 	s.actions = nil
+	s.wakes = nil
+	s.externalEvents = nil
+	s.runtimeLeases = make(map[string]store.RuntimeLease)
+	s.policyDecisions = nil
 	s.empty = true
 	return nil
 }

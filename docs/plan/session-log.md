@@ -302,3 +302,13 @@
 - Context: Completed the runtime mode decision spike and recorded the baseline decision, rejected alternatives, and workflow impact for CLI, MCP, and operator flows.
 2026-03-20T19:40:23Z | Subagent completed
 2026-03-20T19:43:45Z | Subagent completed
+
+### 2026-03-20T19:44:18Z
+- status-change: TH3.E1.US2 -> in-progress
+- Context: Selected the next eligible TH3 story after TH3.E1.US1 approval and commit; starting the persisted run-state and wake-record model work.
+
+### 2026-03-20T19:49:01Z
+- status-change: TH3.E1.US2 -> done
+- Context: Added additive SQLite runtime-record persistence for wake schedules, external events, runtime leases, and policy decisions; verified checkpoint truth remains authoritative and the full Go test suite passes.
+2026-03-20T19:49:32Z | Subagent completed
+2026-03-20T19:51:31Z | Subagent completed

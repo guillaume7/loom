@@ -1,7 +1,7 @@
 # Backlog — Core State File
 backlog:
   project: "loom"
-  last-updated: "2026-03-20T19:39:04Z"
+  last-updated: "2026-03-20T19:49:01Z"
   themes:
     # ── TH1: Loom v1 Core ────────────────────────────────────────────
     - id: TH1
@@ -311,7 +311,7 @@ backlog:
               depends-on: []
             - id: TH3.E1.US2
               title: "Persisted run state and wake record model"
-              status: todo
+              status: done
               file: docs/themes/TH3-runtime-first-reengineering/epics/E1-runtime-kernel-foundation/user-stories/US2-persisted-run-state-and-wake-record-model.md
               depends-on: [TH3.E1.US1]
             - id: TH3.E1.US3
