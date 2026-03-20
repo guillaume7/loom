@@ -455,6 +455,10 @@
 ### 2026-03-21T01:05:00Z
 - status-change: TH3.E2.US4 -> done
 - Context: Added the missing cross-path regression proving a GitHub event can refresh an already-claimed wake without reopening the resume window, and fixed wake refresh persistence to preserve the existing wake identity so due-wake deduplication skips duplicate resumes with an auditable reason.
+
+### 2026-03-21T01:20:00Z
+- status-change: TH3.E2 -> done
+- Context: Large-epic closeout passed after runtime/store/integration verification and epic quality review, confirming durable wake scheduling, poll-driven resumptions, GitHub event ingress, and cross-path resume deduplication across CLI and MCP diagnostics.
 2026-03-20T21:11:16Z | Subagent completed
 2026-03-20T21:13:41Z | Subagent completed
 2026-03-20T21:18:12Z | Subagent completed
@@ -467,3 +471,5 @@
 2026-03-20T21:40:27Z | Subagent completed
 2026-03-20T21:46:10Z | Subagent completed
 2026-03-20T21:47:41Z | Subagent completed
+2026-03-20T21:50:15Z | Subagent completed
+2026-03-20T21:51:57Z | Subagent completed

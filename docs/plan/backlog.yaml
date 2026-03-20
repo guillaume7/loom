@@ -1,7 +1,7 @@
 # Backlog — Core State File
 backlog:
   project: "loom"
-  last-updated: "2026-03-21T01:05:00Z"
+  last-updated: "2026-03-21T01:20:00Z"
   themes:
     # ── TH1: Loom v1 Core ────────────────────────────────────────────
     - id: TH1
@@ -326,7 +326,7 @@ backlog:
               depends-on: [TH3.E1.US3]
         - id: E2
           name: "Wake-Up and Resumption"
-          status: in-progress
+          status: done
           depends-on: [E1]
           stories:
             - id: TH3.E2.US1

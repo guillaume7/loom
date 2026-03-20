@@ -194,3 +194,39 @@
 - internal/mcp/server_resources_test.go
 - docs/plan/backlog.yaml
 - docs/plan/session-log.md
+
+## Epic TH3.E2 — Wake-Up and Resumption
+
+### Stories Completed
+- TH3.E2.US1 — Wake-up queue and timers
+- TH3.E2.US2 — Poll-driven resumptions
+- TH3.E2.US3 — GitHub event adapters
+- TH3.E2.US4 — Resume deduplication
+
+### Key Changes
+- Added durable wake-queue diagnostics so the runtime, CLI status, and MCP state surfaces expose pending wake intent and controller lifecycle without relying on prompt history.
+- Introduced poll-driven resumptions as the baseline wake path, recording explicit runtime observations and policy decisions before any checkpoint transitions.
+- Added GitHub event adapters that persist raw external observations and refresh the existing wake queue without mutating checkpoint truth or reopening claimed wake windows.
+- Added resume deduplication on the due-wake path so already-processed or concurrently duplicated wake windows are skipped with audited duplicate reasons instead of repeating external side effects.
+
+### Files Modified
+- internal/runtime/controller.go
+- internal/runtime/controller_test.go
+- internal/runtime/poll_resumption.go
+- internal/runtime/github_event_adapters.go
+- internal/runtime/github_event_adapters_test.go
+- internal/store/store.go
+- internal/store/sqlite_runtime.go
+- internal/store/store_sqlite_runtime_test.go
+- cmd/loom/controller_runtime.go
+- cmd/loom/cmd_status.go
+- cmd/loom/main_test.go
+- internal/mcp/handlers.go
+- internal/mcp/runtime_state.go
+- internal/mcp/server.go
+- internal/mcp/server_core_test.go
+- internal/mcp/server_resources_test.go
+- internal/mcp/story_checkpoint_test.go
+- integration/lifecycle_test.go
+- docs/plan/backlog.yaml
+- docs/plan/session-log.md
