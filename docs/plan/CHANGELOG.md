@@ -155,3 +155,42 @@
 - go.sum
 - docs/plan/backlog.yaml
 - docs/plan/session-log.md
+
+## Epic TH3.E1 — Runtime Kernel Foundation
+
+### Stories Completed
+- TH3.E1.US1 — Runtime mode decision spike
+- TH3.E1.US2 — Persisted run state and wake record model
+- TH3.E1.US3 — Background controller lifecycle
+- TH3.E1.US4 — Pause and manual override controls
+
+### Key Changes
+- Documented the VP3 runtime-mode baseline and tied it to the runtime-first control-plane direction.
+- Added additive runtime persistence for wake schedules, external events, runtime leases, and policy decisions while preserving checkpoint truth.
+- Introduced a persisted controller lifecycle for start, claim, sleep, wake, resume, pause, and shutdown across CLI and MCP state surfaces.
+- Centralized operator pause and resume controls in the runtime controller so CLI pause, CLI resume, elicitation `pause_epic`, and MCP `loom_abort` all use the same audited manual-override path.
+- Added regression coverage for recoverable pause semantics, resume safety, and story-scoped MCP pause behavior.
+
+### Files Modified
+- docs/themes/TH3-runtime-first-reengineering/epics/E1-runtime-kernel-foundation/runtime-mode-decision.md
+- internal/store/store.go
+- internal/store/sqlite_runtime.go
+- internal/store/store_sqlite_runtime_test.go
+- internal/runtime/controller.go
+- internal/runtime/controller_test.go
+- internal/runtime/operator_controls.go
+- cmd/loom/cmd_start.go
+- cmd/loom/cmd_pause.go
+- cmd/loom/cmd_resume.go
+- cmd/loom/cmd_log.go
+- cmd/loom/main_test.go
+- internal/mcp/handlers.go
+- internal/mcp/runtime_state.go
+- internal/mcp/elicitation_response.go
+- internal/mcp/elicitation_response_test.go
+- internal/mcp/story_checkpoint.go
+- internal/mcp/story_checkpoint_test.go
+- internal/mcp/server_core_test.go
+- internal/mcp/server_resources_test.go
+- docs/plan/backlog.yaml
+- docs/plan/session-log.md

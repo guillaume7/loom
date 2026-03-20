@@ -1,7 +1,7 @@
 # Backlog — Core State File
 backlog:
   project: "loom"
-  last-updated: "2026-03-20T22:30:00Z"
+  last-updated: "2026-03-20T22:31:00Z"
   themes:
     # ── TH1: Loom v1 Core ────────────────────────────────────────────
     - id: TH1
@@ -301,12 +301,12 @@ backlog:
       epics:
         - id: E1
           name: "Runtime Kernel Foundation"
-          status: in-progress
+          status: done
           depends-on: []
           stories:
             - id: TH3.E1.US1
               title: "Runtime mode decision spike"
-              status: in-progress
+              status: done
               file: docs/themes/TH3-runtime-first-reengineering/epics/E1-runtime-kernel-foundation/user-stories/US1-runtime-mode-decision-spike.md
               depends-on: []
             - id: TH3.E1.US2

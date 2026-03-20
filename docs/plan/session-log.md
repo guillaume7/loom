@@ -370,6 +370,10 @@
 ### 2026-03-20T22:30:00Z
 - status-change: TH3.E1.US4 -> done
 - Context: Added the final reviewer-requested regression proving story-scoped MCP `pause_epic` pauses only the scoped checkpoint, leaves the default checkpoint untouched, and preserves audited manual-override records on the scoped session.
+
+### 2026-03-20T22:31:00Z
+- status-change: TH3.E1 -> done
+- Context: Completed large-epic closeout for Runtime Kernel Foundation after final integration verification and quality review; reconciled authoritative backlog state so all E1 stories are done and the epic is closed.
 2026-03-20T20:03:32Z | Subagent completed
 2026-03-20T20:05:09Z | Subagent completed
 2026-03-20T20:11:40Z | Subagent completed
@@ -384,3 +388,6 @@
 2026-03-20T20:40:15Z | Subagent completed
 2026-03-20T20:43:04Z | Subagent completed
 2026-03-20T20:44:14Z | Subagent completed
+2026-03-20T20:45:56Z | Subagent completed
+2026-03-20T20:48:26Z | Subagent completed
+2026-03-20T20:50:20Z | Subagent completed
