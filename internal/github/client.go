@@ -83,8 +83,12 @@ type prAPIResponse struct {
 	Draft  bool   `json:"draft"`
 	State  string `json:"state"`
 	Head   struct {
+		Ref string `json:"ref"`
 		SHA string `json:"sha"`
 	} `json:"head"`
+	Base struct {
+		Ref string `json:"ref"`
+	} `json:"base"`
 }
 
 func (p *prAPIResponse) toPR() *PR {
@@ -92,6 +96,8 @@ func (p *prAPIResponse) toPR() *PR {
 		Number:  p.Number,
 		Title:   p.Title,
 		Draft:   p.Draft,
+		HeadRef: p.Head.Ref,
+		BaseRef: p.Base.Ref,
 		HeadSHA: p.Head.SHA,
 		State:   p.State,
 	}

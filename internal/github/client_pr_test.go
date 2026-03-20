@@ -23,6 +23,8 @@ func TestHTTPClient_ListPRs_Success(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, prs, 1)
 	assert.Equal(t, 7, prs[0].Number)
+	assert.Equal(t, "feature/xyz", prs[0].HeadRef)
+	assert.Equal(t, "main", prs[0].BaseRef)
 	assert.Equal(t, "abc123", prs[0].HeadSHA)
 	assert.False(t, prs[0].Draft)
 }
@@ -54,6 +56,8 @@ func TestHTTPClient_GetPR_Success(t *testing.T) {
 	require.NotNil(t, pr)
 	assert.Equal(t, 7, pr.Number)
 	assert.False(t, pr.Draft)
+	assert.Equal(t, "feature/xyz", pr.HeadRef)
+	assert.Equal(t, "main", pr.BaseRef)
 	assert.Equal(t, "abc123", pr.HeadSHA)
 }
 

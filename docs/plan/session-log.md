@@ -459,6 +459,18 @@
 ### 2026-03-21T01:20:00Z
 - status-change: TH3.E2 -> done
 - Context: Large-epic closeout passed after runtime/store/integration verification and epic quality review, confirming durable wake scheduling, poll-driven resumptions, GitHub event ingress, and cross-path resume deduplication across CLI and MCP diagnostics.
+
+### 2026-03-21T01:25:00Z
+- status-change: TH3.E3.US1 -> in-progress
+- Context: Selected the next eligible TH3 story after TH3.E2 closeout; starting the typed runtime observation model so policy evaluation can consume persisted CI, review, PR, branch, and operator facts without prompt-history reconstruction.
+
+### 2026-03-21T01:35:00Z
+- status-change: TH3.E3.US1 -> in-progress
+- Context: Reviewer requested changes because the observation assembler currently accepts unrelated persisted GitHub events for the session and does not guarantee branch observations from the polling baseline, so the model is not yet safe enough for policy inputs.
+
+### 2026-03-21T01:50:00Z
+- status-change: TH3.E3.US1 -> done
+- Context: Added a typed runtime observation assembler over persisted checkpoint, event, and decision records; filtered GitHub observations to the active PR, persisted branch facts on poll observations, and added regression coverage for unrelated-event rejection and polling-only branch reconstruction.
 2026-03-20T21:11:16Z | Subagent completed
 2026-03-20T21:13:41Z | Subagent completed
 2026-03-20T21:18:12Z | Subagent completed
@@ -473,3 +485,7 @@
 2026-03-20T21:47:41Z | Subagent completed
 2026-03-20T21:50:15Z | Subagent completed
 2026-03-20T21:51:57Z | Subagent completed
+2026-03-20T21:59:16Z | Subagent completed
+2026-03-20T22:01:37Z | Subagent completed
+2026-03-20T22:07:46Z | Subagent completed
+2026-03-20T22:09:50Z | Subagent completed

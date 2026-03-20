@@ -4,6 +4,10 @@
   "draft": false,
   "state": "open",
   "head": {
+	"ref": "feature/xyz",
     "sha": "abc123"
+  },
+  "base": {
+	"ref": "main"
   }
 }

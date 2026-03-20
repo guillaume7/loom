@@ -23,6 +23,9 @@ const (
 	pollWaitEvent      = "poll_waiting"
 	pollDrivenBy       = "poll_observation"
 	pollRecordedReason = "poll_observation_recorded"
+	pollDuplicateEvent = "wake_duplicate_skipped"
+	pollDedupeKind     = "runtime_resume_dedupe"
+	pollDedupeDrivenBy = "resume_deduplication"
 )
 
 var (
@@ -46,26 +49,33 @@ type ciPollSummary struct {
 	FailedChecks  []string `json:"failed_checks,omitempty"`
 }
 
+type branchPollSummary struct {
+	BaseRef string `json:"base_ref,omitempty"`
+	HeadRef string `json:"head_ref,omitempty"`
+	HeadSHA string `json:"head_sha,omitempty"`
+}
+
 func (s ciPollSummary) allGreen() bool {
 	return s.TotalChecks > 0 && s.GreenChecks == s.TotalChecks
 }
 
 type pollObservation struct {
-	SessionID            string        `json:"session_id"`
-	CorrelationID        string        `json:"correlation_id"`
-	WakeKind             string        `json:"wake_kind"`
-	PreviousState        string        `json:"previous_state"`
-	NewState             string        `json:"new_state"`
-	DecisionVerdict      string        `json:"decision_verdict"`
-	ActionEvent          string        `json:"action_event"`
-	Outcome              string        `json:"outcome"`
-	PRNumber             int           `json:"pr_number,omitempty"`
-	RetryCount           int           `json:"retry_count"`
-	ResumeState          string        `json:"resume_state,omitempty"`
-	ReviewStatus         string        `json:"review_status,omitempty"`
-	Draft                *bool         `json:"draft,omitempty"`
-	ForcedReadyForReview bool          `json:"forced_ready_for_review,omitempty"`
-	CI                   ciPollSummary `json:"ci,omitempty"`
+	SessionID            string            `json:"session_id"`
+	CorrelationID        string            `json:"correlation_id"`
+	WakeKind             string            `json:"wake_kind"`
+	PreviousState        string            `json:"previous_state"`
+	NewState             string            `json:"new_state"`
+	DecisionVerdict      string            `json:"decision_verdict"`
+	ActionEvent          string            `json:"action_event"`
+	Outcome              string            `json:"outcome"`
+	PRNumber             int               `json:"pr_number,omitempty"`
+	RetryCount           int               `json:"retry_count"`
+	ResumeState          string            `json:"resume_state,omitempty"`
+	ReviewStatus         string            `json:"review_status,omitempty"`
+	Draft                *bool             `json:"draft,omitempty"`
+	ForcedReadyForReview bool              `json:"forced_ready_for_review,omitempty"`
+	Branch               branchPollSummary `json:"branch,omitempty"`
+	CI                   ciPollSummary     `json:"ci,omitempty"`
 }
 
 type pollEvaluation struct {
@@ -73,6 +83,18 @@ type pollEvaluation struct {
 	next     store.Checkpoint
 	nextWake store.WakeSchedule
 	verdict  string
+}
+
+type duplicateWakeObservation struct {
+	SessionID     string `json:"session_id"`
+	CorrelationID string `json:"correlation_id"`
+	WakeKind      string `json:"wake_kind"`
+	DedupeKey     string `json:"dedupe_key"`
+	OperationKey  string `json:"operation_key"`
+	WorkflowState string `json:"workflow_state"`
+	Reason        string `json:"reason"`
+	ClaimedAt     string `json:"claimed_at,omitempty"`
+	CreatedAt     string `json:"created_at,omitempty"`
 }
 
 func (c *Controller) ProcessDueWake(ctx context.Context, gh PollingClient) (Lifecycle, error) {
@@ -93,12 +115,32 @@ func (c *Controller) ProcessDueWake(ctx context.Context, gh PollingClient) (Life
 		return lifecycle, ErrNoDueWake
 	}
 
+	sessionID := RunIdentifier(cp)
+	wakeDedupeKey := fmt.Sprintf("%s:%s", LeaseKey(cp), lifecycle.NextWakeKind)
+	wake, ok, err := c.readWakeByDedupeKey(ctx, sessionID, wakeDedupeKey)
+	if err != nil {
+		return Lifecycle{}, err
+	}
+	if !ok {
+		return lifecycle, ErrNoDueWake
+	}
+
+	operationKey := pollResumeOperationKey(sessionID, wake)
+	if _, err := c.store.ReadActionByOperationKey(ctx, operationKey); err == nil {
+		return c.recordDuplicateWakeSkip(ctx, wake, operationKey, "wake_already_processed")
+	} else if !errors.Is(err, store.ErrActionNotFound) {
+		return Lifecycle{}, err
+	}
+
 	now := c.cfg.Now().UTC()
-	evaluation, err := c.evaluateDueWake(ctx, cp, gh, now, lifecycle.NextWakeKind)
+	evaluation, err := c.evaluateDueWake(ctx, cp, gh, now, wake)
 	if err != nil {
 		return Lifecycle{}, err
 	}
 	if err := c.writePollEvaluation(ctx, evaluation.record); err != nil {
+		if errors.Is(err, store.ErrDuplicateOperationKey) {
+			return c.recordDuplicateWakeSkip(ctx, wake, operationKey, "duplicate_operation_key")
+		}
 		return Lifecycle{}, err
 	}
 	if evaluation.nextWake.WakeKind != "" {
@@ -119,8 +161,9 @@ func (c *Controller) ProcessDueWake(ctx context.Context, gh PollingClient) (Life
 	return updatedLifecycle, nil
 }
 
-func (c *Controller) evaluateDueWake(ctx context.Context, cp store.Checkpoint, gh PollingClient, now time.Time, wakeKind string) (pollEvaluation, error) {
+func (c *Controller) evaluateDueWake(ctx context.Context, cp store.Checkpoint, gh PollingClient, now time.Time, wake store.WakeSchedule) (pollEvaluation, error) {
 	sessionID := RunIdentifier(cp)
+	wakeKind := wake.WakeKind
 	correlationID := fmt.Sprintf("poll:%s:%s:%d", sessionID, wakeKind, now.UnixNano())
 	observation := pollObservation{
 		SessionID:     sessionID,
@@ -147,6 +190,11 @@ func (c *Controller) evaluateDueWake(ctx context.Context, cp store.Checkpoint, g
 		}
 		draft := pr.Draft
 		observation.Draft = &draft
+		observation.Branch = branchPollSummary{
+			BaseRef: strings.TrimSpace(pr.BaseRef),
+			HeadRef: strings.TrimSpace(pr.HeadRef),
+			HeadSHA: strings.TrimSpace(pr.HeadSHA),
+		}
 		if !pr.Draft {
 			observation.Outcome = "ready_for_review"
 			observation.ActionEvent = string(fsm.EventPRReady)
@@ -184,6 +232,11 @@ func (c *Controller) evaluateDueWake(ctx context.Context, cp store.Checkpoint, g
 		}
 		if pr == nil {
 			return pollEvaluation{}, fmt.Errorf("PR #%d not found", cp.PRNumber)
+		}
+		observation.Branch = branchPollSummary{
+			BaseRef: strings.TrimSpace(pr.BaseRef),
+			HeadRef: strings.TrimSpace(pr.HeadRef),
+			HeadSHA: strings.TrimSpace(pr.HeadSHA),
 		}
 		if strings.TrimSpace(pr.HeadSHA) == "" {
 			return pollEvaluation{}, ErrMissingPollHeadSHA
@@ -232,6 +285,18 @@ func (c *Controller) evaluateDueWake(ctx context.Context, cp store.Checkpoint, g
 		if cp.PRNumber <= 0 {
 			return pollEvaluation{}, ErrMissingPollPRNumber
 		}
+		pr, err := gh.GetPR(ctx, cp.PRNumber)
+		if err != nil {
+			return pollEvaluation{}, err
+		}
+		if pr == nil {
+			return pollEvaluation{}, fmt.Errorf("PR #%d not found", cp.PRNumber)
+		}
+		observation.Branch = branchPollSummary{
+			BaseRef: strings.TrimSpace(pr.BaseRef),
+			HeadRef: strings.TrimSpace(pr.HeadRef),
+			HeadSHA: strings.TrimSpace(pr.HeadSHA),
+		}
 		status, err := gh.GetReviewStatus(ctx, cp.PRNumber)
 		if err != nil {
 			return pollEvaluation{}, err
@@ -269,7 +334,7 @@ func (c *Controller) evaluateDueWake(ctx context.Context, cp store.Checkpoint, g
 		return pollEvaluation{}, err
 	}
 
-	operationKey := fmt.Sprintf("poll_resume:%s:%s:%d", sessionID, wakeKind, now.UnixNano())
+	operationKey := pollResumeOperationKey(sessionID, wake)
 	record := store.RuntimeControlRecord{
 		Checkpoint: nextCheckpoint,
 		Action: store.Action{
@@ -311,6 +376,84 @@ func (c *Controller) evaluateDueWake(ctx context.Context, cp store.Checkpoint, g
 	}
 
 	return pollEvaluation{record: record, next: nextCheckpoint, nextWake: nextWake, verdict: observation.DecisionVerdict}, nil
+}
+
+func pollResumeOperationKey(sessionID string, wake store.WakeSchedule) string {
+	return fmt.Sprintf("poll_resume:%s:%s:%s", sessionID, wake.DedupeKey, wakeWindowKey(wake))
+}
+
+func wakeWindowKey(wake store.WakeSchedule) string {
+	switch {
+	case !wake.CreatedAt.IsZero():
+		return fmt.Sprintf("created:%d", wake.CreatedAt.UTC().UnixNano())
+	case !wake.DueAt.IsZero():
+		return fmt.Sprintf("due:%d", wake.DueAt.UTC().UnixNano())
+	default:
+		return "unknown"
+	}
+}
+
+func (c *Controller) recordDuplicateWakeSkip(ctx context.Context, wake store.WakeSchedule, operationKey string, reason string) (Lifecycle, error) {
+	now := c.cfg.Now().UTC()
+	cp, err := c.store.ReadCheckpoint(ctx)
+	if err != nil {
+		return Lifecycle{}, err
+	}
+
+	sessionID := RunIdentifier(cp)
+	correlationID := fmt.Sprintf("wake_dedupe:%s:%s:%d", sessionID, wake.WakeKind, now.UnixNano())
+	observation := duplicateWakeObservation{
+		SessionID:     sessionID,
+		CorrelationID: correlationID,
+		WakeKind:      wake.WakeKind,
+		DedupeKey:     wake.DedupeKey,
+		OperationKey:  operationKey,
+		WorkflowState: cp.State,
+		Reason:        reason,
+	}
+	if !wake.ClaimedAt.IsZero() {
+		observation.ClaimedAt = wake.ClaimedAt.UTC().Format(time.RFC3339Nano)
+	}
+	if !wake.CreatedAt.IsZero() {
+		observation.CreatedAt = wake.CreatedAt.UTC().Format(time.RFC3339Nano)
+	}
+	payload, err := json.Marshal(observation)
+	if err != nil {
+		return Lifecycle{}, err
+	}
+
+	if err := c.store.WriteExternalEvent(ctx, store.ExternalEvent{
+		SessionID:     sessionID,
+		EventSource:   "runtime",
+		EventKind:     pollDuplicateEvent,
+		CorrelationID: correlationID,
+		Payload:       string(payload),
+		ObservedAt:    now,
+	}); err != nil {
+		return Lifecycle{}, err
+	}
+	if err := c.store.WritePolicyDecision(ctx, store.PolicyDecision{
+		SessionID:     sessionID,
+		CorrelationID: correlationID,
+		DecisionKind:  pollDedupeKind,
+		Verdict:       "skip_duplicate",
+		InputHash:     hashPollInput(payload),
+		Detail:        string(payload),
+		CreatedAt:     now,
+	}); err != nil {
+		return Lifecycle{}, err
+	}
+
+	updatedLifecycle, err := c.snapshotFromCheckpoint(ctx, cp)
+	if err != nil {
+		return Lifecycle{}, err
+	}
+	updatedLifecycle.DrivenBy = pollDedupeDrivenBy
+	updatedLifecycle.Reason = reason
+	if cp.State == string(fsm.StatePaused) {
+		updatedLifecycle.ResumeState = cp.ResumeState
+	}
+	return updatedLifecycle, nil
 }
 
 func (c *Controller) writePollEvaluation(ctx context.Context, record store.RuntimeControlRecord) error {

@@ -15,6 +15,8 @@ type PR struct {
 	Number  int    `json:"number"`
 	Title   string `json:"title"`
 	Draft   bool   `json:"draft"`
+	HeadRef string `json:"-"`
+	BaseRef string `json:"-"`
 	HeadSHA string `json:"-"`
 	State   string `json:"state"`
 }
