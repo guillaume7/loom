@@ -49,7 +49,12 @@ func newStatusCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			wakes, err := readPendingWakeSchedules(context.Background(), st)
+			if err != nil {
+				return err
+			}
 			printControllerLifecycle(cmd.OutOrStdout(), lifecycle)
+			printPendingWakeSchedules(cmd.OutOrStdout(), wakes)
 			return nil
 		},
 	}

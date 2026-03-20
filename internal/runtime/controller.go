@@ -110,6 +110,14 @@ func (c *Controller) Snapshot(ctx context.Context) (Lifecycle, error) {
 	return c.snapshotFromCheckpoint(ctx, cp)
 }
 
+func (c *Controller) PendingWakes(ctx context.Context) ([]store.WakeSchedule, error) {
+	cp, err := c.store.ReadCheckpoint(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return c.store.ReadWakeSchedules(ctx, RunIdentifier(cp), defaultWakeScanLimit)
+}
+
 func (c *Controller) Start(ctx context.Context) (Lifecycle, error) {
 	cp, err := c.store.ReadCheckpoint(ctx)
 	if err != nil {

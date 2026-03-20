@@ -1,7 +1,7 @@
 # Backlog — Core State File
 backlog:
   project: "loom"
-  last-updated: "2026-03-20T22:31:00Z"
+  last-updated: "2026-03-20T23:20:00Z"
   themes:
     # ── TH1: Loom v1 Core ────────────────────────────────────────────
     - id: TH1
@@ -326,12 +326,12 @@ backlog:
               depends-on: [TH3.E1.US3]
         - id: E2
           name: "Wake-Up and Resumption"
-          status: todo
+          status: in-progress
           depends-on: [E1]
           stories:
             - id: TH3.E2.US1
               title: "Wake-up queue and timers"
-              status: todo
+              status: done
               file: docs/themes/TH3-runtime-first-reengineering/epics/E2-wake-up-and-resumption/user-stories/US1-wake-up-queue-and-timers.md
               depends-on: [TH3.E1.US2]
             - id: TH3.E2.US2

@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/guillaume7/loom/internal/fsm"
 	"github.com/guillaume7/loom/internal/mcp"
 	"github.com/guillaume7/loom/internal/store"
+	mcplib "github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -212,4 +214,104 @@ func TestLoomElicitationResponse_PauseEpic_WithStoryID_PausesStoryScopedCheckpoi
 	defaultDecisions, err := st.ReadPolicyDecisions(context.Background(), "default", 10)
 	require.NoError(t, err)
 	assert.Empty(t, defaultDecisions)
+}
+
+func TestLoomGetState_WithStoryID_UsesStoryScopedRuntimeDiagnostics(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.New(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, st.Close()) })
+
+	scopedStore, ok := st.(interface {
+		WriteCheckpointByStoryID(context.Context, string, store.Checkpoint) error
+	})
+	require.True(t, ok)
+
+	require.NoError(t, st.WriteCheckpoint(ctx, store.Checkpoint{State: "AWAITING_REVIEW", Phase: 1}))
+	require.NoError(t, st.UpsertWakeSchedule(ctx, store.WakeSchedule{
+		SessionID: "default",
+		WakeKind:  "poll_review",
+		DueAt:     time.Date(2030, 3, 20, 12, 1, 0, 0, time.UTC),
+		DedupeKey: "run:default:poll_review",
+	}))
+
+	require.NoError(t, scopedStore.WriteCheckpointByStoryID(ctx, "TH3.E2.US1", store.Checkpoint{State: "AWAITING_CI", Phase: 4}))
+	require.NoError(t, st.UpsertWakeSchedule(ctx, store.WakeSchedule{
+		SessionID: "TH3.E2.US1",
+		WakeKind:  "poll_ci",
+		DueAt:     time.Date(2030, 3, 20, 12, 2, 0, 0, time.UTC),
+		DedupeKey: "run:TH3.E2.US1:poll_ci",
+	}))
+
+	server := mcp.NewServer(fsm.NewMachine(fsm.DefaultConfig()), st, nil, mcp.WithStoryID("TH3.E2.US1"))
+	result := callTool(t, server.MCPServer(), "loom_get_state", nil)
+	require.False(t, result.IsError)
+
+	var got mcp.GetStateResult
+	require.NoError(t, json.Unmarshal([]byte(toolText(t, result)), &got))
+	assert.Equal(t, "AWAITING_CI", got.State)
+	assert.Equal(t, 4, got.Phase)
+	assert.Equal(t, "sleeping", got.ControllerState)
+	assert.Equal(t, "poll_ci", got.NextWakeKind)
+	assert.Equal(t, "2030-03-20T12:02:00Z", got.NextWakeAt)
+	require.Len(t, got.PendingWakes, 1)
+	assert.Equal(t, "poll_ci", got.PendingWakes[0].WakeKind)
+	assert.Equal(t, "2030-03-20T12:02:00Z", got.PendingWakes[0].DueAt)
+	assert.Equal(t, "run:TH3.E2.US1:poll_ci", got.PendingWakes[0].DedupeKey)
+}
+
+func TestLoomStateResource_WithStoryID_UsesStoryScopedRuntimeDiagnostics(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.New(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, st.Close()) })
+
+	scopedStore, ok := st.(interface {
+		WriteCheckpointByStoryID(context.Context, string, store.Checkpoint) error
+	})
+	require.True(t, ok)
+
+	require.NoError(t, st.WriteCheckpoint(ctx, store.Checkpoint{State: "AWAITING_REVIEW", Phase: 1}))
+	require.NoError(t, st.UpsertWakeSchedule(ctx, store.WakeSchedule{
+		SessionID: "default",
+		WakeKind:  "poll_review",
+		DueAt:     time.Date(2030, 3, 20, 12, 1, 0, 0, time.UTC),
+		DedupeKey: "run:default:poll_review",
+	}))
+
+	require.NoError(t, scopedStore.WriteCheckpointByStoryID(ctx, "TH3.E2.US1", store.Checkpoint{State: "AWAITING_CI", Phase: 4}))
+	require.NoError(t, st.UpsertWakeSchedule(ctx, store.WakeSchedule{
+		SessionID: "TH3.E2.US1",
+		WakeKind:  "poll_ci",
+		DueAt:     time.Date(2030, 3, 20, 12, 2, 0, 0, time.UTC),
+		DedupeKey: "run:TH3.E2.US1:poll_ci",
+	}))
+
+	server := mcp.NewServer(fsm.NewMachine(fsm.DefaultConfig()), st, nil, mcp.WithStoryID("TH3.E2.US1"))
+	resp := callResourceRead(t, server.MCPServer(), "loom://state")
+	result, ok := resp.Result.(mcplib.ReadResourceResult)
+	require.True(t, ok, "expected ReadResourceResult, got %T", resp.Result)
+	require.Len(t, result.Contents, 1)
+
+	tc, ok := result.Contents[0].(mcplib.TextResourceContents)
+	require.True(t, ok, "expected TextResourceContents, got %T", result.Contents[0])
+
+	var got struct {
+		State           string               `json:"state"`
+		Phase           int                  `json:"phase"`
+		ControllerState string               `json:"controller_state"`
+		NextWakeKind    string               `json:"next_wake_kind"`
+		NextWakeAt      string               `json:"next_wake_at"`
+		PendingWakes    []mcp.WakeDiagnostic `json:"pending_wakes"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(tc.Text), &got))
+	assert.Equal(t, "AWAITING_CI", got.State)
+	assert.Equal(t, 4, got.Phase)
+	assert.Equal(t, "sleeping", got.ControllerState)
+	assert.Equal(t, "poll_ci", got.NextWakeKind)
+	assert.Equal(t, "2030-03-20T12:02:00Z", got.NextWakeAt)
+	require.Len(t, got.PendingWakes, 1)
+	assert.Equal(t, "poll_ci", got.PendingWakes[0].WakeKind)
+	assert.Equal(t, "2030-03-20T12:02:00Z", got.PendingWakes[0].DueAt)
+	assert.Equal(t, "run:TH3.E2.US1:poll_ci", got.PendingWakes[0].DedupeKey)
 }

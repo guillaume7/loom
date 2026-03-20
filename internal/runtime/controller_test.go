@@ -260,6 +260,39 @@ func TestControllerStartSleepsUntilNextPersistedWake(t *testing.T) {
 	assert.Equal(t, now.Add(45*time.Second), wakes[0].DueAt)
 }
 
+func TestControllerPendingWakesReturnsPersistedQueueForCurrentRun(t *testing.T) {
+	now := time.Date(2026, 3, 20, 12, 0, 0, 0, time.UTC)
+	st := newMemStore()
+	require.NoError(t, st.WriteCheckpoint(context.Background(), store.Checkpoint{State: "AWAITING_CI", Phase: 2, StoryID: "TH3.E2.US1"}))
+	require.NoError(t, st.UpsertWakeSchedule(context.Background(), store.WakeSchedule{
+		SessionID: "TH3.E2.US1",
+		WakeKind:  "poll_ci",
+		DueAt:     now.Add(time.Minute),
+		DedupeKey: "run:TH3.E2.US1:poll_ci",
+	}))
+	require.NoError(t, st.UpsertWakeSchedule(context.Background(), store.WakeSchedule{
+		SessionID: "TH3.E2.US1",
+		WakeKind:  "poll_review",
+		DueAt:     now.Add(2 * time.Minute),
+		DedupeKey: "run:TH3.E2.US1:poll_review",
+	}))
+	require.NoError(t, st.UpsertWakeSchedule(context.Background(), store.WakeSchedule{
+		SessionID: "other-story",
+		WakeKind:  "poll_ci",
+		DueAt:     now.Add(3 * time.Minute),
+		DedupeKey: "run:other-story:poll_ci",
+	}))
+
+	controller := loomruntime.NewController(st, loomruntime.Config{Now: func() time.Time { return now }})
+	wakes, err := controller.PendingWakes(context.Background())
+	require.NoError(t, err)
+	require.Len(t, wakes, 2)
+	assert.Equal(t, "poll_ci", wakes[0].WakeKind)
+	assert.Equal(t, "run:TH3.E2.US1:poll_ci", wakes[0].DedupeKey)
+	assert.Equal(t, "poll_review", wakes[1].WakeKind)
+	assert.Equal(t, "run:TH3.E2.US1:poll_review", wakes[1].DedupeKey)
+}
+
 func TestControllerSnapshotExposesActiveControllerProgress(t *testing.T) {
 	now := time.Date(2026, 3, 20, 12, 0, 0, 0, time.UTC)
 	st := newMemStore()

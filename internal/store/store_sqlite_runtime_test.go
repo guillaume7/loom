@@ -57,6 +57,37 @@ func TestSQLiteStore_RuntimeRecordsExtendCheckpointWithoutReplacingIt(t *testing
 	assert.Equal(t, time.Date(2026, 3, 20, 10, 10, 0, 0, time.UTC), lease.ExpiresAt)
 }
 
+func TestSQLiteStore_UpsertWakeScheduleDeduplicatesByKeyAndRefreshesDueTime(t *testing.T) {
+	st := newMemDB(t)
+	ctx := context.Background()
+	createdAt := time.Date(2026, 3, 20, 10, 1, 0, 0, time.UTC)
+	firstDueAt := time.Date(2026, 3, 20, 10, 5, 0, 0, time.UTC)
+	secondDueAt := firstDueAt.Add(2 * time.Minute)
+
+	require.NoError(t, st.UpsertWakeSchedule(ctx, store.WakeSchedule{
+		SessionID: "session-1",
+		WakeKind:  "poll_ci",
+		DueAt:     firstDueAt,
+		DedupeKey: "session-1:ci:42",
+		CreatedAt: createdAt,
+	}))
+	require.NoError(t, st.UpsertWakeSchedule(ctx, store.WakeSchedule{
+		SessionID: "session-1",
+		WakeKind:  "poll_ci",
+		DueAt:     secondDueAt,
+		DedupeKey: "session-1:ci:42",
+		Payload:   `{"attempt":2}`,
+		CreatedAt: createdAt,
+	}))
+
+	wakes, err := st.ReadWakeSchedules(ctx, "session-1", 10)
+	require.NoError(t, err)
+	require.Len(t, wakes, 1)
+	assert.Equal(t, secondDueAt, wakes[0].DueAt)
+	assert.Equal(t, `{"attempt":2}`, wakes[0].Payload)
+	assert.Equal(t, "session-1:ci:42", wakes[0].DedupeKey)
+}
+
 func TestSQLiteStore_ExternalEventsAndPolicyDecisionsPersistForReplay(t *testing.T) {
 	st := newMemDB(t)
 	ctx := context.Background()

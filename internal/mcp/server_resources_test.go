@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/guillaume7/loom/internal/fsm"
 	"github.com/guillaume7/loom/internal/mcp"
@@ -186,6 +187,7 @@ func TestLoomStateResource_ReadReturnsJSON(t *testing.T) {
 	assert.Contains(t, body, "updated_at")
 	assert.Contains(t, body, "unblocked_stories")
 	assert.Contains(t, body, "controller_state")
+	assert.Contains(t, body, "pending_wakes")
 	assert.Contains(t, body, "driven_by")
 
 	assert.Equal(t, "IDLE", body["state"])
@@ -200,6 +202,9 @@ func TestLoomStateResource_ReadReturnsJSON(t *testing.T) {
 	unblockedStories, ok := body["unblocked_stories"].([]interface{})
 	require.True(t, ok, "expected unblocked_stories to be an array, got %T", body["unblocked_stories"])
 	assert.Empty(t, unblockedStories)
+	pendingWakes, ok := body["pending_wakes"].([]interface{})
+	require.True(t, ok, "expected pending_wakes to be an array, got %T", body["pending_wakes"])
+	assert.Empty(t, pendingWakes)
 }
 
 func TestLoomStateResource_UnblockedStoriesBehavior(t *testing.T) {
@@ -329,6 +334,38 @@ func TestLoomStateResource_ReflectsCurrentState(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(afterText.Text), &afterBody))
 	assert.Equal(t, "SCANNING", afterBody.State)
 	assert.Equal(t, 0, afterBody.Phase)
+}
+
+func TestLoomStateResource_IncludesPendingWakes(t *testing.T) {
+	machine := fsm.NewMachine(fsm.DefaultConfig())
+	st := newMemStore()
+	s := mcp.NewServer(machine, st, nil)
+	mcpSvr := s.MCPServer()
+
+	require.NoError(t, st.WriteCheckpoint(context.Background(), store.Checkpoint{State: "AWAITING_CI", Phase: 2}))
+	require.NoError(t, st.UpsertWakeSchedule(context.Background(), store.WakeSchedule{
+		SessionID: "default",
+		WakeKind:  "poll_ci",
+		DueAt:     time.Date(2026, 3, 20, 12, 1, 0, 0, time.UTC),
+		DedupeKey: "run:default:poll_ci",
+	}))
+
+	resp := callResourceRead(t, mcpSvr, "loom://state")
+	result, ok := resp.Result.(mcplib.ReadResourceResult)
+	require.True(t, ok, "expected ReadResourceResult, got %T", resp.Result)
+	require.Len(t, result.Contents, 1)
+
+	tc, ok := result.Contents[0].(mcplib.TextResourceContents)
+	require.True(t, ok, "expected TextResourceContents, got %T", result.Contents[0])
+
+	var body struct {
+		PendingWakes []mcp.WakeDiagnostic `json:"pending_wakes"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(tc.Text), &body))
+	require.Len(t, body.PendingWakes, 1)
+	assert.Equal(t, "poll_ci", body.PendingWakes[0].WakeKind)
+	assert.Equal(t, "2026-03-20T12:01:00Z", body.PendingWakes[0].DueAt)
+	assert.Equal(t, "run:default:poll_ci", body.PendingWakes[0].DedupeKey)
 }
 
 func TestLoomStateResource_RehydratesFromCheckpointAfterOutOfBandChange(t *testing.T) {

@@ -459,6 +459,10 @@ func (s *Server) handleGetState(ctx context.Context, req mcplib.CallToolRequest)
 	if err != nil {
 		return mcplib.NewToolResultError(err.Error()), nil
 	}
+	wakes, err := s.pendingWakes(ctx)
+	if err != nil {
+		return mcplib.NewToolResultError(err.Error()), nil
+	}
 
 	slog.InfoContext(ctx, "tool called", "tool", toolName, "state", string(currentState))
 
@@ -472,6 +476,7 @@ func (s *Server) handleGetState(ctx context.Context, req mcplib.CallToolRequest)
 		LeaseExpiresAt:   formatLifecycleTime(lifecycle.LeaseExpires),
 		NextWakeKind:     lifecycle.NextWakeKind,
 		NextWakeAt:       formatLifecycleTime(lifecycle.NextWakeAt),
+		PendingWakes:     buildWakeDiagnostics(wakes),
 		ResumeState:      lifecycle.ResumeState,
 		DrivenBy:         lifecycle.DrivenBy,
 	}
@@ -670,6 +675,11 @@ func (s *Server) MCPServer() *mcpserver.MCPServer {
 				return nil, err
 			}
 
+			wakes, err := s.pendingWakes(ctx)
+			if err != nil {
+				return nil, err
+			}
+
 			unblockedStories := []string{}
 			graph, depErr := depgraph.Load(".loom/dependencies.yaml")
 			if depErr == nil {
@@ -698,6 +708,7 @@ func (s *Server) MCPServer() *mcpserver.MCPServer {
 				LeaseExpiresAt   string   `json:"lease_expires_at,omitempty"`
 				NextWakeKind     string   `json:"next_wake_kind,omitempty"`
 				NextWakeAt       string   `json:"next_wake_at,omitempty"`
+				PendingWakes     []WakeDiagnostic `json:"pending_wakes"`
 				ResumeState      string   `json:"resume_state,omitempty"`
 				DrivenBy         string   `json:"driven_by,omitempty"`
 			}{
@@ -715,6 +726,7 @@ func (s *Server) MCPServer() *mcpserver.MCPServer {
 				LeaseExpiresAt:   formatLifecycleTime(lifecycle.LeaseExpires),
 				NextWakeKind:     lifecycle.NextWakeKind,
 				NextWakeAt:       formatLifecycleTime(lifecycle.NextWakeAt),
+				PendingWakes:     buildWakeDiagnostics(wakes),
 				ResumeState:      lifecycle.ResumeState,
 				DrivenBy:         lifecycle.DrivenBy,
 			}

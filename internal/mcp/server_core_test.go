@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/guillaume7/loom/internal/fsm"
 	"github.com/guillaume7/loom/internal/mcp"
@@ -167,6 +168,29 @@ func TestLoomGetState_RehydratesFromCheckpointAfterOutOfBandChange(t *testing.T)
 	assert.Equal(t, 4, got.Phase)
 	assert.Equal(t, "resuming", got.ControllerState)
 	assert.Equal(t, "persisted_runtime_state", got.DrivenBy)
+}
+
+func TestLoomGetState_IncludesPendingWakes(t *testing.T) {
+	st := newMemStore()
+	s := mcp.NewServer(fsm.NewMachine(fsm.DefaultConfig()), st, nil)
+	mcpSvr := s.MCPServer()
+	require.NoError(t, st.WriteCheckpoint(context.Background(), store.Checkpoint{State: "AWAITING_CI", Phase: 4}))
+	require.NoError(t, st.UpsertWakeSchedule(context.Background(), store.WakeSchedule{
+		SessionID: "default",
+		WakeKind:  "poll_ci",
+		DueAt:     time.Date(2026, 3, 20, 12, 1, 0, 0, time.UTC),
+		DedupeKey: "run:default:poll_ci",
+	}))
+
+	result := callTool(t, mcpSvr, "loom_get_state", nil)
+	assert.False(t, result.IsError)
+
+	var got mcp.GetStateResult
+	require.NoError(t, json.Unmarshal([]byte(toolText(t, result)), &got))
+	require.Len(t, got.PendingWakes, 1)
+	assert.Equal(t, "poll_ci", got.PendingWakes[0].WakeKind)
+	assert.Equal(t, "2026-03-20T12:01:00Z", got.PendingWakes[0].DueAt)
+	assert.Equal(t, "run:default:poll_ci", got.PendingWakes[0].DedupeKey)
 }
 
 func TestLoomCheckpoint_ValidAction_AdvancesState(t *testing.T) {

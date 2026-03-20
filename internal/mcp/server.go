@@ -217,6 +217,7 @@ type GetStateResult struct {
 	LeaseExpiresAt    string `json:"lease_expires_at,omitempty"`
 	NextWakeKind      string `json:"next_wake_kind,omitempty"`
 	NextWakeAt        string `json:"next_wake_at,omitempty"`
+	PendingWakes      []WakeDiagnostic `json:"pending_wakes"`
 	ResumeState       string `json:"resume_state,omitempty"`
 	DrivenBy          string `json:"driven_by,omitempty"`
 }

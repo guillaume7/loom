@@ -374,6 +374,22 @@
 ### 2026-03-20T22:31:00Z
 - status-change: TH3.E1 -> done
 - Context: Completed large-epic closeout for Runtime Kernel Foundation after final integration verification and quality review; reconciled authoritative backlog state so all E1 stories are done and the epic is closed.
+
+### 2026-03-20T22:35:00Z
+- status-change: TH3.E2.US1 -> in-progress
+- Context: Selected the next eligible P0 story after TH3.E1 closure; starting wake-up queue and timers to make waiting states durable without session heartbeats.
+
+### 2026-03-20T23:05:00Z
+- status-change: TH3.E2.US1 -> done
+- Context: Exposed the persisted wake queue through runtime diagnostics in CLI and MCP state views, added controller-level pending wake inspection, and verified deduplicated wake persistence plus timer-driven reassessment with focused and full-suite tests.
+
+### 2026-03-20T23:06:00Z
+- status-change: TH3.E2.US1 -> in-progress
+- Context: Reviewer requested changes because story-scoped MCP state inspection still used the default runtime store for controller and pending-wake diagnostics, so `loom_get_state` and `loom://state` could show the wrong wake queue in scoped runs.
+
+### 2026-03-20T23:20:00Z
+- status-change: TH3.E2.US1 -> done
+- Context: Routed MCP runtime-state diagnostics through the story-scoped runtime store so `loom_get_state` and `loom://state` inspect the scoped checkpoint and wake queue consistently, and added SQLite-backed regressions covering scoped pending-wake inspection.
 2026-03-20T20:03:32Z | Subagent completed
 2026-03-20T20:05:09Z | Subagent completed
 2026-03-20T20:11:40Z | Subagent completed
@@ -391,3 +407,7 @@
 2026-03-20T20:45:56Z | Subagent completed
 2026-03-20T20:48:26Z | Subagent completed
 2026-03-20T20:50:20Z | Subagent completed
+2026-03-20T20:55:44Z | Subagent completed
+2026-03-20T20:58:13Z | Subagent completed
+2026-03-20T21:01:51Z | Subagent completed
+2026-03-20T21:03:26Z | Subagent completed

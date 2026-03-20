@@ -283,6 +283,43 @@ func TestStatusCmd_WithActiveCheckpoint_PrintsStateAndPhase(t *testing.T) {
 	assert.Contains(t, out, "Controller:")
 }
 
+func TestStatusCmd_PrintsPendingWakes(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := dir + "/state.db"
+	t.Setenv("LOOM_DB_PATH", dbPath)
+
+	st, err := store.New(dbPath)
+	require.NoError(t, err)
+	require.NoError(t, st.WriteCheckpoint(context.Background(), store.Checkpoint{
+		State: "AWAITING_CI",
+		Phase: 2,
+	}))
+	require.NoError(t, st.UpsertWakeSchedule(context.Background(), store.WakeSchedule{
+		SessionID: "default",
+		WakeKind:  "poll_ci",
+		DueAt:     time.Date(2026, 3, 20, 12, 1, 0, 0, time.UTC),
+		DedupeKey: "run:default:poll_ci",
+	}))
+	require.NoError(t, st.UpsertWakeSchedule(context.Background(), store.WakeSchedule{
+		SessionID: "default",
+		WakeKind:  "poll_review",
+		DueAt:     time.Date(2026, 3, 20, 12, 2, 0, 0, time.UTC),
+		DedupeKey: "run:default:poll_review",
+	}))
+	require.NoError(t, st.Close())
+
+	var buf bytes.Buffer
+	cmd := newRootCmd()
+	cmd.SetOut(&buf)
+	cmd.SetArgs([]string{"status"})
+	require.NoError(t, cmd.Execute())
+
+	out := buf.String()
+	assert.Contains(t, out, "Pending Wakes:")
+	assert.Contains(t, out, "poll_ci at 2026-03-20T12:01:00Z (run:default:poll_ci)")
+	assert.Contains(t, out, "poll_review at 2026-03-20T12:02:00Z (run:default:poll_review)")
+}
+
 func TestResumeCmd_WithPausedCheckpoint_PrintsResuming(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := dir + "/state.db"
