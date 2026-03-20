@@ -427,7 +427,23 @@
 ### 2026-03-20T21:17:09Z
 - status-change: TH3.E2.US2 -> done
 - Context: Reworked poll-driven resumptions to keep the poll path observation-only, pause unsupported retry-exhaustion cases instead of performing GitHub mutations before durable writes, tighten wake scheduling to supported poll states, and add regression coverage for CI green, CI red, review outcomes, retry exhaustion, unsupported wake states, and persistence-write failure.
+
+### 2026-03-20T23:24:00Z
+- status-change: TH3.E2.US3 -> in-progress
+- Context: Selected the next in-order E2 story after TH3.E2.US2 approval and commit; starting GitHub event adapters so external signals can enqueue resumptions without bypassing checkpoint truth.
+
+### 2026-03-20T23:45:00Z
+- status-change: TH3.E2.US3 -> done
+- Context: Added a runtime GitHub event adapter ingress that records raw event observations, maps relevant GitHub signals onto the existing deduplicated wake queue without mutating checkpoint state, and keeps poll-driven resumptions as the fallback path; focused runtime tests passed.
+
+### 2026-03-20T23:46:00Z
+- status-change: TH3.E2.US3 -> in-progress
+- Context: Reviewer requested changes because a matching GitHub event can overwrite an already-claimed wake and make it visible again before checkpoint state advances, which risks duplicate resumptions and is not covered by the current event-adapter tests.
 2026-03-20T21:11:16Z | Subagent completed
 2026-03-20T21:13:41Z | Subagent completed
 2026-03-20T21:18:12Z | Subagent completed
 2026-03-20T21:20:15Z | Subagent completed
+2026-03-20T21:24:43Z | Subagent completed
+2026-03-20T21:26:44Z | Subagent completed
+2026-03-20T21:30:58Z | Subagent completed
+2026-03-20T21:32:57Z | Subagent completed
