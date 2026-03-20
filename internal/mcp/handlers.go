@@ -454,12 +454,25 @@ func (s *Server) handleGetState(ctx context.Context, req mcplib.CallToolRequest)
 	if syncErr != nil {
 		return mcplib.NewToolResultError(syncErr.Error()), nil
 	}
+	lifecycle, err := s.controllerLifecycle(ctx)
+	if err != nil {
+		return mcplib.NewToolResultError(err.Error()), nil
+	}
 
 	slog.InfoContext(ctx, "tool called", "tool", toolName, "state", string(currentState))
 
 	result := GetStateResult{
-		State: string(currentState),
-		Phase: cp.Phase,
+		State:            string(currentState),
+		Phase:            cp.Phase,
+		ControllerState:  lifecycle.Controller,
+		ControllerReason: lifecycle.Reason,
+		ControllerHolder: lifecycle.HolderID,
+		ControllerLease:  lifecycle.LeaseKey,
+		LeaseExpiresAt:   formatLifecycleTime(lifecycle.LeaseExpires),
+		NextWakeKind:     lifecycle.NextWakeKind,
+		NextWakeAt:       formatLifecycleTime(lifecycle.NextWakeAt),
+		ResumeState:      lifecycle.ResumeState,
+		DrivenBy:         lifecycle.DrivenBy,
 	}
 
 	slog.InfoContext(ctx, "tool completed", "tool", toolName, "state", string(currentState), "duration_ms", time.Since(start).Milliseconds())
@@ -650,12 +663,16 @@ func (s *Server) MCPServer() *mcpserver.MCPServer {
 			Description: "Current FSM state and phase as JSON",
 			MIMEType:    "application/json",
 		},
-		func(_ context.Context, _ mcplib.ReadResourceRequest) ([]mcplib.ResourceContents, error) {
-			s.mu.RLock()
-			currentState := s.machine.State()
-			s.mu.RUnlock()
+		func(ctx context.Context, _ mcplib.ReadResourceRequest) ([]mcplib.ResourceContents, error) {
+			cp, currentState, err := s.syncMachineToCheckpoint(ctx, "loom://state")
+			if err != nil {
+				return nil, err
+			}
 
-			cp := s.readCheckpoint(context.Background(), "loom://state")
+			lifecycle, err := s.controllerLifecycle(ctx)
+			if err != nil {
+				return nil, err
+			}
 
 			unblockedStories := []string{}
 			graph, depErr := depgraph.Load(".loom/dependencies.yaml")
@@ -678,6 +695,15 @@ func (s *Server) MCPServer() *mcpserver.MCPServer {
 				RetryCount       int      `json:"retry_count"`
 				UpdatedAt        string   `json:"updated_at"`
 				UnblockedStories []string `json:"unblocked_stories"`
+				ControllerState  string   `json:"controller_state,omitempty"`
+				ControllerReason string   `json:"controller_reason,omitempty"`
+				ControllerHolder string   `json:"controller_holder,omitempty"`
+				ControllerLease  string   `json:"controller_lease,omitempty"`
+				LeaseExpiresAt   string   `json:"lease_expires_at,omitempty"`
+				NextWakeKind     string   `json:"next_wake_kind,omitempty"`
+				NextWakeAt       string   `json:"next_wake_at,omitempty"`
+				ResumeState      string   `json:"resume_state,omitempty"`
+				DrivenBy         string   `json:"driven_by,omitempty"`
 			}{
 				State:            string(currentState),
 				Phase:            cp.Phase,
@@ -686,6 +712,15 @@ func (s *Server) MCPServer() *mcpserver.MCPServer {
 				RetryCount:       cp.RetryCount,
 				UpdatedAt:        updatedAt,
 				UnblockedStories: unblockedStories,
+				ControllerState:  lifecycle.Controller,
+				ControllerReason: lifecycle.Reason,
+				ControllerHolder: lifecycle.HolderID,
+				ControllerLease:  lifecycle.LeaseKey,
+				LeaseExpiresAt:   formatLifecycleTime(lifecycle.LeaseExpires),
+				NextWakeKind:     lifecycle.NextWakeKind,
+				NextWakeAt:       formatLifecycleTime(lifecycle.NextWakeAt),
+				ResumeState:      lifecycle.ResumeState,
+				DrivenBy:         lifecycle.DrivenBy,
 			}
 
 			payload, marshalErr := marshalResultText(result)

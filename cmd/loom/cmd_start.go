@@ -17,6 +17,7 @@ import (
 	"github.com/guillaume7/loom/internal/config"
 	"github.com/guillaume7/loom/internal/fsm"
 	loomgh "github.com/guillaume7/loom/internal/github"
+	loomruntime "github.com/guillaume7/loom/internal/runtime"
 	"github.com/guillaume7/loom/internal/store"
 	"github.com/spf13/cobra"
 )
@@ -72,6 +73,15 @@ func newStartCmd() *cobra.Command {
 				return err
 			}
 
+			controller := loomruntime.NewController(st, loomruntime.DefaultConfig())
+			if cp.State != string(fsm.StatePaused) {
+				lifecycle, err := controller.Start(ctx)
+				if err != nil {
+					return err
+				}
+				printControllerLifecycle(cmd.OutOrStdout(), lifecycle)
+			}
+
 			machine := fsm.NewMachine(fsm.DefaultConfig())
 			if err := machine.Hydrate(fsm.State(cp.State)); err != nil {
 				return err
@@ -94,6 +104,9 @@ func newStartCmd() *cobra.Command {
 				RetryCount:  cp.RetryCount,
 			}); err != nil {
 				slog.Error("failed to write PAUSED checkpoint on shutdown", "error", err)
+			}
+			if _, err := controller.Shutdown(context.Background()); err != nil {
+				slog.Error("failed to expire controller lease on shutdown", "error", err)
 			}
 			// TODO: drive the FSM action loop using machine.
 			_ = machine

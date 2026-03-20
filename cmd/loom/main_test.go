@@ -265,6 +265,7 @@ func TestStatusCmd_WithActiveCheckpoint_PrintsStateAndPhase(t *testing.T) {
 	out := buf.String()
 	assert.Contains(t, out, "SCANNING")
 	assert.Contains(t, out, "2")
+	assert.Contains(t, out, "Controller:")
 }
 
 func TestResumeCmd_WithPausedCheckpoint_PrintsResuming(t *testing.T) {
@@ -288,6 +289,7 @@ func TestResumeCmd_WithPausedCheckpoint_PrintsResuming(t *testing.T) {
 	cmd.SetArgs([]string{"resume"})
 	require.NoError(t, cmd.Execute())
 	assert.Contains(t, buf.String(), "Resuming from AWAITING_READY")
+	assert.Contains(t, buf.String(), "Controller:")
 
 	st, err = store.New(dbPath)
 	require.NoError(t, err)
@@ -326,6 +328,7 @@ func TestResumeCmd_InfersResumeStateFromLastAction(t *testing.T) {
 	cmd.SetArgs([]string{"resume"})
 	require.NoError(t, cmd.Execute())
 	assert.Contains(t, buf.String(), "Resuming from AWAITING_READY")
+	assert.Contains(t, buf.String(), "Controller:")
 
 	st, err = store.New(dbPath)
 	require.NoError(t, err)
@@ -370,6 +373,7 @@ func TestResumeCmd_SkipsPausedSelfLoopAndUsesEarlierAction(t *testing.T) {
 	cmd.SetArgs([]string{"resume"})
 	require.NoError(t, cmd.Execute())
 	assert.Contains(t, buf.String(), "Resuming from AWAITING_READY")
+	assert.Contains(t, buf.String(), "Controller:")
 
 	st, err = store.New(dbPath)
 	require.NoError(t, err)
@@ -409,6 +413,7 @@ func TestResumeCmd_IgnoresPausedResumeStateAndFallsBackToHistory(t *testing.T) {
 	cmd.SetArgs([]string{"resume"})
 	require.NoError(t, cmd.Execute())
 	assert.Contains(t, buf.String(), "Resuming from AWAITING_READY")
+	assert.Contains(t, buf.String(), "Controller:")
 
 	st, err = store.New(dbPath)
 	require.NoError(t, err)

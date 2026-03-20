@@ -8,6 +8,7 @@ import (
 
 	"github.com/guillaume7/loom/internal/config"
 	"github.com/guillaume7/loom/internal/fsm"
+	loomruntime "github.com/guillaume7/loom/internal/runtime"
 	"github.com/guillaume7/loom/internal/store"
 	"github.com/spf13/cobra"
 )
@@ -54,7 +55,13 @@ func newResumeCmd() *cobra.Command {
 				return err
 			}
 
+			lifecycle, err := loomruntime.NewController(st, loomruntime.DefaultConfig()).Start(context.Background())
+			if err != nil {
+				return err
+			}
+
 			fmt.Fprintf(cmd.OutOrStdout(), "Resuming from %s\n", resumeState)
+			printControllerLifecycle(cmd.OutOrStdout(), lifecycle)
 			return nil
 		},
 	}

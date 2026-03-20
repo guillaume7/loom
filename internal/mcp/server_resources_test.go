@@ -185,6 +185,8 @@ func TestLoomStateResource_ReadReturnsJSON(t *testing.T) {
 	assert.Contains(t, body, "retry_count")
 	assert.Contains(t, body, "updated_at")
 	assert.Contains(t, body, "unblocked_stories")
+	assert.Contains(t, body, "controller_state")
+	assert.Contains(t, body, "driven_by")
 
 	assert.Equal(t, "IDLE", body["state"])
 	assert.Equal(t, float64(0), body["phase"])
@@ -192,6 +194,8 @@ func TestLoomStateResource_ReadReturnsJSON(t *testing.T) {
 	assert.Equal(t, float64(0), body["issue_number"])
 	assert.Equal(t, float64(0), body["retry_count"])
 	assert.Equal(t, "", body["updated_at"])
+	assert.Equal(t, "idle", body["controller_state"])
+	assert.Equal(t, "persisted_runtime_state", body["driven_by"])
 
 	unblockedStories, ok := body["unblocked_stories"].([]interface{})
 	require.True(t, ok, "expected unblocked_stories to be an array, got %T", body["unblocked_stories"])
@@ -325,6 +329,38 @@ func TestLoomStateResource_ReflectsCurrentState(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(afterText.Text), &afterBody))
 	assert.Equal(t, "SCANNING", afterBody.State)
 	assert.Equal(t, 0, afterBody.Phase)
+}
+
+func TestLoomStateResource_RehydratesFromCheckpointAfterOutOfBandChange(t *testing.T) {
+	machine := fsm.NewMachine(fsm.DefaultConfig())
+	st := newMemStore()
+	s := mcp.NewServer(machine, st, nil)
+	mcpSvr := s.MCPServer()
+
+	require.NoError(t, st.WriteCheckpoint(context.Background(), store.Checkpoint{
+		State: "AWAITING_READY",
+		Phase: 4,
+	}))
+
+	resp := callResourceRead(t, mcpSvr, "loom://state")
+	result, ok := resp.Result.(mcplib.ReadResourceResult)
+	require.True(t, ok, "expected ReadResourceResult, got %T", resp.Result)
+	require.Len(t, result.Contents, 1)
+
+	tc, ok := result.Contents[0].(mcplib.TextResourceContents)
+	require.True(t, ok, "expected TextResourceContents, got %T", result.Contents[0])
+
+	var body struct {
+		State           string `json:"state"`
+		Phase           int    `json:"phase"`
+		ControllerState string `json:"controller_state"`
+		DrivenBy        string `json:"driven_by"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(tc.Text), &body))
+	assert.Equal(t, "AWAITING_READY", body.State)
+	assert.Equal(t, 4, body.Phase)
+	assert.Equal(t, "resuming", body.ControllerState)
+	assert.Equal(t, "persisted_runtime_state", body.DrivenBy)
 }
 
 // --------------------------------------------------------------------------

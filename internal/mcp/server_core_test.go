@@ -165,6 +165,8 @@ func TestLoomGetState_RehydratesFromCheckpointAfterOutOfBandChange(t *testing.T)
 	require.NoError(t, json.Unmarshal([]byte(toolText(t, result)), &got))
 	assert.Equal(t, "AWAITING_READY", got.State)
 	assert.Equal(t, 4, got.Phase)
+	assert.Equal(t, "resuming", got.ControllerState)
+	assert.Equal(t, "persisted_runtime_state", got.DrivenBy)
 }
 
 func TestLoomCheckpoint_ValidAction_AdvancesState(t *testing.T) {

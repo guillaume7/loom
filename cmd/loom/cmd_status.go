@@ -45,6 +45,11 @@ func newStatusCmd() *cobra.Command {
 			if cp.State == string(storePausedState()) && cp.ResumeState != "" {
 				fmt.Fprintf(cmd.OutOrStdout(), "Resume State: %s\n", cp.ResumeState)
 			}
+			lifecycle, err := readControllerLifecycle(context.Background(), st)
+			if err != nil {
+				return err
+			}
+			printControllerLifecycle(cmd.OutOrStdout(), lifecycle)
 			return nil
 		},
 	}

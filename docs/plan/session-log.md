@@ -311,4 +311,24 @@
 - status-change: TH3.E1.US2 -> done
 - Context: Added additive SQLite runtime-record persistence for wake schedules, external events, runtime leases, and policy decisions; verified checkpoint truth remains authoritative and the full Go test suite passes.
 2026-03-20T19:49:32Z | Subagent completed
+
+### 2026-03-20T19:52:01Z
+- status-change: TH3.E1.US3 -> in-progress
+- Context: Selected the next eligible TH3 story after TH3.E1.US2 approval and commit; starting the background controller lifecycle work.
 2026-03-20T19:51:31Z | Subagent completed
+
+### 2026-03-20T19:57:41Z
+- status-change: TH3.E1.US3 -> done
+- Context: Added a persisted controller lifecycle model with lease claiming, wake/sleep scheduling, CLI and MCP controller-state inspection, and verification through the full Go test suite.
+2026-03-20T19:58:17Z | Subagent completed
+
+### 2026-03-20T20:00:35Z
+- status-change: TH3.E1.US3 -> in-progress
+- Context: Reviewer requested changes because claimed due wakes became unrecoverable after controller crash and loom://state could return stale workflow state after out-of-band checkpoint changes.
+2026-03-20T20:00:25Z | Subagent completed
+
+### 2026-03-20T20:20:00Z
+- status-change: TH3.E1.US3 -> done
+- Context: Reworked wake-claim recovery so expired leases do not hide due wakes permanently, made loom://state rehydrate from persisted checkpoint before rendering, and added regression tests for both reviewer-blocking failure modes.
+2026-03-20T20:03:32Z | Subagent completed
+2026-03-20T20:05:09Z | Subagent completed
