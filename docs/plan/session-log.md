@@ -439,6 +439,22 @@
 ### 2026-03-20T23:46:00Z
 - status-change: TH3.E2.US3 -> in-progress
 - Context: Reviewer requested changes because a matching GitHub event can overwrite an already-claimed wake and make it visible again before checkpoint state advances, which risks duplicate resumptions and is not covered by the current event-adapter tests.
+
+### 2026-03-21T00:00:00Z
+- status-change: TH3.E2.US4 -> in-progress
+- Context: Selected the final E2 story after TH3.E2.US3 approval and commit; starting resume deduplication to suppress duplicate wake handling across polling and event-driven resumptions.
+
+### 2026-03-21T00:30:00Z
+- status-change: TH3.E2.US4 -> done
+- Context: Added stable wake-window resume deduplication on the existing runtime due-wake path, suppressing already-processed or concurrently duplicated resumes via action-log idempotency, and recording duplicate-skip reasons in runtime audit records with focused runtime tests.
+
+### 2026-03-21T00:45:00Z
+- status-change: TH3.E2.US4 -> in-progress
+- Context: Reviewer requested changes because the authoritative backlog state regressed during the story update and the regression suite still lacks the cross-path case where a GitHub event refreshes an already-claimed wake before the due-wake processor deduplicates that same wake window.
+
+### 2026-03-21T01:05:00Z
+- status-change: TH3.E2.US4 -> done
+- Context: Added the missing cross-path regression proving a GitHub event can refresh an already-claimed wake without reopening the resume window, and fixed wake refresh persistence to preserve the existing wake identity so due-wake deduplication skips duplicate resumes with an auditable reason.
 2026-03-20T21:11:16Z | Subagent completed
 2026-03-20T21:13:41Z | Subagent completed
 2026-03-20T21:18:12Z | Subagent completed
@@ -447,3 +463,7 @@
 2026-03-20T21:26:44Z | Subagent completed
 2026-03-20T21:30:58Z | Subagent completed
 2026-03-20T21:32:57Z | Subagent completed
+2026-03-20T21:38:26Z | Subagent completed
+2026-03-20T21:40:27Z | Subagent completed
+2026-03-20T21:46:10Z | Subagent completed
+2026-03-20T21:47:41Z | Subagent completed

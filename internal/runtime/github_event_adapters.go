@@ -162,6 +162,7 @@ func (c *Controller) ObserveGitHubEvent(ctx context.Context, event GitHubEvent) 
 	if existingWake, ok, err := c.readWakeByDedupeKey(ctx, sessionID, wake.DedupeKey); err != nil {
 		return receipt, err
 	} else if ok {
+		wake.ID = existingWake.ID
 		wake.ClaimedAt = existingWake.ClaimedAt
 		wake.CreatedAt = existingWake.CreatedAt
 	}

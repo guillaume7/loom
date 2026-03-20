@@ -1,7 +1,7 @@
 # Backlog — Core State File
 backlog:
   project: "loom"
-  last-updated: "2026-03-20T23:46:00Z"
+  last-updated: "2026-03-21T01:05:00Z"
   themes:
     # ── TH1: Loom v1 Core ────────────────────────────────────────────
     - id: TH1
@@ -341,12 +341,12 @@ backlog:
               depends-on: [TH3.E2.US1]
             - id: TH3.E2.US3
               title: "GitHub event adapters"
-              status: in-progress
+              status: done
               file: docs/themes/TH3-runtime-first-reengineering/epics/E2-wake-up-and-resumption/user-stories/US3-github-event-adapters.md
               depends-on: [TH3.E2.US1]
             - id: TH3.E2.US4
               title: "Resume deduplication"
-              status: todo
+              status: done
               file: docs/themes/TH3-runtime-first-reengineering/epics/E2-wake-up-and-resumption/user-stories/US4-resume-deduplication.md
               depends-on: [TH3.E2.US2, TH3.E2.US3]
         - id: E3
