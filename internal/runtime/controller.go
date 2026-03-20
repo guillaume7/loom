@@ -11,20 +11,20 @@ import (
 )
 
 const (
-	ControllerStateIdle      = "idle"
-	ControllerStateStarting  = "starting"
-	ControllerStateClaimed   = "claimed"
-	ControllerStateSleeping  = "sleeping"
-	ControllerStateWakeDue   = "wake_due"
-	ControllerStateResuming  = "resuming"
-	ControllerStatePaused    = "paused"
-	ControllerStateComplete  = "complete"
-	ControllerStateShutdown  = "shutdown"
-	controllerLeaseScopeRun  = "run"
-	defaultRunIdentifier     = "default"
-	defaultWakeScanLimit     = 100
-	DefaultLeaseTTL          = 2 * time.Minute
-	DefaultPollInterval      = 30 * time.Second
+	ControllerStateIdle     = "idle"
+	ControllerStateStarting = "starting"
+	ControllerStateClaimed  = "claimed"
+	ControllerStateSleeping = "sleeping"
+	ControllerStateWakeDue  = "wake_due"
+	ControllerStateResuming = "resuming"
+	ControllerStatePaused   = "paused"
+	ControllerStateComplete = "complete"
+	ControllerStateShutdown = "shutdown"
+	controllerLeaseScopeRun = "run"
+	defaultRunIdentifier    = "default"
+	defaultWakeScanLimit    = 100
+	DefaultLeaseTTL         = 2 * time.Minute
+	DefaultPollInterval     = 30 * time.Second
 )
 
 type Clock func() time.Time
@@ -313,12 +313,20 @@ func (c *Controller) readWakeState(ctx context.Context, cp store.Checkpoint, now
 }
 
 func (c *Controller) nextWake(ctx context.Context, cp store.Checkpoint, now time.Time, leaseActive bool) (store.WakeSchedule, error) {
+	expectedWakeKind := inferWakeKind(cp.State)
+	if expectedWakeKind == "" {
+		return store.WakeSchedule{}, nil
+	}
+
 	wakes, err := c.store.ReadWakeSchedules(ctx, RunIdentifier(cp), defaultWakeScanLimit)
 	if err != nil {
 		return store.WakeSchedule{}, err
 	}
 	var next store.WakeSchedule
 	for _, wake := range wakes {
+		if wake.WakeKind != expectedWakeKind {
+			continue
+		}
 		if !c.isWakeVisible(wake, now, leaseActive) {
 			continue
 		}
@@ -371,12 +379,6 @@ func inferWakeKind(state string) string {
 		return "poll_ci"
 	case fsm.StateReviewing:
 		return "poll_review"
-	case fsm.StateDebugging:
-		return "poll_fix"
-	case fsm.StateAddressingFeedback:
-		return "poll_feedback"
-	case fsm.StateRefactoring:
-		return "poll_refactor"
 	default:
 		return ""
 	}

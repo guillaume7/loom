@@ -223,6 +223,10 @@
 - story: TH3.E1.US4
 - Context: Fixed the reviewer-found MCP manual-override regression so story-scoped `loom_abort` and `pause_epic` writes stay on the scoped checkpoint while preserving audited runtime-control records; added scoped MCP regression coverage.
 
+### 2026-03-20T23:21:00Z
+- status-change: TH3.E2.US2 -> in-progress
+- Context: Selected the next in-order E2 story after TH3.E2.US1 approval and commit; starting poll-driven resumptions so waiting gates can resume from persisted state without prompt-history replay.
+
 ### 2026-03-19T19:29:41Z
 - status-change: TH2 -> in-progress
 - status-change: TH2.E9 -> todo
@@ -411,3 +415,19 @@
 2026-03-20T20:58:13Z | Subagent completed
 2026-03-20T21:01:51Z | Subagent completed
 2026-03-20T21:03:26Z | Subagent completed
+
+### 2026-03-20T21:10:05Z
+- status-change: TH3.E2.US2 -> done
+- Context: Poll-driven resumptions implemented in the runtime controller with persisted poll observations, policy decisions, and resume-from-checkpoint behavior; focused and full Go test suites passed.
+
+### 2026-03-20T23:22:00Z
+- status-change: TH3.E2.US2 -> in-progress
+- Context: Reviewer requested changes because poll-driven resumptions perform GitHub side effects before durable persistence, which can replay external mutations after a store failure, and regression coverage is missing for that failure mode and other poll outcome branches.
+
+### 2026-03-20T21:17:09Z
+- status-change: TH3.E2.US2 -> done
+- Context: Reworked poll-driven resumptions to keep the poll path observation-only, pause unsupported retry-exhaustion cases instead of performing GitHub mutations before durable writes, tighten wake scheduling to supported poll states, and add regression coverage for CI green, CI red, review outcomes, retry exhaustion, unsupported wake states, and persistence-write failure.
+2026-03-20T21:11:16Z | Subagent completed
+2026-03-20T21:13:41Z | Subagent completed
+2026-03-20T21:18:12Z | Subagent completed
+2026-03-20T21:20:15Z | Subagent completed
