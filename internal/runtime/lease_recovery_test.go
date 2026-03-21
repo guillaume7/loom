@@ -163,3 +163,93 @@ func TestRecoverExpiredLease_CommittedActionsReturnedToAvoidReplay(t *testing.T)
 	require.Len(t, result.CommittedActions, 1)
 	assert.Equal(t, "op:create-pr:story-4", result.CommittedActions[0].OperationKey)
 }
+
+func TestRecoverExpiredLease_ExcludesCommittedActionsFromOtherSessions(t *testing.T) {
+	now := time.Date(2025, 1, 1, 12, 30, 0, 0, time.UTC)
+	expiredAt := now.Add(-5 * time.Minute)
+
+	st := newMemStore()
+	require.NoError(t, st.WriteCheckpoint(context.Background(), store.Checkpoint{
+		StoryID: "story-5",
+		State:   "open",
+	}))
+	require.NoError(t, st.WriteAction(context.Background(), store.Action{
+		SessionID:    "story-5",
+		OperationKey: "op:story-5",
+		StateBefore:  "open",
+		StateAfter:   "pr_open",
+		Event:        "create_pr",
+		CreatedAt:    expiredAt.Add(-time.Minute),
+	}))
+	require.NoError(t, st.WriteAction(context.Background(), store.Action{
+		SessionID:    "other-story",
+		OperationKey: "op:other-story",
+		StateBefore:  "open",
+		StateAfter:   "pr_open",
+		Event:        "create_pr",
+		CreatedAt:    expiredAt.Add(-30 * time.Second),
+	}))
+
+	leaseKey := "run:story-5"
+	require.NoError(t, st.UpsertRuntimeLease(context.Background(), expiredLease(leaseKey, "controller-1", expiredAt)))
+
+	ctrl := loomruntime.NewController(st, loomruntime.Config{
+		HolderID:     "controller-2",
+		LeaseTTL:     2 * time.Minute,
+		PollInterval: 30 * time.Second,
+		Now:          func() time.Time { return now },
+	})
+
+	result, err := ctrl.RecoverExpiredLease(context.Background())
+	require.NoError(t, err)
+
+	require.Len(t, result.CommittedActions, 1)
+	assert.Equal(t, "story-5", result.CommittedActions[0].SessionID)
+	assert.Equal(t, "op:story-5", result.CommittedActions[0].OperationKey)
+}
+
+func TestRecoverExpiredLease_ReadsOlderSameSessionActionsBeyondRecentGlobalWindow(t *testing.T) {
+	now := time.Date(2025, 1, 1, 13, 0, 0, 0, time.UTC)
+	expiredAt := now.Add(-5 * time.Minute)
+
+	st := newMemStore()
+	require.NoError(t, st.WriteCheckpoint(context.Background(), store.Checkpoint{
+		StoryID: "story-overflow",
+		State:   "open",
+	}))
+	require.NoError(t, st.WriteAction(context.Background(), store.Action{
+		SessionID:    "story-overflow",
+		OperationKey: "op:story-overflow",
+		StateBefore:  "open",
+		StateAfter:   "pr_open",
+		Event:        "create_pr",
+		CreatedAt:    expiredAt.Add(-time.Minute),
+	}))
+
+	for index := 0; index < 275; index++ {
+		require.NoError(t, st.WriteAction(context.Background(), store.Action{
+			SessionID:    "other-session",
+			OperationKey: "op:other-session:" + time.Unix(0, int64(index)).UTC().Format(time.RFC3339Nano),
+			StateBefore:  "open",
+			StateAfter:   "pr_open",
+			Event:        "create_pr",
+			CreatedAt:    expiredAt.Add(time.Duration(index) * time.Second),
+		}))
+	}
+
+	leaseKey := "run:story-overflow"
+	require.NoError(t, st.UpsertRuntimeLease(context.Background(), expiredLease(leaseKey, "controller-1", expiredAt)))
+
+	ctrl := loomruntime.NewController(st, loomruntime.Config{
+		HolderID:     "controller-2",
+		LeaseTTL:     2 * time.Minute,
+		PollInterval: 30 * time.Second,
+		Now:          func() time.Time { return now },
+	})
+
+	result, err := ctrl.RecoverExpiredLease(context.Background())
+	require.NoError(t, err)
+	require.Len(t, result.CommittedActions, 1)
+	assert.Equal(t, "story-overflow", result.CommittedActions[0].SessionID)
+	assert.Equal(t, "op:story-overflow", result.CommittedActions[0].OperationKey)
+}

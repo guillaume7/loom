@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/guillaume7/loom/internal/store"
@@ -17,6 +18,8 @@ var ErrLeaseNotExpired = errors.New("runtime: cannot recover: lease is not expir
 // ErrLeaseNotFound is returned when RecoverExpiredLease is called but no
 // lease exists for the run.
 var ErrLeaseNotFound = errors.New("runtime: cannot recover: no lease exists for run")
+
+const readAllCommittedActionsLimit = math.MaxInt
 
 // LeaseRecoveryResult describes the outcome of an explicit lease recovery attempt.
 type LeaseRecoveryResult struct {
@@ -62,9 +65,17 @@ func (c *Controller) RecoverExpiredLease(ctx context.Context) (LeaseRecoveryResu
 
 	// AC2: Collect already-committed actions to report to caller so they are
 	// not re-executed.
-	committed, err := c.store.ReadActions(ctx, 200)
+	committed, err := c.store.ReadActions(ctx, readAllCommittedActionsLimit)
 	if err != nil {
 		return LeaseRecoveryResult{}, err
+	}
+	sessionID := RunIdentifier(cp)
+	filteredCommitted := make([]store.Action, 0, len(committed))
+	for _, action := range committed {
+		if action.SessionID != sessionID {
+			continue
+		}
+		filteredCommitted = append(filteredCommitted, action)
 	}
 
 	// Claim the lease under the recovering holder.
@@ -86,10 +97,10 @@ func (c *Controller) RecoverExpiredLease(ctx context.Context) (LeaseRecoveryResu
 		"previous_holder":   existing.HolderID,
 		"lease_expired_at":  existing.ExpiresAt.Format(time.RFC3339),
 		"recovery_holder":   c.cfg.HolderID,
-		"committed_actions": len(committed),
+		"committed_actions": len(filteredCommitted),
 	})
 	auditRecord := store.PolicyDecision{
-		SessionID:     RunIdentifier(cp),
+		SessionID:     sessionID,
 		CorrelationID: auditID,
 		DecisionKind:  "lease_recovery",
 		Verdict:       "recovered",
@@ -104,7 +115,7 @@ func (c *Controller) RecoverExpiredLease(ctx context.Context) (LeaseRecoveryResu
 		LeaseKey:         key,
 		PreviousHolderID: existing.HolderID,
 		LeaseExpiredAt:   existing.ExpiresAt,
-		CommittedActions: committed,
+		CommittedActions: filteredCommitted,
 		AuditID:          auditID,
 	}, nil
 }

@@ -1,7 +1,7 @@
 # Backlog — Core State File
 backlog:
   project: "loom"
-  last-updated: "2026-03-21T04:30:00Z"
+  last-updated: "2026-03-21T13:51:36Z"
   themes:
     # ── TH1: Loom v1 Core ────────────────────────────────────────────
     - id: TH1
@@ -376,7 +376,7 @@ backlog:
               depends-on: [TH3.E3.US2, TH3.E3.US3]
         - id: E4
           name: "Locking and Recovery"
-          status: todo
+          status: done
           depends-on: [E2, E3]
           stories:
             - id: TH3.E4.US1
@@ -396,7 +396,7 @@ backlog:
               depends-on: [TH3.E4.US1, TH3.E2.US4]
             - id: TH3.E4.US4
               title: "Resume conflict handling"
-                status: done
+              status: done
               file: docs/themes/TH3-runtime-first-reengineering/epics/E4-locking-and-recovery/user-stories/US4-resume-conflict-handling.md
               depends-on: [TH3.E4.US2, TH3.E4.US3, TH3.E3.US4]
         - id: E5

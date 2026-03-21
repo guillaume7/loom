@@ -136,6 +136,37 @@ func (c *Controller) ProcessDueWake(ctx context.Context, gh PollingClient) (Life
 	}
 
 	now := c.cfg.Now().UTC()
+	model, err := AssembleObservationModel(ctx, c.store)
+	if err != nil {
+		return Lifecycle{}, err
+	}
+	if model.Checkpoint.UpdatedAt.After(now) {
+		model.Checkpoint.UpdatedAt = now
+	}
+	conflict, err := c.DetectResumeConflict(ctx, wake, cp.PRNumber, model)
+	if err != nil {
+		return Lifecycle{}, err
+	}
+	if conflict != nil {
+		correlationID := fmt.Sprintf("resume_conflict:%s:%s:%d", sessionID, wake.WakeKind, now.UnixNano())
+		if err := c.RecordResumeConflict(ctx, *conflict, sessionID, correlationID); err != nil {
+			return Lifecycle{}, err
+		}
+
+		conflictLifecycle, err := c.snapshotFromCheckpoint(ctx, cp)
+		if err != nil {
+			return Lifecycle{}, err
+		}
+		conflictLifecycle.DrivenBy = "resume_conflict"
+		conflictLifecycle.Reason = conflict.Reason
+		if cp.State == string(fsm.StatePaused) {
+			conflictLifecycle.ResumeState = cp.ResumeState
+		}
+		return conflictLifecycle, nil
+	}
+	if cp.PRNumber > 0 {
+		defer c.ReleasePRLock(ctx, cp.PRNumber)
+	}
 	evaluation, err := c.evaluateDueWake(ctx, cp, gh, now, wake)
 	if err != nil {
 		return Lifecycle{}, err

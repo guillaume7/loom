@@ -1,3 +1,35 @@
+## Epic TH3.E4 — Locking and Recovery
+
+### Stories Completed
+- TH3.E4.US1 — Runtime lease and ownership claims
+- TH3.E4.US2 — PR-scoped locking
+- TH3.E4.US3 — Lease expiry and recovery
+- TH3.E4.US4 — Resume conflict handling
+
+### Key Changes
+- Added explicit runtime lease recovery so expired foreign run leases are reclaimed through an audited recovery path instead of silent ownership takeover.
+- Added PR-scoped mutation locking with contention detection and explicit holder reporting for concurrent controller paths.
+- Added lease-recovery reporting of previously committed same-session actions so recovery can avoid replaying already committed side effects.
+- Added unified resume-conflict detection and recording for stale observations, superseded wakes, and PR lock contention in the live due-wake path.
+- Split oversized controller runtime tests into focused lifecycle, polling, dedupe/conflict, and shared-helper test files so all runtime test files remain under the repository size limit.
+
+### Files Modified
+- `internal/runtime/controller.go`
+- `internal/runtime/poll_resumption.go`
+- `internal/runtime/pr_lock.go` (new)
+- `internal/runtime/pr_lock_test.go` (new)
+- `internal/runtime/lease_recovery.go` (new)
+- `internal/runtime/lease_recovery_test.go` (new)
+- `internal/runtime/resume_conflict.go` (new)
+- `internal/runtime/resume_conflict_test.go` (new)
+- `internal/runtime/controller_test_helpers_test.go` (new)
+- `internal/runtime/controller_lifecycle_test.go` (new)
+- `internal/runtime/controller_polling_ci_test.go` (new)
+- `internal/runtime/controller_polling_review_test.go` (new)
+- `internal/runtime/controller_dedupe_conflict_test.go` (new)
+- `internal/runtime/controller_test.go` (split)
+- `docs/plan/backlog.yaml`
+
 ## Epic TH3.E3 — Deterministic Policy Engine
 
 ### Stories Completed

@@ -159,6 +159,20 @@ func (c *Controller) startWithCheckpoint(ctx context.Context, cp store.Checkpoin
 			DrivenBy:   "persisted_runtime_state",
 		}), nil
 	}
+	if lease.LeaseKey != "" && !leaseActive && lease.HolderID != "" && lease.HolderID != c.cfg.HolderID {
+		recovered, err := c.RecoverExpiredLease(ctx)
+		if err != nil {
+			return Lifecycle{}, err
+		}
+		lease = store.RuntimeLease{
+			LeaseKey:  recovered.LeaseKey,
+			HolderID:  c.cfg.HolderID,
+			Scope:     controllerLeaseScopeRun,
+			ExpiresAt: now.Add(c.cfg.LeaseTTL),
+			CreatedAt: lease.CreatedAt,
+			RenewedAt: now,
+		}
+	}
 
 	lease = store.RuntimeLease{
 		LeaseKey:  leaseKey,
