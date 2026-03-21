@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Status** | Accepted |
+| **Status** | Superseded by ADR-008 |
 | **Date** | 2026-03-07 |
 | **Deciders** | Guillaume Riflet |
 | **Relates to** | WORKFLOW_GITHUB.md, Loop Driver (deprecated) |

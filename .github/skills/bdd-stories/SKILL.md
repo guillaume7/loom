@@ -145,3 +145,10 @@ Spikes investigate risky technical assumptions before committing the full backlo
 todo → in-progress → done
                    → failed → in-progress (troubleshooter fixes) → done
 ```
+
+## Story Immutability
+
+- Story files are draft planning artifacts until they are accepted into the backlog and execution begins.
+- Once a story is `in-progress` or `done`, do not rewrite its acceptance criteria or scenarios to match implementation drift.
+- If requirements change materially, create a new story or follow-up story instead of changing historical intent.
+- Spike outcomes may propose new ADRs or superseding ADRs, but must not rewrite accepted ADR history.

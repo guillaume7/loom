@@ -30,7 +30,6 @@ type failingAbortStore struct {
 	memStore
 }
 
-
 func (s *failingAbortStore) WriteCheckpointAndAction(_ context.Context, _ store.Checkpoint, _ store.Action) error {
 	return errors.New("simulated abort store failure")
 }

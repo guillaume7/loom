@@ -13,6 +13,7 @@ An autonomous product development methodology powered by a squad of specialized 
 - **Architecture before implementation**: Design decisions are documented before a single line of code
 - **BDD-driven**: Every feature is specified as testable scenarios before implementation
 - **Incremental delivery**: Products are built in vision phases (VP<n>) that map to implementation themes (TH<n>), with 1:N mapping for large VPs
+- **Immutable history**: Settled vision phases, accepted ADRs, and accepted theme scopes are historical records; changed understanding is captured in new artifacts, not by rewriting old ones
 - **Autonomous execution**: The orchestrator agent loops the squad through implement → test → review cycles
 - **Persistent state**: All progress is tracked in `docs/plan/backlog.yaml` for resumability
 - **Ceremony at boundaries**: Epic and theme completions trigger quality gates (integration tests, refactor, release notes)
@@ -24,12 +25,14 @@ An autonomous product development methodology powered by a squad of specialized 
 - Output: `docs/vision_of_product/VP<n>-<name>/`
 - Free-form brainstorming canvas — no rigid structure
 - Each VP<n> maps 1:1 to a theme TH<n>
+- Once a VP is settled, future product changes go into a new VP rather than rewriting the old one
 
 ### Phase 2 — Architecture (Architect Agent)
 - Prompt: `/plan-product` (step 1)
 - Output: `docs/architecture/` + `docs/ADRs/`
 - System design, tech stack selection, component boundaries
 - Every significant decision recorded as an ADR
+- Accepted ADRs are append-only historical decisions; architecture changes create new ADRs that supersede prior ones
 
 ### Phase 3 — Planning (Product Owner Agent)
 - Prompt: `/plan-product` (step 2)
@@ -37,6 +40,7 @@ An autonomous product development methodology powered by a squad of specialized 
 - Vision decomposed into themes → epics → user stories
 - Stories are hybrid BDD (acceptance criteria + Given/When/Then)
 - Backlog YAML is the dependency graph + status state machine
+- Once planning is accepted, theme identity is stable; changed scope is captured in new themes, epics, or stories rather than repurposing settled ones
 
 ### Phase 4 — Autopilot Execution (Orchestrator Agent)
 - Prompt: `/run-autopilot`
@@ -54,6 +58,26 @@ One vision phase can produce **one or more** themes (1:N). Theme numbering is se
 | `VP1-mvp/` | `TH1-<name>/` | 1:1 (simple case) |
 | `VP1-mvp/` | `TH1-<name>/`, `TH2-<name>/` | 1:N (large vision phase) |
 | `VP2-<feat>/` | `TH3-<name>/` | Sequential numbering continues |
+
+## Artifact Immutability
+
+### Settled Vision Phases
+
+- A vision phase becomes **settled** once it has been accepted as product history or used as the basis for planning/implementation.
+- Settled VPs are immutable in substance.
+- New strategy, redesign, or reengineering work must be captured in a new VP rather than rewriting an earlier VP.
+
+### Accepted ADRs
+
+- ADRs with status `Accepted`, `Deprecated`, or `Superseded` are immutable in substance.
+- To change architecture, create a new ADR and update the prior ADR's status/reference only.
+- Do not rewrite the prior ADR's original problem framing to match the new decision.
+
+### Accepted Themes And Stories
+
+- Once a theme is accepted into planning, its identity is fixed.
+- Backlog status may change, and append-only release artifacts may be added, but settled themes/stories must not be repurposed to describe new scope.
+- If implementation reveals a new requirement, add a new story, epic, or theme instead of changing historical intent.
 
 ## Definition of Done
 
@@ -90,7 +114,7 @@ Ceremony scales with epic size:
 7. Product-owner revalidates theme against `docs/vision_of_product/VP<n>/`
 8. **User checkpoint**: orchestrator pauses and presents a demo summary to the user:
    - User can **accept** (proceed to next theme), **reject** (rework), or **amend** vision for next VP
-   - Vision is frozen only for the theme currently in execution — future VPs can be updated at checkpoints
+   - Only draft or future artifacts may be amended at checkpoints; settled VPs, accepted ADRs, and accepted theme scopes remain immutable
 
 ## Naming Conventions
 
@@ -117,6 +141,6 @@ Ceremony scales with epic size:
 
 - Never hardcode state in agent memory — read/write `docs/plan/backlog.yaml`
 - Never skip the troubleshooter — failed stories must be fixed before epic completion
-- Never modify vision docs during Phase 4 for the **theme currently in execution** — future VPs can be amended at user checkpoints
+- Never rewrite settled VPs, accepted ADRs, or accepted theme scopes — create successor artifacts instead
 - Never implement multiple stories in one agent session
 - Never skip the code quality review at epic end

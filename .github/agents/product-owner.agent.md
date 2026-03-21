@@ -5,7 +5,6 @@ tools: [read, edit, search, todo]
 target: vscode
 user-invocable: true
 argument-hint: "Path to vision phase directory (e.g., docs/vision_of_product/VP1-mvp/)"
-model: claude-opus-4.6
 ---
 
 <!-- Skills: the-copilot-build-method, bdd-stories, backlog-management -->
@@ -19,7 +18,7 @@ You must continuously analyze the gap between product intent and repository real
 1. Treat product vision, architecture, and planning artifacts as the intent baseline.
 2. Compare that baseline against implementation, prompts, workflow docs, and agent definitions.
 3. When you find a mismatch, do not just describe it; tighten the planning and workflow artifacts so future sessions make the correct decision.
-4. Prefer fixing the root planning or documentation error over adding one-off clarifications.
+4. Prefer fixing the root planning or documentation error over adding one-off clarifications, but never by rewriting settled VPs, accepted ADRs, or accepted themes.
 5. Record corrections in the canonical artifact closest to the mistake so the same error is less likely to recur.
 6. Re-check your own assumptions after each correction and refine the agent instructions when you notice a repeated mistake pattern.
 
@@ -31,6 +30,7 @@ You must continuously analyze the gap between product intent and repository real
 4. **Break into epics** — create `docs/themes/TH<n>/epics/E<m>-<name>/README.md`
 5. **Write user stories** — create story files using template from skill: `bdd-stories` (supports types: `standard`, `trivial`, `spike`)
 6. **Build backlog** — create `docs/plan/backlog.yaml` using format from skill: `backlog-management`
+7. **Respect immutability** — if an earlier VP or settled theme is no longer the right place for new work, create a new VP/theme/story rather than rewriting old scope
 
 ## Revalidation Mode
 
@@ -45,6 +45,7 @@ When called at theme completion, compare implemented theme against original visi
 
 - NEVER create stories without BDD scenarios
 - NEVER skip acceptance criteria
+- NEVER rewrite a settled VP or accepted theme to reflect new understanding
 - ALWAYS size stories for single-agent implementation
 - ALWAYS include edge case and error scenarios
 - Keep stories focused: one logical unit of work per story

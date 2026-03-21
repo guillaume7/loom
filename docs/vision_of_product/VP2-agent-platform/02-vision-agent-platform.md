@@ -65,17 +65,17 @@ events or polling intervals. Without one, Loom stalls in waiting states.
 **New bridges:**
 
 1. **Background agents** (v1.107) — a local agent session stays alive even
-   after the UI tab is closed. Loom's FSM polling loop can run unattended.
+	 after the UI tab is closed. Loom's FSM polling loop can run unattended.
 
 2. **`code chat` CLI** (v1.102) — Loom's Go binary can spawn a new agent
-   session via `code chat -m agent "resume FSM from state X"` in response to a
-   webhook, a cron job, or a file-system event. The Loom binary is the timer;
-   VS Code is the executor.
+	 session via `code chat -m agent "resume FSM from state X"` in response to a
+	 webhook, a cron job, or a file-system event. The Loom binary is the timer;
+	 VS Code is the executor.
 
 3. **MCP Tasks** (v1.107 MCP spec) — long-running Loom tool calls
-   (`loom_next_step` while waiting for CI) declare themselves as Tasks, giving
-   the client explicit lifecycle events (started / progress / done) rather than
-   a silent blocking call.
+	 (`loom_next_step` while waiting for CI) declare themselves as Tasks, giving
+	 the client explicit lifecycle events (started / progress / done) rather than
+	 a silent blocking call.
 
 **Verdict:** Closed. Loom's Go binary continues to own the timer/polling logic,
 but can now delegate execution to a persistent background agent. No separate
@@ -91,22 +91,22 @@ daemon process is needed.
 **New bridges:**
 
 1. **Custom agents with constrained tool sets** — a `loom-gate.agent.md`
-   custom agent can be defined with only read tools (`search`, no `shell`, no
-   `editFiles`) and explicit gate criteria in its instructions. The LLM is
-   constrained to return a structured verdict, not take action.
+	 custom agent can be defined with only read tools (`search`, no `shell`, no
+	 `editFiles`) and explicit gate criteria in its instructions. The LLM is
+	 constrained to return a structured verdict, not take action.
 
 2. **Handoffs** — the Gate agent hands off to `loom-merge.agent.md` only if
-   the gate verdict is PASS, pre-filling the prompt with the PR number. A FAIL
-   verdict hands off to `loom-debug.agent.md`.
+	 the gate verdict is PASS, pre-filling the prompt with the PR number. A FAIL
+	 verdict hands off to `loom-debug.agent.md`.
 
 3. **Subagents** (v1.105+) — the main Loom orchestrator agent can invoke the
-   gate evaluator as an isolated subagent (`#runSubagent loom-gate`) with its
-   own context window. The subagent returns a single structured result; the
-   orchestrator does not share the evaluator's reasoning context.
+	 gate evaluator as an isolated subagent (`#runSubagent loom-gate`) with its
+	 own context window. The subagent returns a single structured result; the
+	 orchestrator does not share the evaluator's reasoning context.
 
 4. **MCP tool annotations** — Loom's read-only gate tools (`loom_get_state`,
-   `loom_heartbeat`) already carry `readOnlyHint: true`. VS Code auto-approves
-   these, removing the human confirmation bottleneck during gate polling.
+	 `loom_heartbeat`) already carry `readOnlyHint: true`. VS Code auto-approves
+	 these, removing the human confirmation bottleneck during gate polling.
 
 **Verdict:** Closed. The gate evaluator becomes a first-class custom agent
 definition, not ad-hoc prompt engineering in the master session.
@@ -121,17 +121,17 @@ issue bodies. Recommended: `.loom/dependencies.yaml`.
 **New bridges:**
 
 1. **MCP resources** — Loom's MCP server can expose `.loom/dependencies.yaml`
-   as a browseable resource. Any agent session can attach it as context with
-   `#resources loom/dependencies`.
+	 as a browseable resource. Any agent session can attach it as context with
+	 `#resources loom/dependencies`.
 
 2. **MCP server instructions** (v1.104) — Loom's MCP server can include a
-   concise dependency summary in its server instructions, which VS Code
-   automatically injects into the base prompt of every session that activates
-   Loom.
+	 concise dependency summary in its server instructions, which VS Code
+	 automatically injects into the base prompt of every session that activates
+	 Loom.
 
 3. **AGENTS.md / nested AGENTS.md** (v1.104–v1.105) — a top-level `AGENTS.md`
-   can include a human-readable dependency section. Loom's tooling can keep
-   `.loom/dependencies.yaml` and `AGENTS.md` in sync.
+	 can include a human-readable dependency section. Loom's tooling can keep
+	 `.loom/dependencies.yaml` and `AGENTS.md` in sync.
 
 **Verdict:** Closed. `.loom/dependencies.yaml` is the canonical store;
 MCP resources and AGENTS.md surface it to agents automatically.
@@ -146,19 +146,19 @@ to prevent two loops acting on the same PR simultaneously.
 **New bridges:**
 
 1. **Background agents in Git worktrees** (v1.107) — each background agent
-   session operates in an isolated worktree. Two Loom sessions cannot collide
-   on the same working tree by construction.
+	 session operates in an isolated worktree. Two Loom sessions cannot collide
+	 on the same working tree by construction.
 
 2. **Loom SQLite action log** — remains the canonical idempotency store.
-   Loom's MCP tools check the log before executing any write operation.
+	 Loom's MCP tools check the log before executing any write operation.
 
 3. **Chat checkpoints** (v1.103) — session state snapshots let Loom roll back
-   to a known-good point without re-executing completed steps.
+	 to a known-good point without re-executing completed steps.
 
 4. **Post-approval for external data** (v1.106) — tool calls that pull in
-   external data (e.g., CI results, PR body from GitHub) go through
-   post-approval, letting the operator catch unexpected content before it
-   affects the FSM transition.
+	 external data (e.g., CI results, PR body from GitHub) go through
+	 post-approval, letting the operator catch unexpected content before it
+	 affects the FSM transition.
 
 **Verdict:** Substantially closed. The combination of worktree isolation +
 SQLite action log + checkpoints provides sufficient idempotency for the current
@@ -175,31 +175,31 @@ escalation comments; recovery from bad states.
 **New bridges:**
 
 1. **Handoffs with explicit failure branches** — a `loom-ci-watch.agent.md`
-   agent, upon detecting red CI, hands off to `loom-debug.agent.md` with the
-   failing check run attached as context. This replaces ad-hoc
-   "if CI red, post debug comment" prompt logic with a structured workflow
-   transition.
+	 agent, upon detecting red CI, hands off to `loom-debug.agent.md` with the
+	 failing check run attached as context. This replaces ad-hoc
+	 "if CI red, post debug comment" prompt logic with a structured workflow
+	 transition.
 
 2. **Todo list tool** (v1.104+) — each phase of the Loom FSM is tracked as a
-   named todo item. The operator can see at a glance which step failed and
-   at what retry count.
+	 named todo item. The operator can see at a glance which step failed and
+	 at what retry count.
 
 3. **OS notifications** (v1.103+) — when a Loom session requires human
-   confirmation (retry budget exhausted, ambiguous gate verdict), VS Code
-   fires an OS notification even when the window is not focused.
+	 confirmation (retry budget exhausted, ambiguous gate verdict), VS Code
+	 fires an OS notification even when the window is not focused.
 
 4. **MCP elicitations** (v1.102) — Loom's MCP server, on budget exhaustion,
-   issues a structured elicitation prompt (e.g., "PR #42 has failed CI 3 times.
-   Choices: [Skip] [Re-assign] [Pause epic]"). The operator responds from
-   within the chat UI.
+	 issues a structured elicitation prompt (e.g., "PR #42 has failed CI 3 times.
+	 Choices: [Skip] [Re-assign] [Pause epic]"). The operator responds from
+	 within the chat UI.
 
 5. **MCP Tasks** (v1.107 spec) — long-running waits (CI polling) are declared
-   as Tasks with explicit progress events. If the client disconnects, the
-   task can be resumed without re-sending the initial prompt.
+	 as Tasks with explicit progress events. If the client disconnects, the
+	 task can be resumed without re-sending the initial prompt.
 
 6. **Chat checkpoints** (v1.103) — Loom can checkpoint before each destructive
-   operation (merge, force-close issue). If the operation produces an
-   unexpected result, the operator can restore the previous session state.
+	 operation (merge, force-close issue). If the operation produces an
+	 unexpected result, the operator can restore the previous session state.
 
 **Verdict:** Closed. Failure policy is now expressible as structured agent
 handoffs and MCP elicitations, not embedded in prompt templates.
@@ -214,22 +214,22 @@ alignment.
 **New bridges:**
 
 1. **MCP auth — CIMD and WWW-Authenticate** (v1.106–v1.107) — Loom's MCP
-   server can use the Client ID Metadata Document auth flow for remote
-   connections and can request scope escalation dynamically via
-   `WWW-Authenticate` headers when a write operation requires elevated
-   permissions.
+	 server can use the Client ID Metadata Document auth flow for remote
+	 connections and can request scope escalation dynamically via
+	 `WWW-Authenticate` headers when a write operation requires elevated
+	 permissions.
 
 2. **Organization-level MCP registry** (v1.106) — Loom can be published to the
-   organization's private MCP registry, ensuring all team sessions use the
-   same vetted server version.
+	 organization's private MCP registry, ensuring all team sessions use the
+	 same vetted server version.
 
 3. **Enterprise tool eligibility policy** (v1.107) — `loom_checkpoint` and
-   `loom_abort` can be marked ineligible for auto-approval via
-   `chat.tools.eligibleForAutoApproval`. Write operations always require
-   explicit human approval.
+	 `loom_abort` can be marked ineligible for auto-approval via
+	 `chat.tools.eligibleForAutoApproval`. Write operations always require
+	 explicit human approval.
 
 4. **`loom_heartbeat` + `loom_get_state`** already carry `readOnlyHint: true`
-   and are auto-approved; no token escalation is needed for polling.
+	 and are auto-approved; no token escalation is needed for polling.
 
 **Verdict:** Closed. MCP's mature auth story (CIMD, scope escalation,
 org registry) maps cleanly onto Loom's permission requirements.
@@ -257,8 +257,8 @@ org registry) maps cleanly onto Loom's permission requirements.
 │  │ target: vscode   │  │  github/comment] │             │
 │  └──────────────────┘  └──────────────────┘             │
 └──────────────────────────────┬──────────────────────────┘
-                               │ calls
-                               ▼
+															 │ calls
+															 ▼
 ┌─────────────────────────────────────────────────────────┐
 │  Loom MCP Server (Go binary, stdio)                      │
 │                                                          │
@@ -278,8 +278,8 @@ org registry) maps cleanly onto Loom's permission requirements.
 │                                                          │
 │  FSM + SQLite (unchanged)                                │
 └──────────────────────────────┬──────────────────────────┘
-                               │ GitHub REST / GitHub MCP
-                               ▼
+															 │ GitHub REST / GitHub MCP
+															 ▼
 ┌─────────────────────────────────────────────────────────┐
 │  GitHub.com                                              │
 │  Issues · PRs · CI Checks · Copilot Coding Agent        │
@@ -319,10 +319,10 @@ MCP Tasks (MCP spec 2025-11-25):
 
 ```json
 {
-  "type": "task/start",
-  "id": "loom-ci-poll-pr-42",
-  "title": "Watching CI for PR #42",
-  "cancellable": true
+	"type": "task/start",
+	"id": "loom-ci-poll-pr-42",
+	"title": "Watching CI for PR #42",
+	"cancellable": true
 }
 ```
 
@@ -335,20 +335,20 @@ When a retry budget is exhausted, Loom issues a structured elicitation:
 
 ```json
 {
-  "type": "elicitation",
-  "title": "PR #42 — CI budget exhausted",
-  "description": "check_suite 'build' has failed 5 times. Choose an action.",
-  "schema": {
-    "action": {
-      "type": "string",
-      "enum": ["skip", "reassign", "pause_epic"],
-      "enumDescriptions": [
-        "Skip this user story and advance to the next",
-        "Re-assign the PR to a fresh @copilot session",
-        "Pause the epic and require human intervention"
-      ]
-    }
-  }
+	"type": "elicitation",
+	"title": "PR #42 — CI budget exhausted",
+	"description": "check_suite 'build' has failed 5 times. Choose an action.",
+	"schema": {
+		"action": {
+			"type": "string",
+			"enum": ["skip", "reassign", "pause_epic"],
+			"enumDescriptions": [
+				"Skip this user story and advance to the next",
+				"Re-assign the PR to a fresh @copilot session",
+				"Pause the epic and require human intervention"
+			]
+		}
+	}
 }
 ```
 
@@ -367,25 +367,25 @@ and is compatible with GitHub Copilot cloud agents for future escalation.
 ---
 name: Loom Orchestrator
 description: Drives the Loom FSM end-to-end. Call loom_next_step, execute the
-  returned step using GitHub MCP tools, then checkpoint.
+	returned step using GitHub MCP tools, then checkpoint.
 target: vscode
 tools:
-  - loom/loom_next_step
-  - loom/loom_checkpoint
-  - loom/loom_heartbeat
-  - loom/loom_get_state
-  - loom/loom_abort
-  - github/github-mcp-server/default
+	- loom/loom_next_step
+	- loom/loom_checkpoint
+	- loom/loom_heartbeat
+	- loom/loom_get_state
+	- loom/loom_abort
+	- github/github-mcp-server/default
 handoffs:
-  - label: Evaluate gate
-    agent: loom-gate
-    prompt: "Evaluate whether PR ${pr_number} is safe to merge. Return PASS or FAIL."
-  - label: Debug CI failure
-    agent: loom-debug
-    prompt: "CI failed on PR ${pr_number} (run ${run_id}). Post a debug comment."
-  - label: Pause for human
-    agent: ask
-    prompt: "Loom has paused. ${reason}"
+	- label: Evaluate gate
+		agent: loom-gate
+		prompt: "Evaluate whether PR ${pr_number} is safe to merge. Return PASS or FAIL."
+	- label: Debug CI failure
+		agent: loom-debug
+		prompt: "CI failed on PR ${pr_number} (run ${run_id}). Post a debug comment."
+	- label: Pause for human
+		agent: ask
+		prompt: "Loom has paused. ${reason}"
 ---
 
 Follow the Loom MCP Operator contract in .github/skills/loom-mcp-loop.md.
@@ -397,13 +397,13 @@ Follow the Loom MCP Operator contract in .github/skills/loom-mcp-loop.md.
 ---
 name: Loom Gate
 description: Read-only gate evaluator. Returns {"verdict":"PASS"|"FAIL","reason":"..."}.
-  Never makes writes.
+	Never makes writes.
 target: vscode
 tools:
-  - search/codebase
-  - github/github-mcp-server/pull_request_read
-  - github/github-mcp-server/get_commit
-  - loom/loom_get_state
+	- search/codebase
+	- github/github-mcp-server/pull_request_read
+	- github/github-mcp-server/get_commit
+	- loom/loom_get_state
 ---
 
 You are a pure evaluator. Given a PR number, check:
@@ -425,17 +425,17 @@ name: Loom Debug
 description: Posts a structured debug comment on a failing PR CI run.
 target: vscode
 tools:
-  - github/github-mcp-server/pull_request_read
-  - github/github-mcp-server/get_commit
-  - github/github-mcp-server/add_issue_comment
-  - search/codebase
+	- github/github-mcp-server/pull_request_read
+	- github/github-mcp-server/get_commit
+	- github/github-mcp-server/add_issue_comment
+	- search/codebase
 ---
 
 Given a PR number and a failing check run ID:
 1. Read the check run annotations.
 2. Identify the root cause.
 3. Post a structured comment on the PR following the debug comment template in
-   .github/squad_prompts/WORKFLOW_GITHUB.md.
+	 .github/squad_prompts/WORKFLOW_GITHUB.md.
 4. Return {"action":"commented","comment_id":…}.
 
 Do not modify files. Do not create new issues.
@@ -592,13 +592,13 @@ The body of the tab must provide:
 
 1. A chronological event timeline of every meaningful Loom event.
 2. An FSM transition ledger with `from_state`, `to_state`, timestamp, and
-    transition reason.
+	 transition reason.
 3. A GitHub entity ledger that tracks issues and pull requests involved in the
-    session and records how their states changed over time.
+	 session and records how their states changed over time.
 4. Explicit markers for retries, exhausted budgets, elicitation prompts,
-    operator responses, and pause/resume boundaries.
+	 operator responses, and pause/resume boundaries.
 5. Enough source identifiers to correlate the human-readable trace with the
-    structured log and persisted SQLite checkpoints.
+	 structured log and persisted SQLite checkpoints.
 
 ### 10.4 GitHub State Transcription
 
@@ -626,35 +626,35 @@ replay the session without querying GitHub again.
 This capability is successful when:
 
 - A maintainer can reconstruct a `/run-loom` session from a single tab without
-   switching between terminal logs, GitHub pages, and the database.
+	switching between terminal logs, GitHub pages, and the database.
 - Every FSM transition visible in SQLite also appears in the trace tab with a
-   human-readable reason.
+	human-readable reason.
 - The header always identifies the exact Loom build via version and release
-   tag.
+	tag.
 - Issue and PR evolution is visible as a sequence of state changes, not only as
-   final snapshots.
+	final snapshots.
 - A failed session can be analyzed after the fact even if GitHub state has
-   since changed.
+	since changed.
 
 ### 10.6 Constraints and Open Questions
 
 Constraints:
 
 - The trace must be append-only or otherwise auditable; post-hoc mutation
-   weakens post-mortem value.
+	weakens post-mortem value.
 - It must not become the source of truth for orchestration state; SQLite and
-   the FSM remain authoritative.
+	the FSM remain authoritative.
 - It must scale to long sessions without becoming unreadable or excessively
-   expensive to maintain.
+	expensive to maintain.
 
 Open questions:
 
 - Should the tab be backed by a dedicated MCP resource such as
-   `loom://session/<id>` or generated as a Markdown/virtual document?
+	`loom://session/<id>` or generated as a Markdown/virtual document?
 - Should GitHub state be recorded as full snapshots, field-level diffs, or a
-   hybrid model?
+	hybrid model?
 - How long should session traces be retained, and should Loom export them as
-   release/debug artifacts?
+	release/debug artifacts?
 
 ---
 
@@ -718,6 +718,6 @@ The existing epic/user-story hierarchy maps cleanly to the P0–P4 roadmap:
 New epics warranted by v2:
 
 - **E9 — Agent Definitions**: The `.github/agents/` custom agent files for
-  orchestrator, gate, debug. Handoff wiring. Subagent invocation patterns.
+	orchestrator, gate, debug. Handoff wiring. Subagent invocation patterns.
 - **E10 — Parallel Execution**: Background agent spawning, Git worktree
-  lifecycle, orchestrator DAG-aware scheduling.
+	lifecycle, orchestrator DAG-aware scheduling.

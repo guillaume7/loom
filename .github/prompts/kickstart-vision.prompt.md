@@ -13,6 +13,13 @@ tools: [read, edit, search, todo]
 
 Let's design the product vision together. I'll help you brainstorm and capture ideas in `docs/vision_of_product/`.
 
+## Artifact Immutability
+
+- If a vision phase is already settled, treat it as product history.
+- Do not rewrite a settled `VP<n>-.../` directory to reflect new understanding.
+- Capture new strategy, redesign, or reengineering work in a new `VP<n>-.../` directory instead.
+- Limit edits to settled vision artifacts to non-semantic corrections, append-only notes, or explicit supersession metadata.
+
 ## Structure
 
 Each vision phase maps to one or more implementation themes (1:N):
@@ -29,6 +36,8 @@ Create markdown files covering:
 - **Success criteria**: How do we know this phase is done?
 - **Constraints**: Budget, timeline, technology, compliance
 - **Open questions**: Unknowns to resolve before implementation
+
+When an existing VP is settled, create the next VP rather than replacing the old one with the new content.
 
 ## Let's start
 

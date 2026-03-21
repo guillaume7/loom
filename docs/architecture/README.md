@@ -1,12 +1,13 @@
-# Loom v2 Architecture — System Context & High-Level Design
+# Loom Runtime-First Architecture — System Context & High-Level Design
 
-> Traces to: [VP2 — The Native Agent Platform](../vision_of_product/VP2-agent-platform/02-vision-agent-platform.md)
+> Traces to: [VP3 — Runtime-First Autonomous Operations](../vision_of_product/VP3-runtime-first/03-vision-runtime-first.md), [ADR-008](../ADRs/ADR-008-runtime-first-control-plane-and-wake-model.md), [ADR-009](../ADRs/ADR-009-deterministic-runtime-policy-engine.md), [ADR-010](../ADRs/ADR-010-bounded-agent-jobs-and-run-locking.md)
 
 ## 1. System Context
 
 Loom is a Go CLI tool and MCP server that orchestrates autonomous software
-development workflows. It bridges VS Code's multi-agent platform with GitHub's
-issue/PR lifecycle.
+development workflows. In the VP3 architecture, the **runtime controller** is
+the primary control plane. MCP, CLI, and agent sessions are surfaces around it,
+not substitutes for it.
 
 ```text
                  ┌─────────────────────────────────────────┐
@@ -16,28 +17,32 @@ issue/PR lifecycle.
                                    │ CLI
                                    ▼
 ┌──────────────────────────────────────────────────────────────────────┐
-│  .github/agents/                                                     │
-│  ┌───────────────────┐  ┌──────────────┐  ┌──────────────────┐      │
-│  │ loom-orchestrator  │  │ loom-gate    │  │ loom-debug       │      │
-│  │ .agent.md          │→ │ .agent.md    │  │ .agent.md        │      │
-│  │ (full Loom tools)  │  │ (read-only)  │  │ (comment-only)   │      │
-│  └────────┬───────────┘  └──────────────┘  └──────────────────┘      │
-│           │ handoffs / subagent calls                                 │
-└───────────┼──────────────────────────────────────────────────────────┘
-            │ MCP stdio
+│  CLI / MCP / Operator UI                                              │
+│  loom start | status | pause | resume | log | MCP resources           │
+└──────────────────────────────┬────────────────────────────────────────┘
+                               │ commands / tool calls
+                               ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│  Runtime Controller                                                  │
+│  Scheduler · Wake Queue · Policy Engine · Lock Manager · Agent Jobs  │
+└──────────────────────────────┬───────────────────────────────────────┘
+                               │
+             ┌─────────────────┼─────────────────┐
+             │                 │                 │
             ▼
 ┌──────────────────────────────────────────────────────────────────────┐
-│  Loom MCP Server (Go binary)                                         │
+│  Persistence                                                         │
 │                                                                      │
-│  Tools:  loom_next_step · loom_checkpoint · loom_heartbeat ·         │
-│          loom_get_state · loom_abort                                  │
-│                                                                      │
-│  Resources:  loom://dependencies · loom://state · loom://log         │
-│              loom://sessions · loom://session/<id>                  │
-│                                                                      │
-│  Internals:  FSM │ Store (SQLite) │ GitHub Client │ Config │ Monitor │
+│  Checkpoint Store · Wake Schedules · Event Inbox · Locks ·           │
+│  Policy Decisions · Agent Jobs · Action Log · Session Trace          │
 └──────────────────────────────────┬───────────────────────────────────┘
-                                   │ GitHub REST API
+             │                     │                     │
+             ▼                     ▼                     ▼
+┌──────────────────────┐  ┌─────────────────────┐  ┌───────────────────┐
+│  Agent Job Workers   │  │  Loom MCP Surface   │  │ GitHub Integration │
+│  bounded, short-lived│  │ tools + resources   │  │ REST + polling     │
+└──────────────────────┘  └─────────────────────┘  └───────────────────┘
+                                                        │ GitHub REST API
                                    ▼
 ┌──────────────────────────────────────────────────────────────────────┐
 │  GitHub.com                                                          │
@@ -47,69 +52,55 @@ issue/PR lifecycle.
 
 ## 2. High-Level Design
 
-### 2.1 Core Principle: Plumbing vs. Intelligence
+### 2.1 Core Principle: Runtime First
 
-The Go binary owns **deterministic plumbing**: FSM transitions, retry budgets,
-checkpoint persistence, dependency DAG evaluation, and idempotency enforcement.
+The Go binary owns **deterministic control**: checkpoint state, wake-ups,
+policy evaluation, retry handling, lock ownership, and recovery.
 
-VS Code custom agents own **contextual intelligence**: parsing GitHub responses,
-composing issue bodies, choosing GitHub MCP tools per step, and recovering from
-ambiguous states.
+Agents own **bounded contextual work**: drafting artifacts, summarizing external
+state, and composing responses from structured inputs.
 
 ### 2.2 Layered Architecture
 
 | Layer | Responsibility | Technology |
 | ------- | --------------- | ------------ |
-| **Agent Definitions** | Workflow personas with constrained tool sets and handoff wiring | `.github/agents/*.agent.md` |
-| **MCP Server** | Tool + resource surface between agents and Loom internals | Go, `mcp-go` library, stdio transport |
-| **Orchestration Core** | FSM, retry budgets, dependency DAG, session monitoring | Pure Go packages (`internal/fsm`, `internal/mcp`) |
-| **Persistence** | Checkpoint store, action log, session trace, dependency graph | SQLite via `modernc.org/sqlite` |
-| **GitHub Integration** | REST API client with rate-limit handling | `google/go-github`, `net/http` |
-| **CLI** | Human operator commands | `spf13/cobra` |
+| **Operator Surfaces** | Human and tool entry points | CLI, MCP tools/resources |
+| **Runtime Controller** | Scheduling, policy, retries, wake-ups, locks, recovery | Go packages under `internal/` |
+| **Agent Job Runner** | Bounded AI-assisted work with structured I/O | Custom agents + MCP |
+| **Persistence** | Checkpoints, schedules, locks, events, traces | SQLite via `modernc.org/sqlite` |
+| **GitHub Integration** | Polling, event ingestion, action execution | `google/go-github`, `net/http` |
 
-### 2.3 v1 → v2 Evolution
+### 2.3 v2 → v3 Evolution
 
-VP2 is **additive** over v1. No existing interface is removed or renamed.
+VP3 preserves the local-first and deterministic values of earlier versions but
+changes who owns liveness.
 
-| v1 (ADR-001) | v2 (VP2) |
+| v2 | v3 |
 | --- | --- |
-| Single master Copilot session | Multiple custom agents with handoffs |
-| Workflow steps in one prompt | Workflow steps as agent handoff transitions |
-| Polling in LLM context | Polling in background agent + MCP Tasks |
-| Gate evaluation in LLM reasoning | Gate evaluation as isolated read-only subagent |
-| `PAUSED` + manual `loom resume` | MCP elicitation with structured choices |
-| No MCP resources | `loom://dependencies`, `loom://state`, `loom://log`, session trace resources |
-| Sequential story execution | Parallel execution via background agents + worktrees |
+| Agent-centric orchestration | Runtime-centric orchestration |
+| Heartbeats keep sessions alive through waits | Runtime wake-ups own waits and resumptions |
+| Gate logic split between runtime and prompts | Gate and escalation policy live in Go |
+| Background agents as primary async mechanism | Bounded agent jobs as optional workers |
+| Parallelism as a roadmap capability | Locking and safety before broad concurrency |
 
 ### 2.4 Key Invariants
 
-1. **FSM is the single source of truth** for workflow state. Agents read state
-   via `loom_get_state`; mutations go through `loom_checkpoint` only.
-2. **One checkpoint per state transition** — every FSM event is persisted before
-   the agent proceeds.
-3. **Retry budgets are enforced in Go**, not in prompts. Budget exhaustion
-   triggers MCP elicitation, not silent failure.
-4. **Agent tool sets are constrained by definition** — the gate agent cannot
-   write; the debug agent cannot merge.
-5. **Dependencies are machine-readable** — `.loom/dependencies.yaml` is the
-   canonical store; MCP resources surface it to agents.
-6. **Session traces are derived audit artifacts** — they are append-only,
-   operator-facing observability surfaces backed by SQLite, not the source of
-   truth for orchestration state.
+1. **Checkpoint state is authoritative** for workflow progress.
+2. **Wake-ups and retries are runtime-owned**, not prompt-owned.
+3. **Policy decisions are deterministic artifacts** with inspectable inputs and outputs.
+4. **Agents never own orchestration liveness**; they execute bounded jobs only.
+5. **Locks gate concurrency** before any resumed or parallel work proceeds.
+6. **Session traces and replay inputs remain derived observability artifacts** and never replace checkpoint truth.
 
 ## 3. Cross-References
 
 | Document | Content |
 | ---------- | --------- |
-| [tech-stack.md](tech-stack.md) | Technology choices and rationale |
-| [components.md](components.md) | Component breakdown and boundaries |
-| [data-model.md](data-model.md) | Data entities and persistence |
-| [project-setup.md](project-setup.md) | Repository structure and build |
-| [deployment.md](deployment.md) | Distribution and operational concerns |
-| [ADR-001](../adr/ADR-001-loom-local-orchestrator.md) | Original Loom architecture decision |
-| [ADR-002](../ADRs/ADR-002-multi-agent-orchestration.md) | Multi-agent orchestration via custom agents |
-| [ADR-003](../ADRs/ADR-003-mcp-resources.md) | MCP resources for observability and dependency graph |
-| [ADR-004](../ADRs/ADR-004-mcp-tasks-and-elicitation.md) | MCP Tasks and elicitation for resilient polling |
-| [ADR-005](../ADRs/ADR-005-parallel-execution.md) | Parallel execution via background agents and worktrees |
-| [ADR-006](../ADRs/ADR-006-security-model.md) | Security: tool eligibility, auth, org registry |
-| [ADR-007](../ADRs/ADR-007-session-trace-resource-and-storage.md) | Session trace storage, audit model, and operator surface |
+| [tech-stack.md](tech-stack.md) | Runtime-first technology choices and rationale |
+| [components.md](components.md) | VP3 component boundaries |
+| [data-model.md](data-model.md) | Durable runtime data model |
+| [project-setup.md](project-setup.md) | Repository structure and build conventions |
+| [deployment.md](deployment.md) | Runtime modes and operator deployment concerns |
+| [ADR-008](../ADRs/ADR-008-runtime-first-control-plane-and-wake-model.md) | Runtime-first control plane |
+| [ADR-009](../ADRs/ADR-009-deterministic-runtime-policy-engine.md) | Deterministic policy engine |
+| [ADR-010](../ADRs/ADR-010-bounded-agent-jobs-and-run-locking.md) | Bounded agent jobs and locking |

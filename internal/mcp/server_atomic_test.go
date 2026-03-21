@@ -367,7 +367,7 @@ func TestLoomAbort_RejectsMissingRecoverableState(t *testing.T) {
 	result := callTool(t, mcpSvr, "loom_abort", nil)
 	assert.True(t, result.IsError)
 	assert.Contains(t, toolText(t, result), loomruntime.ErrNothingToPause.Error())
-	
+
 }
 
 func TestLoomAbort_WritesAuditedOperatorPauseRecords(t *testing.T) {

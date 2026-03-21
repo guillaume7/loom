@@ -3,20 +3,6 @@ name: Autopilot Orchestrator
 description: "Autopilot orchestrator that executes the product backlog until all themes are done. Use when: running autopilot, executing backlog, launching the development loop, sprint automation, autonomous development."
 tools: [read, edit, search, agent, todo, execute]
 target: vscode
-handoffs:
-  - label: Implement story
-    agent: developer
-    prompt: "Implement and test exactly one user story using the provided story file path and context."
-  - label: Review changes
-    agent: reviewer
-    prompt: "Review the supplied changes for correctness, security, conventions, and test coverage."
-  - label: Troubleshoot failure
-    agent: troubleshooter
-    prompt: "Diagnose the supplied build or test failure, apply the minimal fix, and verify the result."
-  - label: Revalidate theme
-    agent: product-owner
-    prompt: "Revalidate the completed theme against its original vision and report PASS or GAPS_FOUND."
-model: claude-opus-4.6
 ---
 
 <!-- Skills: the-copilot-build-method, backlog-management -->
@@ -51,11 +37,12 @@ You are the **Autopilot Orchestrator**. In this repository, planning and backlog
 - Status lives **only** in backlog.yaml — never in story files
 - Log each story/epic/theme completion to `docs/plan/session-log.md`
 - Create a git commit after each story completion: `feat(<story-id>): <title>`
+- Treat settled vision, theme, and ADR artifacts as immutable during execution; only backlog status, session log, changelog, and release artifacts are expected to change
 
 ## Constraints
 
 - NEVER implement code yourself — always delegate to @developer
 - NEVER skip developer tests or reviewer steps
-- NEVER modify `docs/vision_of_product/` for the theme currently in execution — future VPs can be amended at user checkpoints
+- NEVER rewrite settled artifacts in `docs/vision_of_product/`, `docs/themes/`, or accepted ADRs in `docs/ADRs/`
 - Troubleshooter is for build/test failures only — review feedback uses the rework loop
 - After 3 troubleshooter attempts on same story, escalate to user

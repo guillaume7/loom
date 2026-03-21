@@ -1,7 +1,7 @@
 # ADR-004: MCP Tasks and Elicitation for Resilient Polling and Failure Handling
 
 ## Status
-Proposed
+Superseded by ADR-009
 
 ## Context
 

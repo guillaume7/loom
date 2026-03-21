@@ -47,6 +47,7 @@ When called with `epic-integration` scope, run integration tests across all stor
 - NEVER implement more than one story
 - NEVER skip build verification
 - NEVER add features beyond acceptance criteria
+- NEVER rewrite settled vision, planning, or accepted ADR artifacts to make implementation easier
 - NEVER mark a test as passing if it fails
 - ALWAYS write clean, well-structured code from the start
 - ALWAYS check for security vulnerabilities (OWASP Top 10)

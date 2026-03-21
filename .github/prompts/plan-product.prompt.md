@@ -13,6 +13,13 @@ tools: [read, edit, search, agent, todo, execute, web]
 
 Execute the planning pipeline to transform vision into an actionable backlog.
 
+## Artifact Immutability
+
+- Treat settled vision phases in `docs/vision_of_product/` as immutable product history.
+- Treat accepted ADRs in `docs/ADRs/` as immutable in substance; architecture changes must create new ADRs and supersede old ones.
+- Treat accepted themes in `docs/themes/` as immutable in meaning; if scope changes materially, create new themes, epics, or stories rather than repurposing existing ones.
+- Limit edits to settled artifacts to non-semantic corrections, append-only notes, or explicit supersession/status metadata.
+
 ## Pipeline
 
 ### Step 1 — Architecture
@@ -21,10 +28,14 @@ Invoke the @architect agent to analyze `docs/vision_of_product/` and produce:
 - `docs/ADRs/` — architecture decision records
 - `.github/copilot-instructions.md` — updated workspace instructions with architecture details and code conventions (DRY, naming, formatting) and best practices for the project, TDD, clean code, keep files <500 lines, etc.
 
+Architecture output must preserve accepted ADR history. If a prior decision is no longer correct, create a new ADR and mark the old one superseded or deprecated rather than rewriting it.
+
 ### Step 2 — User Stories
 Invoke the @product-owner agent to break the vision + architecture into:
 - `docs/themes/TH<n>-<name>/` — theme/epic/story hierarchy
 - `docs/plan/backlog.yaml` — YAML dependency graph with all stories
+
+Planning output must preserve accepted theme identity. If new scope no longer belongs in a settled theme, add a new theme, epic, or story instead of rewriting the old one.
 
 ### Step 3 — GitHub Issue Templates
 

@@ -1,7 +1,7 @@
 ---
 name: "run-autopilot"
 description: "Run the local autopilot loop to execute the backlog autonomously in this repository. Use when: running /run-autopilot locally, starting autonomous development, executing backlog."
-agent: "orchestrator"
+agent: "Autopilot Orchestrator"
 tools: [read, edit, search, execute, agent, todo]
 argument-hint: "Optional: theme, epic, or story to prioritize"
 ---
@@ -17,6 +17,12 @@ argument-hint: "Optional: theme, epic, or story to prioritize"
 | @product-owner | `the-copilot-build-method`, `bdd-stories`, `backlog-management` |
 
 Begin autonomous local execution of the product backlog.
+
+## Artifact Immutability
+
+- During execution, treat settled vision artifacts in `docs/vision_of_product/`, accepted ADRs in `docs/ADRs/`, and accepted theme scope in `docs/themes/` as immutable.
+- Expected execution-time changes are limited to backlog status, session log, changelog, release notes, implementation code, tests, and other delivery artifacts.
+- If implementation reveals changed understanding, stop and route that change into a new planning artifact rather than rewriting settled history.
 
 ## Pre-flight Checks
 

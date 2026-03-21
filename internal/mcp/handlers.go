@@ -694,23 +694,23 @@ func (s *Server) MCPServer() *mcpserver.MCPServer {
 			}
 
 			result := struct {
-				State            string   `json:"state"`
-				Phase            int      `json:"phase"`
-				PRNumber         int      `json:"pr_number"`
-				IssueNumber      int      `json:"issue_number"`
-				RetryCount       int      `json:"retry_count"`
-				UpdatedAt        string   `json:"updated_at"`
-				UnblockedStories []string `json:"unblocked_stories"`
-				ControllerState  string   `json:"controller_state,omitempty"`
-				ControllerReason string   `json:"controller_reason,omitempty"`
-				ControllerHolder string   `json:"controller_holder,omitempty"`
-				ControllerLease  string   `json:"controller_lease,omitempty"`
-				LeaseExpiresAt   string   `json:"lease_expires_at,omitempty"`
-				NextWakeKind     string   `json:"next_wake_kind,omitempty"`
-				NextWakeAt       string   `json:"next_wake_at,omitempty"`
+				State            string           `json:"state"`
+				Phase            int              `json:"phase"`
+				PRNumber         int              `json:"pr_number"`
+				IssueNumber      int              `json:"issue_number"`
+				RetryCount       int              `json:"retry_count"`
+				UpdatedAt        string           `json:"updated_at"`
+				UnblockedStories []string         `json:"unblocked_stories"`
+				ControllerState  string           `json:"controller_state,omitempty"`
+				ControllerReason string           `json:"controller_reason,omitempty"`
+				ControllerHolder string           `json:"controller_holder,omitempty"`
+				ControllerLease  string           `json:"controller_lease,omitempty"`
+				LeaseExpiresAt   string           `json:"lease_expires_at,omitempty"`
+				NextWakeKind     string           `json:"next_wake_kind,omitempty"`
+				NextWakeAt       string           `json:"next_wake_at,omitempty"`
 				PendingWakes     []WakeDiagnostic `json:"pending_wakes"`
-				ResumeState      string   `json:"resume_state,omitempty"`
-				DrivenBy         string   `json:"driven_by,omitempty"`
+				ResumeState      string           `json:"resume_state,omitempty"`
+				DrivenBy         string           `json:"driven_by,omitempty"`
 			}{
 				State:            string(currentState),
 				Phase:            cp.Phase,

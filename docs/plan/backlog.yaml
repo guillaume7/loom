@@ -381,7 +381,7 @@ backlog:
           stories:
             - id: TH3.E4.US1
               title: "Runtime lease and ownership claims"
-              status: todo
+              status: done
               file: docs/themes/TH3-runtime-first-reengineering/epics/E4-locking-and-recovery/user-stories/US1-runtime-lease-and-ownership-claims.md
               depends-on: [TH3.E1.US2]
             - id: TH3.E4.US2

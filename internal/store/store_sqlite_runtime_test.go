@@ -87,7 +87,6 @@ func TestSQLiteStore_UpsertWakeScheduleDeduplicatesByKeyAndRefreshesDueTime(t *t
 	assert.Equal(t, `{"attempt":2}`, wakes[0].Payload)
 	assert.Equal(t, "session-1:ci:42", wakes[0].DedupeKey)
 }
-
 func TestSQLiteStore_ExternalEventsAndPolicyDecisionsPersistForReplay(t *testing.T) {
 	st := newMemDB(t)
 	ctx := context.Background()

@@ -56,6 +56,13 @@ Proposed | Accepted | Deprecated | Superseded by ADR-<NNN>
 3. **Deprecated** → No longer relevant (explain why)
 4. **Superseded** → Replaced by a newer ADR (link to it)
 
+### ADR Immutability
+
+- `Proposed` ADRs may be edited while the decision is still open.
+- Once an ADR is `Accepted`, `Deprecated`, or `Superseded`, its historical context, decision, and consequences are immutable in substance.
+- If the architecture changes, create a new ADR and update the old ADR only with status/supersession metadata.
+- Do not rewrite an accepted ADR so it appears that the new decision was always the original one.
+
 ## Tech Stack Analysis
 
 When choosing technologies, evaluate along these dimensions:

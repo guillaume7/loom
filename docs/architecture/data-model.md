@@ -1,12 +1,13 @@
-# Loom v2 — Data Model
+# Loom Runtime-First Architecture — Data Model
 
-> Traces to: [VP2 §4](../vision_of_product/VP2-agent-platform/02-vision-agent-platform.md) (new tool surface), [VP2 §8](../vision_of_product/VP2-agent-platform/02-vision-agent-platform.md) (what Loom still owns)
+> Traces to: [VP3](../vision_of_product/VP3-runtime-first/03-vision-runtime-first.md), [ADR-009](../ADRs/ADR-009-deterministic-runtime-policy-engine.md), [ADR-010](../ADRs/ADR-010-bounded-agent-jobs-and-run-locking.md)
 
 ## 1. SQLite Database (`.loom/state.db`)
 
-### 1.1 Checkpoint Table (existing)
+### 1.1 Checkpoint Table (retained)
 
-Single-row table holding the latest FSM snapshot. Written on every `loom_checkpoint` call.
+Single authoritative snapshot of workflow progress. VP3 retains checkpoint truth
+while broadening the runtime metadata around it.
 
 ```sql
 CREATE TABLE checkpoint (
@@ -22,9 +23,10 @@ CREATE TABLE checkpoint (
 
 **Go struct**: `store.Checkpoint` — fields map 1:1.
 
-### 1.2 Action Log Table (v2 — new)
+### 1.2 Action Log Table (retained)
 
-Append-only log of every action taken by Loom. Used for idempotency enforcement, the `loom://log` MCP resource, and the `loom log` CLI command.
+Append-only log of every action taken by Loom. VP3 keeps this for idempotency,
+operator history, and replay correlation.
 
 ```sql
 CREATE TABLE action_log (
@@ -43,7 +45,7 @@ CREATE UNIQUE INDEX idx_operation_key ON action_log(operation_key);
 
 **Idempotency contract**: Before executing a write operation, the MCP server checks `SELECT 1 FROM action_log WHERE operation_key = ?`. If the row exists, the operation is skipped and the existing result is returned.
 
-### 1.3 Session Run Table (v2 — new)
+### 1.3 Session Run Table (retained)
 
 Single header row per `/run-loom` execution. This is the stable metadata shown at the top of the session trace surface.
 
@@ -60,7 +62,7 @@ CREATE TABLE session_run (
 );
 ```
 
-### 1.4 Session Trace Event Table (v2 — new)
+### 1.4 Session Trace Event Table (retained)
 
 Append-only event stream for post-mortem replay. Entries are written in chronological order and folded at read time into a timeline, FSM ledger, and GitHub issue/PR evolution ledger.
 
@@ -97,9 +99,96 @@ Recommended `event_kind` values:
 - `github_pr_state_changed`
 - `session_completed`
 
-### 1.5 Migration Strategy
+### 1.5 Wake Schedule Table (v3 — new)
 
-Forward-compatible, additive-only. The existing `migrate()` function in `internal/store/sqlite.go` already handles `ALTER TABLE ADD COLUMN` for missing columns. The v2 migration adds the `action_log` table via `CREATE TABLE IF NOT EXISTS`.
+Durable queue of runtime wake-ups. The runtime consults this table to decide
+what should be re-evaluated next without depending on an active session.
+
+```sql
+CREATE TABLE wake_schedule (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id     TEXT    NOT NULL,
+  wake_kind      TEXT    NOT NULL,
+  due_at         TEXT    NOT NULL,
+  dedupe_key     TEXT    NOT NULL,
+  payload        TEXT    NOT NULL DEFAULT '',
+  claimed_at     TEXT    NOT NULL DEFAULT '',
+  created_at     TEXT    NOT NULL
+);
+
+CREATE UNIQUE INDEX idx_wake_schedule_dedupe_key
+  ON wake_schedule(dedupe_key);
+```
+
+### 1.6 External Event Table (v3 — new)
+
+Append-only inbox of GitHub-derived events or polling observations used for
+replay and policy evaluation.
+
+```sql
+CREATE TABLE external_event (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id     TEXT    NOT NULL,
+  event_source   TEXT    NOT NULL,
+  event_kind     TEXT    NOT NULL,
+  external_id    TEXT    NOT NULL DEFAULT '',
+  payload        TEXT    NOT NULL,
+  observed_at    TEXT    NOT NULL
+);
+```
+
+### 1.7 Runtime Lease Table (v3 — new)
+
+Ensures one runtime owner per run or narrower resource such as a PR.
+
+```sql
+CREATE TABLE runtime_lease (
+  lease_key      TEXT PRIMARY KEY,
+  holder_id      TEXT NOT NULL,
+  scope          TEXT NOT NULL,
+  expires_at     TEXT NOT NULL,
+  created_at     TEXT NOT NULL,
+  renewed_at     TEXT NOT NULL
+);
+```
+
+### 1.8 Policy Decision Table (v3 — new)
+
+Persisted record of deterministic runtime decisions.
+
+```sql
+CREATE TABLE policy_decision (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id       TEXT    NOT NULL,
+  decision_kind    TEXT    NOT NULL,
+  verdict          TEXT    NOT NULL,
+  input_hash       TEXT    NOT NULL,
+  detail           TEXT    NOT NULL DEFAULT '',
+  created_at       TEXT    NOT NULL
+);
+```
+
+### 1.9 Agent Job Table (v3 — new)
+
+Tracks bounded AI-assisted jobs independently from orchestration state.
+
+```sql
+CREATE TABLE agent_job (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id       TEXT    NOT NULL,
+  job_kind         TEXT    NOT NULL,
+  input_payload    TEXT    NOT NULL,
+  output_payload   TEXT    NOT NULL DEFAULT '',
+  status           TEXT    NOT NULL,
+  created_at       TEXT    NOT NULL,
+  completed_at     TEXT    NOT NULL DEFAULT ''
+);
+```
+
+### 1.10 Migration Strategy
+
+Forward-compatible, additive-only. VP3 extends the migration set with wake
+schedule, external event, runtime lease, policy decision, and agent job tables.
 
 The session trace capability extends the migration set with `session_run` and `session_trace_event`, also created via additive `CREATE TABLE IF NOT EXISTS` statements.
 
@@ -134,23 +223,23 @@ epics:
 ### 2.2 Rules
 
 - `depends_on` references use the same ID scheme as the story files.
-- A story is **unblocked** when all entries in its `depends_on` list (and the epic's `depends_on` list) have status `done` in the checkpoint store.
+- A story is **unblocked** when all entries in its `depends_on` list (and the epic's `depends_on` list) have status `done` in the backlog/checkpoint view used by the runtime.
 - Circular dependencies are a parse-time error.
 - The schema `version` field enables future format evolution.
 
 ---
 
-## 3. MCP Resources (v2)
+## 3. MCP Resources
 
 Resources are read-only views served by the MCP server to any connected agent session.
 
 | URI | Format | Source | Description |
 | ----- | -------- | -------- | ------------- |
 | `loom://dependencies` | YAML | `.loom/dependencies.yaml` file | Full dependency graph |
-| `loom://state` | JSON | Checkpoint table + FSM in-memory state | Current state, phase, PR, retry counts, last action |
-| `loom://log` | NDJSON | Action log table (last 200 entries) | Structured history of all Loom actions |
-| `loom://sessions` | JSON | `session_run` table | Retained session index for discoverability |
-| `loom://session/<id>` | Markdown | `session_run` + `session_trace_event` | Human-readable trace tab for one run |
+| `loom://state` | JSON | Checkpoint + active runtime state | Current state, next wake-up, retry counts |
+| `loom://log` | NDJSON | Action log table | Structured history of Loom actions |
+| `loom://sessions` | JSON | `session_run` table | Retained session index |
+| `loom://session/<id>` | Markdown | Trace tables | Human-readable trace for one run |
 
 ### 3.1 `loom://state` Schema
 
@@ -211,7 +300,14 @@ The resource is derived from the append-only `session_trace_event` stream rather
 
 ---
 
-## 4. MCP Elicitation Schema (v2)
+## 4. Replay Inputs
+
+VP3 adds a replay harness that folds checkpoint state, external events, policy
+decisions, and trace correlation IDs into deterministic fixtures. Replay inputs
+must remain derived from real runtime observations and must never overwrite the
+authoritative checkpoint.
+
+## 5. MCP Elicitation Schema
 
 Structured prompt sent to the operator when a retry budget is exhausted.
 
@@ -238,13 +334,13 @@ The Go binary validates the response and maps it to an FSM event.
 
 ---
 
-## 5. Configuration (unchanged)
+## 6. Configuration
 
 `~/.loom/config.toml` with environment variable overrides. Schema documented in `internal/config/config.go`.
 
 ---
 
-## 6. Entity Relationships
+## 7. Entity Relationships
 
 ```text
 Config ──loads──→ Loom binary

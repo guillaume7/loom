@@ -1,6 +1,6 @@
-# Loom v2 — Project Setup
+# Loom Runtime-First Architecture — Project Setup
 
-> Traces to: existing codebase structure and [VP2 §11](../vision_of_product/VP2-agent-platform/02-vision-agent-platform.md) (what has not changed)
+> Traces to: existing codebase structure, [VP3](../vision_of_product/VP3-runtime-first/03-vision-runtime-first.md), and [ADR-008](../ADRs/ADR-008-runtime-first-control-plane-and-wake-model.md)
 
 ## 1. Repository Structure
 
@@ -32,10 +32,14 @@ loom/
 │       └── cmd_version.go
 ├── internal/
 │   ├── config/                     # TOML config + env var loading
-│   ├── depgraph/                   # v2: Dependency DAG parser + evaluator
+│   ├── depgraph/                   # Dependency DAG parser + evaluator
+│   ├── events/                     # v3 planned: wake/event ingestion
 │   ├── fsm/                        # Finite state machine (zero deps)
 │   ├── github/                     # GitHub REST API client
+│   ├── locking/                    # v3 planned: runtime leases and locks
 │   ├── mcp/                        # MCP server (tools, resources, monitor)
+│   ├── policy/                     # v3 planned: deterministic runtime policy engine
+│   ├── runtime/                    # v3 planned: scheduler + recovery loop
 │   ├── store/                      # SQLite persistence layer
 │   └── tools/                      # Compile-time dependency checks
 ├── integration/                    # Integration tests
@@ -132,7 +136,18 @@ feat(TH2.E9.US4): expose session trace resource surface
 fix(TH2.E5.US3): correct task capability fallback
 ```
 
-## 5. v2-Specific Setup
+## 5. Runtime-First Planning Notes
+
+### Planned v3 Runtime Packages
+
+- `internal/runtime/` for wake scheduling, resume control, and controller lifecycle
+- `internal/policy/` for deterministic gate and escalation evaluation
+- `internal/locking/` for run leases and narrower concurrency locks
+- `internal/events/` for GitHub event ingestion and replay inputs
+
+These are planning targets for TH3, not statements that the code already exists.
+
+## 6. Existing Agent Setup
 
 ### Agent Definitions
 

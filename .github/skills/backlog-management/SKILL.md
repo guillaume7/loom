@@ -79,6 +79,13 @@ The backlog file is the **sole authoritative store** for status. Story files do 
 3. **Update** `last-updated` timestamp
 4. **Write** backlog.yaml atomically
 
+## Planning Artifact Immutability
+
+- `docs/plan/backlog.yaml` is mutable for status, dependencies, and the addition of new work.
+- Settled theme, epic, and story identities are not mutable in meaning. Do not repurpose an existing `TH`, `E`, or `US` entry to describe a different initiative after planning has been accepted.
+- If scope changes materially, add a new theme, epic, or story and wire dependencies explicitly.
+- `done` items remain historical records. If follow-up work is needed, create a new backlog item rather than editing the old item to match the new reality.
+
 ## Session Log
 
 The session log (`docs/plan/session-log.md`) provides a bounded, recent-activity view for crash recovery and resumability. **Git commit history is the primary audit trail** — the session log is supplementary.

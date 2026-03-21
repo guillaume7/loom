@@ -330,6 +330,39 @@ func TestControllerStartReclaimsDueWakeAfterExpiredLease(t *testing.T) {
 	assert.Equal(t, restartAt, wakes[0].ClaimedAt)
 }
 
+func TestControllerStartSleepsWhenActiveLeaseHeldByAnotherController(t *testing.T) {
+	now := time.Date(2026, 3, 20, 12, 0, 0, 0, time.UTC)
+	st := newMemStore()
+	require.NoError(t, st.WriteCheckpoint(context.Background(), store.Checkpoint{State: "AWAITING_CI", Phase: 2}))
+	require.NoError(t, st.UpsertRuntimeLease(context.Background(), store.RuntimeLease{
+		LeaseKey:  "run:default",
+		HolderID:  "controller-1",
+		Scope:     "run",
+		ExpiresAt: now.Add(time.Minute),
+		CreatedAt: now,
+		RenewedAt: now,
+	}))
+
+	controller := loomruntime.NewController(st, loomruntime.Config{
+		HolderID:     "controller-2",
+		LeaseTTL:     time.Minute,
+		PollInterval: time.Minute,
+		Now:          func() time.Time { return now },
+	})
+
+	lifecycle, err := controller.Start(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, loomruntime.ControllerStateSleeping, lifecycle.Controller)
+	assert.Equal(t, "lease_held_by_other_controller", lifecycle.Reason)
+	assert.Equal(t, "controller-1", lifecycle.HolderID)
+	assert.Equal(t, "run:default", lifecycle.LeaseKey)
+
+	lease, err := st.ReadRuntimeLease(context.Background(), "run:default")
+	require.NoError(t, err)
+	assert.Equal(t, "controller-1", lease.HolderID)
+}
+
 func TestControllerStartSleepsUntilNextPersistedWake(t *testing.T) {
 	now := time.Date(2026, 3, 20, 12, 0, 0, 0, time.UTC)
 	st := newMemStore()

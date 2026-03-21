@@ -1,145 +1,118 @@
-# Loom v2 — Component Breakdown
+# Loom Runtime-First Architecture — Component Breakdown
 
-> Traces to: [VP2 §3](../vision_of_product/VP2-agent-platform/02-vision-agent-platform.md) (revised architecture), [VP2 §8](../vision_of_product/VP2-agent-platform/02-vision-agent-platform.md) (what Loom still owns)
+> Traces to: [VP3](../vision_of_product/VP3-runtime-first/03-vision-runtime-first.md), [ADR-008](../ADRs/ADR-008-runtime-first-control-plane-and-wake-model.md), [ADR-009](../ADRs/ADR-009-deterministic-runtime-policy-engine.md), [ADR-010](../ADRs/ADR-010-bounded-agent-jobs-and-run-locking.md)
 
 ## Component Map
 
 ```text
 ┌────────────────────────────────────────────────────────────────┐
-│  Agent Layer (.github/agents/)          [not Go — declarative] │
-│  ┌──────────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐  │
-│  │ orchestrator │ │ gate     │ │ debug    │ │ merge        │  │
-│  └──────┬───────┘ └────┬─────┘ └────┬─────┘ └──────┬───────┘  │
-│         │ handoffs      │ subagent   │ handoff      │ handoff  │
-└─────────┼───────────────┼────────────┼──────────────┼──────────┘
-          │               │            │              │
-          ▼               ▼            ▼              ▼
+│  Operator Surfaces (CLI + MCP)                               │
+└─────────┬─────────────────────────────────────────────────────┘
+      ▼
 ┌────────────────────────────────────────────────────────────────┐
-│  MCP Server (internal/mcp)                                     │
-│  ┌───────────┐ ┌───────────┐ ┌───────────┐ ┌───────────────┐  │
-│  │ Tools     │ │ Resources │ │ Tasks     │ │ Elicitation   │  │
-│  └─────┬─────┘ └─────┬─────┘ └─────┬─────┘ └───────┬───────┘  │
+│  Runtime Controller                                             │
+│  ┌────────────┐ ┌──────────────┐ ┌───────────────┐            │
+│  │ Scheduler  │ │ Policy Engine│ │ Lock Manager  │            │
+│  └─────┬──────┘ └──────┬───────┘ └──────┬────────┘            │
+│        │               │                │                     │
+│  ┌─────▼──────┐ ┌──────▼──────┐ ┌──────▼────────┐             │
+│  │ Event Inbox │ │ Agent Jobs  │ │ Recovery Loop │             │
+│  └─────────────┘ └─────────────┘ └───────────────┘             │
 └────────┼──────────────┼─────────────┼───────────────┼──────────┘
          │              │             │               │
          ▼              ▼             ▼               ▼
 ┌────────────────────────────────────────────────────────────────┐
-│  Core Layer                                                    │
-│  ┌──────┐  ┌─────────┐  ┌────────────┐  ┌──────────────────┐  │
-│  │ FSM  │  │ DepGraph │  │ Monitor    │  │ Config           │  │
-│  └──┬───┘  └────┬─────┘  └─────┬──────┘  └────────┬─────────┘  │
-└─────┼───────────┼───────────────┼──────────────────┼───────────┘
-      │           │               │                  │
-      ▼           ▼               ▼                  ▼
+│  Persistence + Integration                                      │
+│  ┌────────────┐ ┌─────────────┐ ┌──────────────┐ ┌───────────┐ │
+│  │ SQLite     │ │ MCP Surface │ │ GitHub Client│ │ Config    │ │
+│  └─────┬──────┘ └──────┬──────┘ └──────┬───────┘ └────┬──────┘ │
+└────────┼───────────────┼───────────────┼──────────────┼────────┘
+     │               │               │              │
+     ▼               ▼               ▼              ▼
 ┌────────────────────────────────────────────────────────────────┐
-│  Persistence Layer                                             │
-│  ┌──────────────────┐  ┌─────────────────────────────┐        │
-│  │ Store (SQLite)   │  │ .loom/dependencies.yaml     │        │
-│  └──────────────────┘  └─────────────────────────────┘        │
+│  External Systems                                               │
+│  GitHub REST API · Optional GitHub Event Sources · Agent Hosts  │
 └────────────────────────────────────────────────────────────────┘
-      │
-      ▼
-┌────────────────────────────────────────────────────────────────┐
-│  GitHub Integration (internal/github)                          │
-│  HTTPClient → GitHub REST API                                  │
-└────────────────────────────────────────────────────────────────┘
-```text
+```
 
 ---
 
 ## Component Details
 
-### 1. Agent Definitions (`.github/agents/`)
+### 1. Runtime Controller
 
-- **Responsibility**: Declarative agent personas with constrained tool sets, handoff wiring, and behavioral instructions.
-- **Interface**: VS Code reads `.agent.md` files; agents invoke MCP tools and hand off to each other.
-- **Data ownership**: None — agents are stateless definitions.
-- **Dependencies**: VS Code custom agent runtime (v1.106+).
-- **Components**:
-  - `loom-orchestrator.agent.md` — full Loom + GitHub MCP tools; drives the FSM loop.
-  - `loom-gate.agent.md` — read-only tools; returns structured PASS/FAIL verdict as subagent.
-  - `loom-debug.agent.md` — read + comment tools; posts debug analysis on failing PRs.
-  - `loom-merge.agent.md` — merge tool; executes merge after gate PASS.
-- **ADR**: [ADR-002](../ADRs/ADR-002-multi-agent-orchestration.md)
+- **Responsibility**: Own orchestration liveness, wake-ups, retries, locks, and recovery.
+- **Interface**: Internal Go APIs plus MCP/CLI surfaces.
+- **Data ownership**: Runtime leases, wake schedules, policy outcomes.
+- **Dependencies**: FSM, Store, GitHub Client, Agent Job Runner.
+- **ADR**: [ADR-008](../ADRs/ADR-008-runtime-first-control-plane-and-wake-model.md)
 
-### 2. MCP Server (`internal/mcp`)
+### 2. Policy Engine
 
-- **Responsibility**: Expose Loom's tools, resources, tasks, and elicitations over MCP stdio.
-- **Interface**: MCP protocol (stdio transport). Five tools, five resources, task lifecycle events, elicitation schema.
-- **Data ownership**: None directly — delegates to Store and FSM.
-- **Dependencies**: FSM, Store, GitHub Client, DepGraph, Monitor.
-- **Sub-components**:
-  - **Tools**: `loom_next_step`, `loom_checkpoint`, `loom_heartbeat`, `loom_get_state`, `loom_abort`.
-  - **Resources** (v2): `loom://dependencies`, `loom://state`, `loom://log`, `loom://sessions`, `loom://session/<id>`.
-  - **Tasks** (v2): MCP Task wrapping for long-running `loom_heartbeat` polls.
-  - **Elicitation** (v2): Structured schema on budget exhaustion.
-  - **Server Instructions** (v2): Phase summary + dependency digest injected into base prompt.
-  - **Session Trace Rendering** (v2): Human-readable per-session trace surface with run header, FSM ledger, and GitHub entity evolution.
-- **ADR**: [ADR-003](../ADRs/ADR-003-mcp-resources.md), [ADR-004](../ADRs/ADR-004-mcp-tasks-and-elicitation.md)
+- **Responsibility**: Evaluate CI, review, merge, dependency, and escalation decisions deterministically.
+- **Interface**: `Evaluate(snapshot) -> decision`.
+- **Data ownership**: Policy decision records.
+- **Dependencies**: GitHub state snapshots, dependency graph, retry counters.
+- **ADR**: [ADR-009](../ADRs/ADR-009-deterministic-runtime-policy-engine.md)
 
-### 3. FSM (`internal/fsm`)
+### 3. Lock Manager
 
-- **Responsibility**: Deterministic state machine enforcing valid workflow transitions and retry budgets.
-- **Interface**: `State()`, `Transition(event)` — pure functions, no I/O.
-- **Data ownership**: Current state and retry counters (in-memory; persisted via Store).
-- **Dependencies**: None (zero external deps).
-- **Unchanged from v1**: 13 states, event set, transition table, budget config.
+- **Responsibility**: Prevent concurrent control of the same run or PR.
+- **Interface**: Acquire, renew, release lease/lock.
+- **Data ownership**: Run leases and narrower lock rows.
+- **Dependencies**: Store and runtime clock.
+- **ADR**: [ADR-010](../ADRs/ADR-010-bounded-agent-jobs-and-run-locking.md)
 
-### 4. Dependency Graph (`internal/depgraph`) — NEW in v2
+### 4. Agent Job Runner
 
-- **Responsibility**: Parse `.loom/dependencies.yaml`, evaluate the DAG, determine unblocked stories/epics.
-- **Interface**: `Load(path) → Graph`, `Graph.Unblocked() → []StoryID`, `Graph.IsBlocked(id) → bool`.
-- **Data ownership**: `.loom/dependencies.yaml` schema and validation.
-- **Dependencies**: `gopkg.in/yaml.v3` for parsing.
-- **ADR**: [ADR-003](../ADRs/ADR-003-mcp-resources.md)
+- **Responsibility**: Execute bounded AI-assisted jobs with structured inputs/outputs.
+- **Interface**: Submit job, await result, record failure/timeout.
+- **Data ownership**: Agent job records and output envelopes.
+- **Dependencies**: MCP surface or agent host integration.
+- **ADR**: [ADR-010](../ADRs/ADR-010-bounded-agent-jobs-and-run-locking.md)
 
 ### 5. Store (`internal/store`)
 
-- **Responsibility**: Persist and retrieve workflow checkpoints, action log entries.
-- **Interface**: `ReadCheckpoint`, `WriteCheckpoint`, `DeleteAll`, `Close` (existing). v2 adds: `WriteAction`, `ReadActions(limit)`, `CreateSessionRun`, `AppendTraceEvent`, `ListSessionRuns`, `ReadSessionTrace`.
+- **Responsibility**: Persist checkpoints, locks, schedules, events, policy decisions, action log, and traces.
+- **Interface**: Existing checkpoint methods plus additive methods for runtime scheduling, leases, external events, policy decisions, and agent jobs.
 - **Data ownership**: SQLite database at `.loom/state.db`.
 - **Dependencies**: `modernc.org/sqlite`.
-- **v2 additions**: Action log table for idempotency keys, plus session trace tables for operator-facing replay and post-mortem analysis.
 
-### 6. Monitor (`internal/mcp/monitor.go`)
+### 6. MCP Surface (`internal/mcp`)
 
-- **Responsibility**: Stall detection, heartbeat log emission, session health monitoring.
-- **Interface**: `RunStallCheck()`, `startMonitor(ctx)` (internal).
-- **Data ownership**: Last-activity timestamp (in-memory).
-- **Dependencies**: FSM, Store, Clock interface.
-- **Unchanged from v1**.
+- **Responsibility**: Expose runtime tools and resources without becoming the control plane.
+- **Interface**: MCP stdio transport with tools and read surfaces.
+- **Data ownership**: None — delegates to runtime and store.
+- **Dependencies**: Runtime controller, store, GitHub client.
 
-### 7. GitHub Client (`internal/github`)
+### 7. Dependency Graph (`internal/depgraph`)
 
-- **Responsibility**: Typed GitHub REST API client with rate-limit handling and retry.
-- **Interface**: `GitHubClient` interface (CreateIssue, ListPRs, MergePR, etc.).
-- **Data ownership**: None (GitHub.com owns the data).
+- **Responsibility**: Parse `.loom/dependencies.yaml` and answer dependency readiness.
+- **Interface**: `Load(path) -> Graph`, blocking/unblocked queries.
+- **Data ownership**: `.loom/dependencies.yaml` schema and validation.
+- **Dependencies**: `gopkg.in/yaml.v3`.
+
+### 8. GitHub Client (`internal/github`)
+
+- **Responsibility**: Read and write GitHub issue, PR, review, and check state.
+- **Interface**: Typed GitHub client methods.
+- **Data ownership**: None.
 - **Dependencies**: `google/go-github`, `net/http`.
-- **Unchanged from v1**.
-
-### 8. Config (`internal/config`)
-
-- **Responsibility**: Load runtime configuration from `~/.loom/config.toml` and environment variables.
-- **Interface**: `Load() → Config`.
-- **Data ownership**: Configuration schema.
-- **Dependencies**: `pelletier/go-toml/v2`.
-- **Unchanged from v1**.
 
 ### 9. CLI (`cmd/loom`)
 
-- **Responsibility**: Human operator surface: `start`, `status`, `pause`, `resume`, `log`, `mcp`, `reset`, `version`.
+- **Responsibility**: Human operator control over runtime lifecycle and inspection.
 - **Interface**: Shell commands via `spf13/cobra`.
 - **Data ownership**: None.
 - **Dependencies**: All internal packages.
-- **Unchanged from v1**.
 
 ---
 
 ## Boundary Rules
 
-1. **Agent definitions do not contain Go code** — they are declarative Markdown files consumed by VS Code.
-2. **MCP Server is the only bridge** between agent sessions and Loom internals. No direct Go package imports from agents.
-3. **FSM has zero external dependencies** — testable in isolation with table-driven Go tests.
-4. **Store owns all durable state** — no other component writes to SQLite directly.
-5. **DepGraph owns `.loom/dependencies.yaml`** — other components read the parsed graph, not the raw YAML.
-6. **GitHub Client never mutates FSM state** — it returns results; the MCP server decides the FSM event.
-7. **Session trace is append-only** — existing trace entries are never rewritten; retained traces are removed only by whole-session retention rules.
+1. **Runtime controller owns liveness** — no agent or surface may bypass runtime scheduling and recovery.
+2. **Store owns durable state** — no other component writes SQLite directly.
+3. **Policy engine is deterministic** — decisions are computed from explicit snapshots, not prompt history.
+4. **Agent jobs are bounded** — they may return outputs, not mutate authoritative orchestration state directly.
+5. **Locking precedes concurrency** — resumed or parallel work must acquire the correct lease first.
+6. **Session trace remains append-only** — observability artifacts are never rewritten into source-of-truth state.
