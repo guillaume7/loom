@@ -401,6 +401,63 @@ epics:
 	})
 }
 
+func TestLoomScheduleEpic_ReschedulesFailedStoryWithoutExitAsAttempt2(t *testing.T) {
+	withDependenciesFile(t, `version: 1
+epics:
+  - id: E2
+    depends_on: []
+    stories:
+      - id: US-2.1
+        depends_on: []
+`, func() {
+		gh := &scheduleGitHubClientMock{budget: loomgh.RateLimit{Limit: 5000, Remaining: 4000}}
+		spawner := newScheduleSpawner()
+		machine := fsm.NewMachine(fsm.DefaultConfig())
+		st := newMemStore()
+		s := mcp.NewServer(machine, st, gh, mcp.WithSpawner(spawner))
+		mcpSvr := s.MCPServer()
+
+		// First pass: spawns US-2.1 with attempt 1.
+		first := callTool(t, mcpSvr, "loom_schedule_epic", nil)
+		require.False(t, first.IsError, toolText(t, first))
+		var firstResult mcp.ScheduleEpicResult
+		require.NoError(t, json.Unmarshal([]byte(toolText(t, first)), &firstResult))
+		require.Len(t, firstResult.Spawned, 1)
+		assert.Equal(t, "US-2.1", firstResult.Spawned[0].StoryID)
+		assert.Equal(t, 1, firstResult.Spawned[0].Contract.Attempt)
+
+		// Simulate failure of US-2.1 without a corresponding exit action.
+		require.NoError(t, st.WriteAction(context.Background(), store.Action{
+			SessionID:    "test-session",
+			OperationKey: "background_agent_failed:test-session:US-2.1:1234:5678",
+			StateBefore:  "background_agent_running",
+			StateAfter:   "background_agent_failed",
+			Event:        "background_agent_failed",
+			Detail:       `{"story_id":"US-2.1","failure_class":"timeout_watchdog","failure_reason":"agent execution timed out"}`,
+		}))
+
+		// Second pass: US-2.1 failed and is not complete, so it becomes a candidate again.
+		second := callTool(t, mcpSvr, "loom_schedule_epic", nil)
+		require.False(t, second.IsError, toolText(t, second))
+		var secondResult mcp.ScheduleEpicResult
+		require.NoError(t, json.Unmarshal([]byte(toolText(t, second)), &secondResult))
+		require.Len(t, secondResult.Spawned, 1)
+		assert.Equal(t, "US-2.1", secondResult.Spawned[0].StoryID)
+		assert.Equal(t, 2, secondResult.Spawned[0].Contract.Attempt)
+		assert.Empty(t, secondResult.RunningStories)
+
+		// Third pass: attempt 2 is now active (spawnCount=2 > max(exitCount=0, failedCount=1)).
+		// The scheduler must not spawn attempt 3 and must report US-2.1 as running.
+		third := callTool(t, mcpSvr, "loom_schedule_epic", nil)
+		require.False(t, third.IsError, toolText(t, third))
+		var thirdResult mcp.ScheduleEpicResult
+		require.NoError(t, json.Unmarshal([]byte(toolText(t, third)), &thirdResult))
+		assert.Empty(t, thirdResult.Spawned, "must not spawn attempt 3 while attempt 2 is active")
+		assert.Equal(t, []string{"US-2.1"}, thirdResult.RunningStories, "attempt 2 must appear as running")
+		assert.Equal(t, "idle", thirdResult.Status)
+	})
+}
+
 func TestLoomScheduleEpic_AttemptIncrementedFromPriorSpawnActions(t *testing.T) {
 	withDependenciesFile(t, `version: 1
 epics:

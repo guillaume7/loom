@@ -95,6 +95,7 @@ type scheduleStoryState struct {
 	completed  map[string]struct{}
 	spawnCount map[string]int
 	exitCount  map[string]int
+	failedCount map[string]int
 }
 
 func (s *Server) handleScheduleEpic(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
@@ -290,6 +291,7 @@ func collectScheduleStoryState(storyIDs []string, actions []store.Action) schedu
 		completed:  make(map[string]struct{}, len(storyIDs)),
 		spawnCount: make(map[string]int, len(storyIDs)),
 		exitCount:  make(map[string]int, len(storyIDs)),
+		failedCount: make(map[string]int, len(storyIDs)),
 	}
 	for _, action := range actions {
 		switch action.Event {
@@ -300,6 +302,10 @@ func collectScheduleStoryState(storyIDs []string, actions []store.Action) schedu
 		case "background_agent_exited":
 			if storyID := storyIDFromActionDetail(action.Detail); storyID != "" {
 				state.exitCount[storyID]++
+			}
+		case "background_agent_failed":
+			if storyID := storyIDFromActionDetail(action.Detail); storyID != "" {
+				state.failedCount[storyID]++
 			}
 		case "merged", "merged_epic_boundary", "refactor_merged":
 			if storyID := storyIDFromOperationKey(action.OperationKey, storyIDs); storyID != "" {
@@ -316,7 +322,8 @@ func collectRunningStories(state scheduleStoryState) []string {
 		if _, done := state.completed[storyID]; done {
 			continue
 		}
-		if spawns <= state.exitCount[storyID] {
+		terminalAttempts := maxInt(state.exitCount[storyID], state.failedCount[storyID])
+		if spawns <= terminalAttempts {
 			continue
 		}
 		running = append(running, storyID)
