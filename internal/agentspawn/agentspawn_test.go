@@ -91,6 +91,52 @@ func TestSpawnCapturesNonZeroExitCode(t *testing.T) {
 	assert.NoDirExists(t, filepath.Join(filepath.Dir(repoRoot), "worktree-us-2.1"))
 }
 
+func TestSpawnCapturesStdoutInExitOutput(t *testing.T) {
+	repoRoot := initGitRepo(t)
+	chdir(t, repoRoot)
+
+	installFakeCodeCLI(t, 0, 0)
+	t.Setenv("LOOM_FAKE_CODE_STDOUT", "not-json")
+	spawner := New()
+
+	handle, err := spawner.Spawn(Request{
+		StoryID:  "US-2.1",
+		Prompt:   "Implement US-2.1",
+		Worktree: "worktree-us-2.1",
+		Contract: testJobContract("US-2.1", "Implement US-2.1"),
+	})
+	require.NoError(t, err)
+
+	exit := waitForExit(t, handle.Done())
+	assert.NoError(t, exit.Err)
+	assert.Equal(t, 0, exit.ExitCode)
+	assert.Equal(t, "not-json", exit.Output)
+}
+
+func TestSpawnBoundsCapturedStdout(t *testing.T) {
+	repoRoot := initGitRepo(t)
+	chdir(t, repoRoot)
+
+	installFakeCodeCLI(t, 0, 0)
+	largeOutput := strings.Repeat("x", spawnOutputCapBytes+2048)
+	t.Setenv("LOOM_FAKE_CODE_STDOUT", largeOutput)
+	spawner := New()
+
+	handle, err := spawner.Spawn(Request{
+		StoryID:  "US-2.1",
+		Prompt:   "Implement US-2.1",
+		Worktree: "worktree-us-2.1",
+		Contract: testJobContract("US-2.1", "Implement US-2.1"),
+	})
+	require.NoError(t, err)
+
+	exit := waitForExit(t, handle.Done())
+	assert.NoError(t, exit.Err)
+	assert.Equal(t, 0, exit.ExitCode)
+	require.Len(t, exit.Output, spawnOutputCapBytes)
+	assert.Equal(t, largeOutput[:spawnOutputCapBytes], exit.Output)
+}
+
 func TestSpawnFiltersSecretsAndPassesStoryIDEnv(t *testing.T) {
 	t.Setenv("LOOM_TOKEN", "super-secret")
 	t.Setenv("GH_TOKEN", "gh-secret")
@@ -264,6 +310,9 @@ func installFakeCodeCLI(t *testing.T, exitCode int, sleep time.Duration) string 
 	script := strings.Join([]string{
 		"#!/bin/sh",
 		"printf '%s\n' \"$@\" > \"$LOOM_FAKE_CODE_ARGS_FILE\"",
+		"if [ -n \"${LOOM_FAKE_CODE_STDOUT:-}\" ]; then",
+		"  printf '%s' \"$LOOM_FAKE_CODE_STDOUT\"",
+		"fi",
 		"if [ \"${LOOM_FAKE_CODE_SLEEP_MS:-0}\" -gt 0 ]; then",
 		"  sleep $(awk \"BEGIN { printf \\\"%.3f\\\", ${LOOM_FAKE_CODE_SLEEP_MS}/1000 }\")",
 		"fi",

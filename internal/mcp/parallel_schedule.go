@@ -218,7 +218,7 @@ func (s *Server) handleScheduleEpic(ctx context.Context, req mcplib.CallToolRequ
 				}
 				result.Spawned = append(result.Spawned, spawned)
 				s.logBackgroundAgentSpawn(ctx, sessionID, started)
-				go s.awaitBackgroundAgentExit(sessionID, handle.Done())
+				go s.awaitBackgroundAgentExit(sessionID, started, handle.Done())
 			}
 			result.DeferredStories = append(result.DeferredStories, candidates[spawnLimit:]...)
 			switch {

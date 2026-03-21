@@ -15,25 +15,25 @@ import (
 
 // BackgroundAgentSpawnResult is returned by loom_spawn_agent.
 type BackgroundAgentSpawnResult struct {
-	StoryID  string   `json:"story_id"`
-	Prompt   string   `json:"prompt"`
-	Worktree string   `json:"worktree"`
+	StoryID  string                 `json:"story_id"`
+	Prompt   string                 `json:"prompt"`
+	Worktree string                 `json:"worktree"`
 	Contract agentspawn.JobContract `json:"contract"`
-	PID      int      `json:"pid"`
-	Command  []string `json:"command"`
-	Status   string   `json:"status"`
+	PID      int                    `json:"pid"`
+	Command  []string               `json:"command"`
+	Status   string                 `json:"status"`
 }
 
 type backgroundAgentExitDetail struct {
-	StoryID         string `json:"story_id"`
-	Prompt          string `json:"prompt"`
-	Worktree        string `json:"worktree"`
+	StoryID         string                 `json:"story_id"`
+	Prompt          string                 `json:"prompt"`
+	Worktree        string                 `json:"worktree"`
 	Contract        agentspawn.JobContract `json:"contract"`
-	PID             int    `json:"pid"`
-	ExitCode        int    `json:"exit_code"`
-	Success         bool   `json:"success"`
-	WorktreeRemoved bool   `json:"worktree_removed"`
-	CleanupError    string `json:"cleanup_error,omitempty"`
+	PID             int                    `json:"pid"`
+	ExitCode        int                    `json:"exit_code"`
+	Success         bool                   `json:"success"`
+	WorktreeRemoved bool                   `json:"worktree_removed"`
+	CleanupError    string                 `json:"cleanup_error,omitempty"`
 }
 
 // backgroundAgentFailedDetail is the payload written to the store when an
@@ -104,20 +104,79 @@ func (s *Server) handleSpawnAgent(ctx context.Context, req mcplib.CallToolReques
 	}
 
 	s.logBackgroundAgentSpawn(ctx, sessionID, started)
-	go s.awaitBackgroundAgentExit(sessionID, handle.Done())
+	go s.awaitBackgroundAgentExit(sessionID, started, handle.Done())
 
 	slog.InfoContext(ctx, "tool completed", "tool", toolName, "story_id", storyID, "pid", started.PID, "duration_ms", time.Since(start).Milliseconds())
 	return toolResultJSON(result), nil
 }
 
-func (s *Server) awaitBackgroundAgentExit(sessionID string, done <-chan agentspawn.Exit) {
-	result, ok := <-done
+func (s *Server) awaitBackgroundAgentExit(sessionID string, started agentspawn.Started, done <-chan agentspawn.Exit) {
+	result, ok, timeoutObservedAt, timedOut := s.waitForBackgroundAgentResult(started.Contract.Deadline, done)
+	if timedOut {
+		s.writeBackgroundAgentFailedTimeoutAction(sessionID, started, timeoutObservedAt)
+		go s.logBackgroundAgentExitOnArrival(sessionID, done)
+		return
+	}
 	if !ok {
 		return
 	}
 
 	observedAt := time.Now().UTC()
+	s.logBackgroundAgentExitedAction(sessionID, result, observedAt)
 
+	if malformedOutput := result.ExitCode == 0 && result.CleanupErr == nil && result.Output != "" && !isValidAgentOutputPayload(result.Output); malformedOutput {
+		s.writeBackgroundAgentFailedAction(sessionID, result, ClassifyMalformedOutput(), observedAt)
+		return
+	}
+
+	if failure, failed := ClassifyAgentJobExit(result, result.Started.Contract, observedAt); failed {
+		s.writeBackgroundAgentFailedAction(sessionID, result, failure, observedAt)
+	}
+}
+
+func (s *Server) waitForBackgroundAgentResult(deadline time.Time, done <-chan agentspawn.Exit) (agentspawn.Exit, bool, time.Time, bool) {
+	if deadline.IsZero() {
+		result, ok := <-done
+		return result, ok, time.Time{}, false
+	}
+
+	now := time.Now().UTC()
+	if !now.Before(deadline) {
+		return agentspawn.Exit{}, false, now, true
+	}
+
+	timer := time.NewTimer(time.Until(deadline))
+	defer timer.Stop()
+
+	select {
+	case result, ok := <-done:
+		return result, ok, time.Time{}, false
+	case timeoutObservedAt := <-timer.C:
+		return agentspawn.Exit{}, false, timeoutObservedAt.UTC(), true
+	}
+}
+
+func (s *Server) logBackgroundAgentExitOnArrival(sessionID string, done <-chan agentspawn.Exit) {
+	result, ok := <-done
+	if !ok {
+		return
+	}
+	s.logBackgroundAgentExitedAction(sessionID, result, time.Now().UTC())
+}
+
+func isValidAgentOutputPayload(output string) bool {
+	if output == "" {
+		return true
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(output), &payload); err != nil {
+		return false
+	}
+	return payload != nil
+}
+
+func (s *Server) logBackgroundAgentExitedAction(sessionID string, result agentspawn.Exit, observedAt time.Time) {
 	detail := backgroundAgentExitDetail{
 		StoryID:         result.Started.StoryID,
 		Prompt:          result.Started.Prompt,
@@ -146,9 +205,38 @@ func (s *Server) awaitBackgroundAgentExit(sessionID string, done <-chan agentspa
 	}); err != nil {
 		slog.Error("background agent exit action log write failed", "story_id", result.Started.StoryID, "pid", result.Started.PID, "error", err)
 	}
+}
 
-	if failure, failed := ClassifyAgentJobExit(result, result.Started.Contract, observedAt); failed {
-		s.writeBackgroundAgentFailedAction(sessionID, result, failure, observedAt)
+func (s *Server) writeBackgroundAgentFailedTimeoutAction(sessionID string, started agentspawn.Started, observedAt time.Time) {
+	timeoutFailure := AgentJobFailureResult{
+		Kind:      AgentJobFailureKindTimeout,
+		Outcome:   AgentJobFailureOutcomeRetry,
+		LockState: "recoverable",
+	}
+	failedDetail := backgroundAgentFailedDetail{
+		StoryID:     started.StoryID,
+		Contract:    started.Contract,
+		PID:         started.PID,
+		ExitCode:    -1,
+		FailureKind: timeoutFailure.Kind,
+		Outcome:     timeoutFailure.Outcome,
+		LockState:   timeoutFailure.LockState,
+		ObservedAt:  observedAt,
+	}
+	payload, err := json.Marshal(failedDetail)
+	if err != nil {
+		slog.Error("background agent timeout marshal failed", "story_id", started.StoryID, "pid", started.PID, "error", err)
+		return
+	}
+	if err := s.st.WriteAction(context.Background(), store.Action{
+		SessionID:    sessionID,
+		OperationKey: fmt.Sprintf("background_agent_failed:%s:%s:%d:%d", sessionID, started.StoryID, started.PID, observedAt.UnixNano()),
+		StateBefore:  "background_agent_running",
+		StateAfter:   "background_agent_failed",
+		Event:        "background_agent_failed",
+		Detail:       string(payload),
+	}); err != nil {
+		slog.Error("background agent timeout action log write failed", "story_id", started.StoryID, "pid", started.PID, "error", err)
 	}
 }
 

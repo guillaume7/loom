@@ -18,6 +18,34 @@ import (
 var ErrCodeCLINotFound = errors.New("code CLI not found on PATH")
 
 const storyIDEnvVar = "LOOM_STORY_ID"
+const spawnOutputCapBytes = 64 * 1024
+
+type cappedBufferWriter struct {
+	cap int
+	buf []byte
+}
+
+func newCappedBufferWriter(limit int) *cappedBufferWriter {
+	if limit < 0 {
+		limit = 0
+	}
+	return &cappedBufferWriter{cap: limit}
+}
+
+func (w *cappedBufferWriter) Write(p []byte) (int, error) {
+	if len(w.buf) < w.cap {
+		remaining := w.cap - len(w.buf)
+		if remaining > len(p) {
+			remaining = len(p)
+		}
+		w.buf = append(w.buf, p[:remaining]...)
+	}
+	return len(p), nil
+}
+
+func (w *cappedBufferWriter) String() string {
+	return string(w.buf)
+}
 
 // JobContract describes a bounded unit of agent work dispatched by the runtime.
 type JobContract struct {
@@ -65,6 +93,7 @@ func (s Started) Command() []string {
 type Exit struct {
 	Started    Started
 	ExitCode   int
+	Output     string
 	Err        error
 	CleanupErr error
 }
@@ -159,7 +188,8 @@ func (s *Spawner) Spawn(req Request) (SpawnHandle, error) {
 	cmd := s.command(codePath, args...)
 	cmd.Dir = repoRoot
 	cmd.Env = append(filteredEnv(os.Environ()), storyIDEnvVar+"="+storyID)
-	cmd.Stdout = io.Discard
+	stdout := newCappedBufferWriter(spawnOutputCapBytes)
+	cmd.Stdout = stdout
 	cmd.Stderr = io.Discard
 	if err := cmd.Start(); err != nil {
 		cleanupErr := s.worktrees.Remove(context.Background(), repoRoot, worktreePath, true)
@@ -194,6 +224,7 @@ func (s *Spawner) Spawn(req Request) (SpawnHandle, error) {
 		results <- Exit{
 			Started:    started,
 			ExitCode:   exitCode,
+			Output:     stdout.String(),
 			Err:        errors.Join(waitErr, cleanupErr),
 			CleanupErr: cleanupErr,
 		}

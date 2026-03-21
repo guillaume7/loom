@@ -22,9 +22,11 @@ import (
 // If pastDeadline is true the contract deadline is set one second in the past
 // so that ClassifyAgentJobExit sees a timeout.
 type containmentSpawner struct {
-	exitCode    int
-	cleanupErr  error
+	exitCode     int
+	cleanupErr   error
+	output       string
 	pastDeadline bool
+	withholdExit bool
 }
 
 func (s *containmentSpawner) Spawn(req agentspawn.Request) (agentspawn.SpawnHandle, error) {
@@ -42,12 +44,15 @@ func (s *containmentSpawner) Spawn(req agentspawn.Request) (agentspawn.SpawnHand
 		PID:      54321,
 	}
 	done := make(chan agentspawn.Exit, 1)
-	done <- agentspawn.Exit{
-		Started:    started,
-		ExitCode:   s.exitCode,
-		CleanupErr: s.cleanupErr,
+	if !s.withholdExit {
+		done <- agentspawn.Exit{
+			Started:    started,
+			ExitCode:   s.exitCode,
+			Output:     s.output,
+			CleanupErr: s.cleanupErr,
+		}
+		close(done)
 	}
-	close(done)
 	return &containmentSpawnHandle{started: started, done: done}, nil
 }
 
@@ -56,7 +61,7 @@ type containmentSpawnHandle struct {
 	done    <-chan agentspawn.Exit
 }
 
-func (h *containmentSpawnHandle) Started() agentspawn.Started { return h.started }
+func (h *containmentSpawnHandle) Started() agentspawn.Started  { return h.started }
 func (h *containmentSpawnHandle) Done() <-chan agentspawn.Exit { return h.done }
 
 // --------------------------------------------------------------------------
@@ -64,15 +69,15 @@ func (h *containmentSpawnHandle) Done() <-chan agentspawn.Exit { return h.done }
 // --------------------------------------------------------------------------
 
 type failedDetailPayload struct {
-	StoryID     string `json:"story_id"`
-	PID         int    `json:"pid"`
-	ExitCode    int    `json:"exit_code"`
-	FailureKind string `json:"failure_kind"`
-	Outcome     string `json:"outcome"`
-	LockState   string `json:"lock_state"`
-	Error       string `json:"error,omitempty"`
+	StoryID      string `json:"story_id"`
+	PID          int    `json:"pid"`
+	ExitCode     int    `json:"exit_code"`
+	FailureKind  string `json:"failure_kind"`
+	Outcome      string `json:"outcome"`
+	LockState    string `json:"lock_state"`
+	Error        string `json:"error,omitempty"`
 	CleanupError string `json:"cleanup_error,omitempty"`
-	ObservedAt  string `json:"observed_at"`
+	ObservedAt   string `json:"observed_at"`
 }
 
 // --------------------------------------------------------------------------
@@ -114,7 +119,33 @@ func TestAwaitBackgroundAgentExit_TimeoutWritesFailedAction(t *testing.T) {
 	machine := fsm.NewMachine(fsm.DefaultConfig())
 	st := newMemStore()
 	s := mcp.NewServer(machine, st, nil,
-		mcp.WithSpawner(&containmentSpawner{exitCode: 1, pastDeadline: true}),
+		mcp.WithSpawner(&containmentSpawner{pastDeadline: true, withholdExit: true}),
+	)
+	mcpSvr := s.MCPServer()
+
+	result := callTool(t, mcpSvr, "loom_spawn_agent", map[string]interface{}{
+		"story_id": "US-5.3",
+		"prompt":   "Implement US-5.3",
+		"worktree": "worktree-us-5.3",
+	})
+	require.False(t, result.IsError, toolText(t, result))
+
+	failedAction := waitForActionEvent(t, s.Store(), "background_agent_failed")
+	assert.Equal(t, "background_agent_running", failedAction.StateBefore)
+	assert.Equal(t, "background_agent_failed", failedAction.StateAfter)
+
+	var detail failedDetailPayload
+	require.NoError(t, json.Unmarshal([]byte(failedAction.Detail), &detail))
+	assert.Equal(t, string(mcp.AgentJobFailureKindTimeout), detail.FailureKind)
+	assert.Equal(t, string(mcp.AgentJobFailureOutcomeRetry), detail.Outcome)
+	assert.Equal(t, "recoverable", detail.LockState)
+}
+
+func TestAwaitBackgroundAgentExit_SuccessWithMalformedOutputWritesBlockedFailedAction(t *testing.T) {
+	machine := fsm.NewMachine(fsm.DefaultConfig())
+	st := newMemStore()
+	s := mcp.NewServer(machine, st, nil,
+		mcp.WithSpawner(&containmentSpawner{exitCode: 0, output: "not-json"}),
 	)
 	mcpSvr := s.MCPServer()
 
@@ -129,9 +160,10 @@ func TestAwaitBackgroundAgentExit_TimeoutWritesFailedAction(t *testing.T) {
 
 	var detail failedDetailPayload
 	require.NoError(t, json.Unmarshal([]byte(failedAction.Detail), &detail))
-	assert.Equal(t, string(mcp.AgentJobFailureKindTimeout), detail.FailureKind)
-	assert.Equal(t, string(mcp.AgentJobFailureOutcomeRetry), detail.Outcome)
+	assert.Equal(t, string(mcp.AgentJobFailureKindMalformedOutput), detail.FailureKind)
+	assert.Equal(t, string(mcp.AgentJobFailureOutcomeBlock), detail.Outcome)
 	assert.Equal(t, "recoverable", detail.LockState)
+	assert.Equal(t, 0, detail.ExitCode)
 }
 
 func TestAwaitBackgroundAgentExit_CleanupFailureWritesEscalatedOutcome(t *testing.T) {
