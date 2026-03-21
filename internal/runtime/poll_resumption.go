@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/guillaume7/loom/internal/fsm"
@@ -165,7 +166,11 @@ func (c *Controller) ProcessDueWake(ctx context.Context, gh PollingClient) (Life
 		return conflictLifecycle, nil
 	}
 	if cp.PRNumber > 0 {
-		defer c.ReleasePRLock(ctx, cp.PRNumber)
+		defer func() {
+			if releaseErr := c.ReleasePRLock(ctx, cp.PRNumber); releaseErr != nil {
+				slog.WarnContext(ctx, "failed to release PR lock", "pr_number", cp.PRNumber, "error", releaseErr)
+			}
+		}()
 	}
 	evaluation, err := c.evaluateDueWake(ctx, cp, gh, now, wake)
 	if err != nil {
