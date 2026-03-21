@@ -19,16 +19,16 @@ func TestAssemblePolicyAuditReport_ReturnsChronologicalEntriesForSession(t *test
 	}
 	now := time.Now().UTC()
 	ciObservation := map[string]interface{}{
-		"session_id":         "default",
-		"correlation_id":     "poll:default:poll_ci:1000",
-		"wake_kind":          "poll_ci",
-		"policy_decision":    "ci_readiness",
-		"policy_outcome":     "continue",
-		"policy_reason":      "ci_green",
-		"previous_state":     "awaiting_ready",
-		"new_state":          "awaiting_ready",
-		"decision_verdict":   "continue",
-		"retry_count":        0,
+		"session_id":       "default",
+		"correlation_id":   "poll:default:poll_ci:1000",
+		"wake_kind":        "poll_ci",
+		"policy_decision":  "ci_readiness",
+		"policy_outcome":   "continue",
+		"policy_reason":    "ci_green",
+		"previous_state":   "awaiting_ready",
+		"new_state":        "awaiting_ready",
+		"decision_verdict": "continue",
+		"retry_count":      0,
 	}
 	ciDetail, _ := json.Marshal(ciObservation)
 	ciDecision := store.PolicyDecision{
@@ -61,16 +61,16 @@ func TestAssemblePolicyAuditReport_ReturnsChronologicalEntriesForSession(t *test
 		t.Fatalf("WritePolicyDecision (dedupe) failed: %v", err)
 	}
 	reviewObservation := map[string]interface{}{
-		"session_id":         "default",
-		"correlation_id":     "poll:default:poll_review:3000",
-		"wake_kind":          "poll_review",
-		"policy_decision":    "review_readiness",
-		"policy_outcome":     "wait",
-		"policy_reason":      "review_pending",
-		"previous_state":     "awaiting_ready",
-		"new_state":          "awaiting_ready",
-		"decision_verdict":   "wait",
-		"retry_count":        0,
+		"session_id":       "default",
+		"correlation_id":   "poll:default:poll_review:3000",
+		"wake_kind":        "poll_review",
+		"policy_decision":  "review_readiness",
+		"policy_outcome":   "wait",
+		"policy_reason":    "review_pending",
+		"previous_state":   "awaiting_ready",
+		"new_state":        "awaiting_ready",
+		"decision_verdict": "wait",
+		"retry_count":      0,
 	}
 	reviewDetail, _ := json.Marshal(reviewObservation)
 	reviewDecision := store.PolicyDecision{

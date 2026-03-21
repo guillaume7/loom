@@ -12,12 +12,12 @@ import (
 type PolicyAuditEntry struct {
 	SessionID     string
 	CorrelationID string
-	DecisionKind  string    // e.g. "ci_readiness", "review_readiness", "merge_readiness"
-	Verdict       string    // the policy outcome: "continue", "block", "wait", "retry", "escalate"
-	Reason        string    // human-readable reason: "ci_green", "review_approved", etc.
-	InputHash     string    // SHA-256 of the input snapshot for replay matching
-	StateBefore   string    // previous FSM state
-	StateAfter    string    // new FSM state
+	DecisionKind  string // e.g. "ci_readiness", "review_readiness", "merge_readiness"
+	Verdict       string // the policy outcome: "continue", "block", "wait", "retry", "escalate"
+	Reason        string // human-readable reason: "ci_green", "review_approved", etc.
+	InputHash     string // SHA-256 of the input snapshot for replay matching
+	StateBefore   string // previous FSM state
+	StateAfter    string // new FSM state
 	RecordedAt    time.Time
 }
 

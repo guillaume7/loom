@@ -56,29 +56,29 @@ func (s ciPollSummary) allGreen() bool {
 }
 
 type pollObservation struct {
-	SessionID              string            `json:"session_id"`
-	CorrelationID          string            `json:"correlation_id"`
-	WakeKind               string            `json:"wake_kind"`
-	PolicyDecision         string            `json:"policy_decision,omitempty"`
-	PolicyOutcome          string            `json:"policy_outcome,omitempty"`
-	PolicyReason           string            `json:"policy_reason,omitempty"`
-	MergePolicyDecision    string            `json:"merge_policy_decision,omitempty"`
-	MergePolicyOutcome     string            `json:"merge_policy_outcome,omitempty"`
-	MergePolicyReason      string            `json:"merge_policy_reason,omitempty"`
-	PersistedVerdict       string            `json:"-"` // not persisted to JSON; used for PolicyDecision record only
-	PreviousState          string            `json:"previous_state"`
-	NewState               string            `json:"new_state"`
-	DecisionVerdict        string            `json:"decision_verdict"`
-	ActionEvent            string            `json:"action_event"`
-	Outcome                string            `json:"outcome"`
-	PRNumber               int               `json:"pr_number,omitempty"`
-	RetryCount             int               `json:"retry_count"`
-	ResumeState            string            `json:"resume_state,omitempty"`
-	ReviewStatus           string            `json:"review_status,omitempty"`
-	Draft                  *bool             `json:"draft,omitempty"`
-	ForcedReadyForReview   bool              `json:"forced_ready_for_review,omitempty"`
-	Branch                 branchPollSummary `json:"branch,omitempty"`
-	CI                     ciPollSummary     `json:"ci,omitempty"`
+	SessionID            string            `json:"session_id"`
+	CorrelationID        string            `json:"correlation_id"`
+	WakeKind             string            `json:"wake_kind"`
+	PolicyDecision       string            `json:"policy_decision,omitempty"`
+	PolicyOutcome        string            `json:"policy_outcome,omitempty"`
+	PolicyReason         string            `json:"policy_reason,omitempty"`
+	MergePolicyDecision  string            `json:"merge_policy_decision,omitempty"`
+	MergePolicyOutcome   string            `json:"merge_policy_outcome,omitempty"`
+	MergePolicyReason    string            `json:"merge_policy_reason,omitempty"`
+	PersistedVerdict     string            `json:"-"` // not persisted to JSON; used for PolicyDecision record only
+	PreviousState        string            `json:"previous_state"`
+	NewState             string            `json:"new_state"`
+	DecisionVerdict      string            `json:"decision_verdict"`
+	ActionEvent          string            `json:"action_event"`
+	Outcome              string            `json:"outcome"`
+	PRNumber             int               `json:"pr_number,omitempty"`
+	RetryCount           int               `json:"retry_count"`
+	ResumeState          string            `json:"resume_state,omitempty"`
+	ReviewStatus         string            `json:"review_status,omitempty"`
+	Draft                *bool             `json:"draft,omitempty"`
+	ForcedReadyForReview bool              `json:"forced_ready_for_review,omitempty"`
+	Branch               branchPollSummary `json:"branch,omitempty"`
+	CI                   ciPollSummary     `json:"ci,omitempty"`
 }
 
 type pollEvaluation struct {
