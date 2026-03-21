@@ -35,6 +35,7 @@ Loom is the operator for that loop.
 
 To operate Loom, you need:
 
+- Go 1.23 or later
 - a GitHub repository
 - VS Code with GitHub Copilot
 - a GitHub token with `repo` scope
@@ -47,6 +48,8 @@ Optional but useful:
 ## Quick Start
 
 ### 1. Install Loom
+
+Loom requires Go 1.23 or later. If you have Go 1.21+, the `toolchain` directive in `go.mod` will automatically download the required toolchain.
 
 Build from source:
 
