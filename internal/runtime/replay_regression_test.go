@@ -103,19 +103,19 @@ func TestReplayRegressionFixtures(t *testing.T) {
 					UpdatedAt: now.Add(-2 * time.Minute),
 				}))
 				decisionPayload := marshalMap(t, map[string]any{
-					"session_id":           "story-policy",
-					"correlation_id":       "policy-merge-1",
-					"wake_kind":            "poll_review",
-					"policy_decision":      "review_readiness",
-					"policy_outcome":       "continue",
-					"policy_reason":        "review_approved",
+					"session_id":            "story-policy",
+					"correlation_id":        "policy-merge-1",
+					"wake_kind":             "poll_review",
+					"policy_decision":       "review_readiness",
+					"policy_outcome":        "continue",
+					"policy_reason":         "review_approved",
 					"merge_policy_decision": "merge_gate",
-					"merge_policy_outcome": "block",
-					"merge_policy_reason":  "merge_blocked_by_ci",
-					"previous_state":       "REVIEWING",
-					"new_state":            "REVIEWING",
-					"decision_verdict":     "block",
-					"pr_number":            77,
+					"merge_policy_outcome":  "block",
+					"merge_policy_reason":   "merge_blocked_by_ci",
+					"previous_state":        "REVIEWING",
+					"new_state":             "REVIEWING",
+					"decision_verdict":      "block",
+					"pr_number":             77,
 				})
 				require.NoError(t, st.WritePolicyDecision(context.Background(), store.PolicyDecision{
 					SessionID:     "story-policy",
@@ -210,9 +210,9 @@ func TestReplayRegressionFixtures(t *testing.T) {
 					UpdatedAt: now.Add(-2 * time.Minute),
 				}))
 				recoveryDetail := marshalMap(t, map[string]any{
-					"previous_holder":  "controller-1",
-					"lease_expired_at": now.Add(-time.Minute).Format(time.RFC3339),
-					"recovery_holder":  "controller-2",
+					"previous_holder":   "controller-1",
+					"lease_expired_at":  now.Add(-time.Minute).Format(time.RFC3339),
+					"recovery_holder":   "controller-2",
 					"committed_actions": 1,
 				})
 				require.NoError(t, st.WritePolicyDecision(context.Background(), store.PolicyDecision{

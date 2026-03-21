@@ -92,9 +92,9 @@ type ScheduleRateLimitResult struct {
 }
 
 type scheduleStoryState struct {
-	completed  map[string]struct{}
-	spawnCount map[string]int
-	exitCount  map[string]int
+	completed   map[string]struct{}
+	spawnCount  map[string]int
+	exitCount   map[string]int
 	failedCount map[string]int
 }
 
@@ -288,9 +288,9 @@ func graphStoryIDs(graph depgraph.Graph) []string {
 
 func collectScheduleStoryState(storyIDs []string, actions []store.Action) scheduleStoryState {
 	state := scheduleStoryState{
-		completed:  make(map[string]struct{}, len(storyIDs)),
-		spawnCount: make(map[string]int, len(storyIDs)),
-		exitCount:  make(map[string]int, len(storyIDs)),
+		completed:   make(map[string]struct{}, len(storyIDs)),
+		spawnCount:  make(map[string]int, len(storyIDs)),
+		exitCount:   make(map[string]int, len(storyIDs)),
 		failedCount: make(map[string]int, len(storyIDs)),
 	}
 	for _, action := range actions {
