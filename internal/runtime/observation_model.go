@@ -12,6 +12,10 @@ const defaultObservationLimit = 100
 
 // AssembleObservationModel reads all persisted runtime records and assembles a typed observation model for policy evaluation.
 func AssembleObservationModel(ctx context.Context, st store.Store) (ObservationModel, error) {
+	return assembleObservationModelWithLimit(ctx, st, defaultObservationLimit)
+}
+
+func assembleObservationModelWithLimit(ctx context.Context, st store.Store, limit int) (ObservationModel, error) {
 	cp, err := st.ReadCheckpoint(ctx)
 	if err != nil {
 		return ObservationModel{}, err
@@ -31,7 +35,7 @@ func AssembleObservationModel(ctx context.Context, st store.Store) (ObservationM
 		},
 	}
 
-	events, err := st.ReadExternalEvents(ctx, model.SessionID, defaultObservationLimit)
+	events, err := st.ReadExternalEvents(ctx, model.SessionID, limit)
 	if err != nil {
 		return ObservationModel{}, err
 	}
@@ -39,7 +43,7 @@ func AssembleObservationModel(ctx context.Context, st store.Store) (ObservationM
 		consumeObservationEvent(&model, event)
 	}
 
-	decisions, err := st.ReadPolicyDecisions(ctx, model.SessionID, defaultObservationLimit)
+	decisions, err := st.ReadPolicyDecisions(ctx, model.SessionID, limit)
 	if err != nil {
 		return ObservationModel{}, err
 	}

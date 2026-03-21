@@ -308,7 +308,7 @@ func (s *sqliteStore) ReadExternalEvents(ctx context.Context, sessionID string, 
 	}
 	defer rows.Close()
 
-	events := make([]ExternalEvent, 0, limit)
+	events := make([]ExternalEvent, 0, boundedReadSliceInitialCapacity(limit))
 	for rows.Next() {
 		event, err := scanExternalEvent(rows)
 		if err != nil {
@@ -426,7 +426,7 @@ func (s *sqliteStore) ReadPolicyDecisions(ctx context.Context, sessionID string,
 	}
 	defer rows.Close()
 
-	decisions := make([]PolicyDecision, 0, limit)
+	decisions := make([]PolicyDecision, 0, boundedReadSliceInitialCapacity(limit))
 	for rows.Next() {
 		decision, err := scanPolicyDecision(rows)
 		if err != nil {

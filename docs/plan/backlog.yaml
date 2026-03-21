@@ -406,7 +406,7 @@ backlog:
           stories:
             - id: TH3.E5.US1
               title: "Deterministic replay fixtures"
-              status: todo
+              status: done
               file: docs/themes/TH3-runtime-first-reengineering/epics/E5-replay-and-bounded-agent-jobs/user-stories/US1-deterministic-replay-fixtures.md
               depends-on: [TH3.E2.US2, TH3.E2.US3, TH3.E3.US4]
             - id: TH3.E5.US2

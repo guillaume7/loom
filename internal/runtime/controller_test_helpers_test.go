@@ -158,13 +158,19 @@ func (s *memStore) UpsertWakeSchedule(_ context.Context, wake store.WakeSchedule
 	return nil
 }
 
-func (s *memStore) ReadWakeSchedules(_ context.Context, sessionID string, _ int) ([]store.WakeSchedule, error) {
+func (s *memStore) ReadWakeSchedules(_ context.Context, sessionID string, limit int) ([]store.WakeSchedule, error) {
+	if limit <= 0 {
+		return []store.WakeSchedule{}, nil
+	}
 	result := make([]store.WakeSchedule, 0, len(s.wakes))
 	for _, wake := range s.wakes {
 		if sessionID != "" && wake.SessionID != sessionID {
 			continue
 		}
 		result = append(result, wake)
+		if len(result) == limit {
+			break
+		}
 	}
 	return result, nil
 }
@@ -178,7 +184,10 @@ func (s *memStore) WriteExternalEvent(_ context.Context, event store.ExternalEve
 	return nil
 }
 
-func (s *memStore) ReadExternalEvents(_ context.Context, sessionID string, _ int) ([]store.ExternalEvent, error) {
+func (s *memStore) ReadExternalEvents(_ context.Context, sessionID string, limit int) ([]store.ExternalEvent, error) {
+	if limit <= 0 {
+		return []store.ExternalEvent{}, nil
+	}
 	result := make([]store.ExternalEvent, 0, len(s.events))
 	for index := len(s.events) - 1; index >= 0; index-- {
 		event := s.events[index]
@@ -186,6 +195,9 @@ func (s *memStore) ReadExternalEvents(_ context.Context, sessionID string, _ int
 			continue
 		}
 		result = append(result, event)
+		if len(result) == limit {
+			break
+		}
 	}
 	return result, nil
 }
@@ -215,7 +227,10 @@ func (s *memStore) WritePolicyDecision(_ context.Context, decision store.PolicyD
 	return nil
 }
 
-func (s *memStore) ReadPolicyDecisions(_ context.Context, sessionID string, _ int) ([]store.PolicyDecision, error) {
+func (s *memStore) ReadPolicyDecisions(_ context.Context, sessionID string, limit int) ([]store.PolicyDecision, error) {
+	if limit <= 0 {
+		return []store.PolicyDecision{}, nil
+	}
 	result := make([]store.PolicyDecision, 0, len(s.decisions))
 	for index := len(s.decisions) - 1; index >= 0; index-- {
 		decision := s.decisions[index]
@@ -223,6 +238,9 @@ func (s *memStore) ReadPolicyDecisions(_ context.Context, sessionID string, _ in
 			continue
 		}
 		result = append(result, decision)
+		if len(result) == limit {
+			break
+		}
 	}
 	return result, nil
 }

@@ -343,7 +343,7 @@ func (s *sqliteStore) ReadActions(ctx context.Context, limit int) ([]Action, err
 	}
 	defer rows.Close()
 
-	actions := make([]Action, 0, limit)
+	actions := make([]Action, 0, boundedReadSliceInitialCapacity(limit))
 	for rows.Next() {
 		var action Action
 		var createdAt string

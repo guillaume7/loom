@@ -8,6 +8,8 @@ import (
 	"github.com/guillaume7/loom/internal/store"
 )
 
+const defaultPolicyAuditLimit = 1000
+
 // PolicyAuditEntry is a decoded, human-readable view of a single persisted policy decision.
 type PolicyAuditEntry struct {
 	SessionID     string
@@ -29,6 +31,10 @@ type PolicyAuditReport struct {
 
 // AssemblePolicyAuditReport reads all policy decisions for the current session and returns them as a chronological audit report.
 func AssemblePolicyAuditReport(ctx context.Context, st store.Store) (PolicyAuditReport, error) {
+	return assemblePolicyAuditReportWithLimit(ctx, st, defaultPolicyAuditLimit)
+}
+
+func assemblePolicyAuditReportWithLimit(ctx context.Context, st store.Store, limit int) (PolicyAuditReport, error) {
 	// Read the checkpoint to get the session ID
 	cp, err := st.ReadCheckpoint(ctx)
 	if err != nil {
@@ -37,8 +43,7 @@ func AssemblePolicyAuditReport(ctx context.Context, st store.Store) (PolicyAudit
 
 	sessionID := RunIdentifier(cp)
 
-	// Read policy decisions from the database (limit 1000)
-	decisions, err := st.ReadPolicyDecisions(ctx, sessionID, 1000)
+	decisions, err := st.ReadPolicyDecisions(ctx, sessionID, limit)
 	if err != nil {
 		return PolicyAuditReport{}, err
 	}
