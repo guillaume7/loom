@@ -386,7 +386,7 @@ backlog:
               depends-on: [TH3.E1.US2]
             - id: TH3.E4.US2
               title: "PR-scoped locking"
-              status: todo
+              status: done
               file: docs/themes/TH3-runtime-first-reengineering/epics/E4-locking-and-recovery/user-stories/US2-pr-scoped-locking.md
               depends-on: [TH3.E4.US1]
             - id: TH3.E4.US3
