@@ -1,7 +1,7 @@
 # Backlog — Core State File
 backlog:
   project: "loom"
-  last-updated: "2026-03-21T03:00:00Z"
+  last-updated: "2026-03-21T03:30:00Z"
   themes:
     # ── TH1: Loom v1 Core ────────────────────────────────────────────
     - id: TH1
@@ -366,7 +366,7 @@ backlog:
               depends-on: [TH3.E3.US1]
             - id: TH3.E3.US3
               title: "Escalation and wait outcome taxonomy"
-              status: todo
+              status: done
               file: docs/themes/TH3-runtime-first-reengineering/epics/E3-deterministic-policy-engine/user-stories/US3-escalation-and-wait-outcome-taxonomy.md
               depends-on: [TH3.E3.US1]
             - id: TH3.E3.US4
