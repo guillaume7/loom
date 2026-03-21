@@ -36,16 +36,36 @@ func TestLoomSpawnAgent_StartsBackgroundProcessAndLogsExitCode(t *testing.T) {
 	assert.Equal(t, "US-2.1", got.StoryID)
 	assert.Equal(t, "Implement US-2.1", got.Prompt)
 	assert.Equal(t, filepath.Join("..", "worktree-us-2.1"), got.Worktree)
+	assert.Equal(t, "US-2.1", got.Contract.StoryID)
+	assert.Equal(t, 1, got.Contract.Attempt)
+	assert.Equal(t, "Implement US-2.1", got.Contract.Input)
+	assert.Equal(t, "Implement the requested story and return completed code changes with tests", got.Contract.ExpectedOutput)
+	assert.NotEmpty(t, got.Contract.JobID)
+	assert.False(t, got.Contract.Deadline.IsZero())
 	assert.Equal(t, "running", got.Status)
 	assert.Greater(t, got.PID, 0)
 	assert.Equal(t, []string{"code", "chat", "-m", "loom-orchestrator", "--worktree", filepath.Join("..", "worktree-us-2.1"), "Implement US-2.1"}, got.Command)
 	assert.Equal(t, []string{"chat", "-m", "loom-orchestrator", "--worktree", filepath.Join("..", "worktree-us-2.1"), "Implement US-2.1"}, readArgsFile(t, argsFile))
+	assert.Contains(t, got.Contract.JobID, ":US-2.1:1:")
+
+	spawnAction := waitForActionEvent(t, s.Store(), "background_agent_spawned")
+	var spawnDetail mcp.BackgroundAgentSpawnResult
+	require.NoError(t, json.Unmarshal([]byte(spawnAction.Detail), &spawnDetail))
+	assert.Equal(t, got.Contract, spawnDetail.Contract)
 
 	exitAction := waitForActionEvent(t, s.Store(), "background_agent_exited")
 	var exitDetail struct {
 		StoryID         string `json:"story_id"`
 		Prompt          string `json:"prompt"`
 		Worktree        string `json:"worktree"`
+		Contract        struct {
+			JobID          string    `json:"job_id"`
+			StoryID        string    `json:"story_id"`
+			Attempt        int       `json:"attempt"`
+			Input          string    `json:"input"`
+			ExpectedOutput string    `json:"expected_output"`
+			Deadline       time.Time `json:"deadline"`
+		} `json:"contract"`
 		PID             int    `json:"pid"`
 		ExitCode        int    `json:"exit_code"`
 		Success         bool   `json:"success"`
@@ -55,6 +75,12 @@ func TestLoomSpawnAgent_StartsBackgroundProcessAndLogsExitCode(t *testing.T) {
 	assert.Equal(t, "US-2.1", exitDetail.StoryID)
 	assert.Equal(t, "Implement US-2.1", exitDetail.Prompt)
 	assert.Equal(t, filepath.Join("..", "worktree-us-2.1"), exitDetail.Worktree)
+	assert.Equal(t, got.Contract.JobID, exitDetail.Contract.JobID)
+	assert.Equal(t, got.Contract.StoryID, exitDetail.Contract.StoryID)
+	assert.Equal(t, got.Contract.Attempt, exitDetail.Contract.Attempt)
+	assert.Equal(t, got.Contract.Input, exitDetail.Contract.Input)
+	assert.Equal(t, got.Contract.ExpectedOutput, exitDetail.Contract.ExpectedOutput)
+	assert.Equal(t, got.Contract.Deadline, exitDetail.Contract.Deadline)
 	assert.Equal(t, got.PID, exitDetail.PID)
 	assert.Equal(t, 1, exitDetail.ExitCode)
 	assert.False(t, exitDetail.Success)
@@ -73,6 +99,42 @@ func TestLoomSpawnAgent_CodeCLINotFoundReturnsClearError(t *testing.T) {
 	})
 	require.True(t, result.IsError)
 	assert.Equal(t, "code CLI not found on PATH", toolText(t, result))
+}
+
+func TestLoomSpawnAgent_SecondSpawnHasAttempt2(t *testing.T) {
+	repoRoot := initGitRepo(t)
+	chdir(t, repoRoot)
+
+	s, mcpSvr := newTestServer(t)
+	installFakeCodeCLI(t, 0, 0)
+
+	// First spawn → attempt 1.
+	first := callTool(t, mcpSvr, "loom_spawn_agent", map[string]interface{}{
+		"story_id": "US-2.1",
+		"prompt":   "Implement US-2.1",
+		"worktree": "worktree-us-2.1",
+	})
+	require.False(t, first.IsError, toolText(t, first))
+	var firstResult mcp.BackgroundAgentSpawnResult
+	require.NoError(t, json.Unmarshal([]byte(toolText(t, first)), &firstResult))
+	assert.Equal(t, 1, firstResult.Contract.Attempt)
+	assert.Contains(t, firstResult.Contract.JobID, ":US-2.1:1:")
+
+	// background_agent_spawned is written synchronously before handleSpawnAgent returns.
+	_ = s
+
+	// Second spawn for same story → attempt 2 derived from prior spawn action.
+	second := callTool(t, mcpSvr, "loom_spawn_agent", map[string]interface{}{
+		"story_id": "US-2.1",
+		"prompt":   "Implement US-2.1 retry",
+		"worktree": "worktree-us-2.1",
+	})
+	require.False(t, second.IsError, toolText(t, second))
+	var secondResult mcp.BackgroundAgentSpawnResult
+	require.NoError(t, json.Unmarshal([]byte(toolText(t, second)), &secondResult))
+	assert.Equal(t, 2, secondResult.Contract.Attempt)
+	assert.Contains(t, secondResult.Contract.JobID, ":US-2.1:2:")
+	assert.NotEqual(t, firstResult.Contract.JobID, secondResult.Contract.JobID)
 }
 
 func installFakeCodeCLI(t *testing.T, exitCode int, sleep time.Duration) string {

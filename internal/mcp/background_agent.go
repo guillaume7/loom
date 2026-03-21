@@ -18,6 +18,7 @@ type BackgroundAgentSpawnResult struct {
 	StoryID  string   `json:"story_id"`
 	Prompt   string   `json:"prompt"`
 	Worktree string   `json:"worktree"`
+	Contract agentspawn.JobContract `json:"contract"`
 	PID      int      `json:"pid"`
 	Command  []string `json:"command"`
 	Status   string   `json:"status"`
@@ -27,6 +28,7 @@ type backgroundAgentExitDetail struct {
 	StoryID         string `json:"story_id"`
 	Prompt          string `json:"prompt"`
 	Worktree        string `json:"worktree"`
+	Contract        agentspawn.JobContract `json:"contract"`
 	PID             int    `json:"pid"`
 	ExitCode        int    `json:"exit_code"`
 	Success         bool   `json:"success"`
@@ -55,11 +57,20 @@ func (s *Server) handleSpawnAgent(ctx context.Context, req mcplib.CallToolReques
 		return mcplib.NewToolResultError("missing or invalid 'worktree' argument: must be a non-empty string"), nil
 	}
 	slog.InfoContext(ctx, "tool called", "tool", toolName, "story_id", storyID, "worktree", worktree)
+	sessionID := sessionIDFromContext(ctx)
+	actions, readErr := s.st.ReadActions(ctx, minScheduleActionReadLimit)
+	if readErr != nil {
+		slog.WarnContext(ctx, "failed to read actions for attempt counting; defaulting to attempt 1", "story_id", storyID, "error", readErr)
+		actions = nil
+	}
+	attempt := nextAttemptNumber(storyID, actions)
+	contract := newAgentJobContract(time.Now().UTC(), sessionID, storyID, prompt, attempt)
 
 	handle, spawnErr := s.spawner.Spawn(agentspawn.Request{
 		StoryID:  storyID,
 		Prompt:   prompt,
 		Worktree: worktree,
+		Contract: contract,
 	})
 	if spawnErr != nil {
 		return mcplib.NewToolResultError(spawnErr.Error()), nil
@@ -70,12 +81,12 @@ func (s *Server) handleSpawnAgent(ctx context.Context, req mcplib.CallToolReques
 		StoryID:  started.StoryID,
 		Prompt:   started.Prompt,
 		Worktree: started.Worktree,
+		Contract: started.Contract,
 		PID:      started.PID,
 		Command:  started.Command(),
 		Status:   "running",
 	}
 
-	sessionID := sessionIDFromContext(ctx)
 	s.logBackgroundAgentSpawn(ctx, sessionID, started)
 	go s.awaitBackgroundAgentExit(sessionID, handle.Done())
 
@@ -93,6 +104,7 @@ func (s *Server) awaitBackgroundAgentExit(sessionID string, done <-chan agentspa
 		StoryID:         result.Started.StoryID,
 		Prompt:          result.Started.Prompt,
 		Worktree:        result.Started.Worktree,
+		Contract:        result.Started.Contract,
 		PID:             result.Started.PID,
 		ExitCode:        result.ExitCode,
 		Success:         result.ExitCode == 0 && result.CleanupErr == nil,
@@ -123,6 +135,7 @@ func (s *Server) logBackgroundAgentSpawn(ctx context.Context, sessionID string, 
 		StoryID:  started.StoryID,
 		Prompt:   started.Prompt,
 		Worktree: started.Worktree,
+		Contract: started.Contract,
 		PID:      started.PID,
 		Command:  started.Command(),
 		Status:   "running",

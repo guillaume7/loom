@@ -92,9 +92,9 @@ type ScheduleRateLimitResult struct {
 }
 
 type scheduleStoryState struct {
-	completed map[string]struct{}
-	scheduled map[string]struct{}
-	exited    map[string]struct{}
+	completed  map[string]struct{}
+	spawnCount map[string]int
+	exitCount  map[string]int
 }
 
 func (s *Server) handleScheduleEpic(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
@@ -140,7 +140,8 @@ func (s *Server) handleScheduleEpic(ctx context.Context, req mcplib.CallToolRequ
 	unblockedStories := graph.Unblocked(completedStories)
 	runningStories := collectRunningStories(state)
 	availableSlots := maxInt(0, s.schedCfg.MaxParallel-len(runningStories))
-	candidates := difference(unblockedStories, state.scheduled)
+	runningSet := setFromSlice(runningStories)
+	candidates := difference(unblockedStories, runningSet)
 
 	result := ScheduleEpicResult{
 		MaxParallel:      s.schedCfg.MaxParallel,
@@ -188,10 +189,14 @@ func (s *Server) handleScheduleEpic(ctx context.Context, req mcplib.CallToolRequ
 			sessionID := sessionIDFromContext(ctx)
 			spawnLimit := minInt(availableSlots, len(candidates))
 			for _, storyID := range candidates[:spawnLimit] {
+				prompt := fmt.Sprintf("Implement %s", storyID)
+				attempt := nextAttemptNumber(storyID, actions)
+				contract := newAgentJobContract(time.Now().UTC(), sessionID, storyID, prompt, attempt)
 				handle, spawnErr := s.spawner.Spawn(agentspawn.Request{
 					StoryID:  storyID,
-					Prompt:   fmt.Sprintf("Implement %s", storyID),
+					Prompt:   prompt,
 					Worktree: gitworktree.ManagedName(storyID),
+					Contract: contract,
 				})
 				if spawnErr != nil {
 					result.Failed = append(result.Failed, ScheduleSpawnFailure{
@@ -206,6 +211,7 @@ func (s *Server) handleScheduleEpic(ctx context.Context, req mcplib.CallToolRequ
 					StoryID:  started.StoryID,
 					Prompt:   started.Prompt,
 					Worktree: started.Worktree,
+					Contract: started.Contract,
 					PID:      started.PID,
 					Command:  started.Command(),
 					Status:   "running",
@@ -281,19 +287,19 @@ func graphStoryIDs(graph depgraph.Graph) []string {
 
 func collectScheduleStoryState(storyIDs []string, actions []store.Action) scheduleStoryState {
 	state := scheduleStoryState{
-		completed: make(map[string]struct{}, len(storyIDs)),
-		scheduled: make(map[string]struct{}, len(storyIDs)),
-		exited:    make(map[string]struct{}, len(storyIDs)),
+		completed:  make(map[string]struct{}, len(storyIDs)),
+		spawnCount: make(map[string]int, len(storyIDs)),
+		exitCount:  make(map[string]int, len(storyIDs)),
 	}
 	for _, action := range actions {
 		switch action.Event {
 		case "background_agent_spawned":
 			if storyID := storyIDFromActionDetail(action.Detail); storyID != "" {
-				state.scheduled[storyID] = struct{}{}
+				state.spawnCount[storyID]++
 			}
 		case "background_agent_exited":
 			if storyID := storyIDFromActionDetail(action.Detail); storyID != "" {
-				state.exited[storyID] = struct{}{}
+				state.exitCount[storyID]++
 			}
 		case "merged", "merged_epic_boundary", "refactor_merged":
 			if storyID := storyIDFromOperationKey(action.OperationKey, storyIDs); storyID != "" {
@@ -305,12 +311,12 @@ func collectScheduleStoryState(storyIDs []string, actions []store.Action) schedu
 }
 
 func collectRunningStories(state scheduleStoryState) []string {
-	running := make([]string, 0, len(state.scheduled))
-	for storyID := range state.scheduled {
+	running := make([]string, 0, len(state.spawnCount))
+	for storyID, spawns := range state.spawnCount {
 		if _, done := state.completed[storyID]; done {
 			continue
 		}
-		if _, exited := state.exited[storyID]; exited {
+		if spawns <= state.exitCount[storyID] {
 			continue
 		}
 		running = append(running, storyID)
@@ -448,4 +454,12 @@ func maxInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func setFromSlice(items []string) map[string]struct{} {
+	set := make(map[string]struct{}, len(items))
+	for _, item := range items {
+		set[item] = struct{}{}
+	}
+	return set
 }

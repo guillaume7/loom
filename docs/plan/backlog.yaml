@@ -411,7 +411,7 @@ backlog:
               depends-on: [TH3.E2.US2, TH3.E2.US3, TH3.E3.US4]
             - id: TH3.E5.US2
               title: "Bounded agent job contract"
-              status: todo
+              status: done
               file: docs/themes/TH3-runtime-first-reengineering/epics/E5-replay-and-bounded-agent-jobs/user-stories/US2-bounded-agent-job-contract.md
               depends-on: [TH3.E1.US3, TH3.E4.US1]
             - id: TH3.E5.US3

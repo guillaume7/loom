@@ -21,17 +21,20 @@ func TestSpawnStartsCodeChatWithPromptAndWorktree(t *testing.T) {
 
 	spawner := New()
 	argsFile := installFakeCodeCLI(t, 0, 250*time.Millisecond)
+	contract := testJobContract("US-2.1", "Implement US-2.1")
 
 	handle, err := spawner.Spawn(Request{
 		StoryID:  "US-2.1",
 		Prompt:   "Implement US-2.1",
 		Worktree: "worktree-us-2.1",
+		Contract: contract,
 	})
 	require.NoError(t, err)
 
 	started := handle.Started()
 	assert.Equal(t, "US-2.1", started.StoryID)
 	assert.Equal(t, "Implement US-2.1", started.Prompt)
+	assert.Equal(t, contract, started.Contract)
 	assert.Equal(t, filepath.Join("..", "worktree-us-2.1"), started.Worktree)
 	assert.Greater(t, started.PID, 0)
 	assert.Equal(t, []string{"chat", "-m", "loom-orchestrator", "--worktree", filepath.Join("..", "worktree-us-2.1"), "Implement US-2.1"}, started.Args)
@@ -59,6 +62,7 @@ func TestSpawnReturnsClearErrorWhenCodeCLIIsMissing(t *testing.T) {
 		StoryID:  "US-2.1",
 		Prompt:   "Implement US-2.1",
 		Worktree: "worktree-us-2.1",
+		Contract: testJobContract("US-2.1", "Implement US-2.1"),
 	})
 	require.ErrorIs(t, err, ErrCodeCLINotFound)
 	assert.Nil(t, handle)
@@ -76,6 +80,7 @@ func TestSpawnCapturesNonZeroExitCode(t *testing.T) {
 		StoryID:  "US-2.1",
 		Prompt:   "Implement US-2.1",
 		Worktree: "worktree-us-2.1",
+		Contract: testJobContract("US-2.1", "Implement US-2.1"),
 	})
 	require.NoError(t, err)
 
@@ -119,6 +124,7 @@ func TestSpawnFiltersSecretsAndPassesStoryIDEnv(t *testing.T) {
 		StoryID:  "US-2.1",
 		Prompt:   "Implement US-2.1",
 		Worktree: "worktree-us-2.1",
+		Contract: testJobContract("US-2.1", "Implement US-2.1"),
 	})
 	require.NoError(t, err)
 	require.NotNil(t, handle)
@@ -135,6 +141,93 @@ func TestSpawnFiltersSecretsAndPassesStoryIDEnv(t *testing.T) {
 	assert.False(t, hasGitHubToken)
 
 	_ = waitForExit(t, handle.Done())
+}
+
+func TestSpawnRejectsInvalidJobContract(t *testing.T) {
+	tests := []struct {
+		name    string
+		request Request
+		wantErr string
+	}{
+		{
+			name: "missing contract job id",
+			request: Request{
+				StoryID:  "US-2.1",
+				Prompt:   "Implement US-2.1",
+				Worktree: "worktree-us-2.1",
+				Contract: JobContract{
+					StoryID:        "US-2.1",
+					Attempt:        1,
+					Input:          "Implement US-2.1",
+					ExpectedOutput: "Implement the requested story and return completed code changes with tests",
+					Deadline:       time.Now().UTC().Add(30 * time.Minute),
+				},
+			},
+			wantErr: "contract.job_id is required",
+		},
+		{
+			name: "attempt must be positive",
+			request: Request{
+				StoryID:  "US-2.1",
+				Prompt:   "Implement US-2.1",
+				Worktree: "worktree-us-2.1",
+				Contract: JobContract{
+					JobID:          "job-US-2.1-1",
+					StoryID:        "US-2.1",
+					Attempt:        0,
+					Input:          "Implement US-2.1",
+					ExpectedOutput: "Implement the requested story and return completed code changes with tests",
+					Deadline:       time.Now().UTC().Add(30 * time.Minute),
+				},
+			},
+			wantErr: "contract.attempt must be at least 1",
+		},
+		{
+			name: "missing deadline",
+			request: Request{
+				StoryID:  "US-2.1",
+				Prompt:   "Implement US-2.1",
+				Worktree: "worktree-us-2.1",
+				Contract: JobContract{
+					JobID:          "job-US-2.1-1",
+					StoryID:        "US-2.1",
+					Attempt:        1,
+					Input:          "Implement US-2.1",
+					ExpectedOutput: "Implement the requested story and return completed code changes with tests",
+				},
+			},
+			wantErr: "contract.deadline is required",
+		},
+		{
+			name: "story ids must match",
+			request: Request{
+				StoryID:  "US-2.2",
+				Prompt:   "Implement US-2.1",
+				Worktree: "worktree-us-2.1",
+				Contract: testJobContract("US-2.1", "Implement US-2.1"),
+			},
+			wantErr: "story_id must match contract.story_id",
+		},
+		{
+			name: "prompt must match contract input",
+			request: Request{
+				StoryID:  "US-2.1",
+				Prompt:   "Different prompt",
+				Worktree: "worktree-us-2.1",
+				Contract: testJobContract("US-2.1", "Implement US-2.1"),
+			},
+			wantErr: "prompt must match contract.input",
+		},
+	}
+
+	spawner := New()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handle, err := spawner.Spawn(tt.request)
+			require.EqualError(t, err, tt.wantErr)
+			assert.Nil(t, handle)
+		})
+	}
 }
 
 func TestFilteredEnv_AllowsWindowsRuntimeKeysAndDropsSecrets(t *testing.T) {
@@ -287,4 +380,15 @@ func gitOutput(t *testing.T, dir string, args ...string) string {
 	output, err := cmd.CombinedOutput()
 	require.NoErrorf(t, err, "git %s failed: %s", strings.Join(args, " "), string(output))
 	return strings.TrimSpace(string(output))
+}
+
+func testJobContract(storyID, input string) JobContract {
+	return JobContract{
+		JobID:          "job-" + storyID + "-1",
+		StoryID:        storyID,
+		Attempt:        1,
+		Input:          input,
+		ExpectedOutput: "Implement the requested story and return completed code changes with tests",
+		Deadline:       time.Date(2026, time.March, 21, 12, 0, 0, 0, time.UTC),
+	}
 }

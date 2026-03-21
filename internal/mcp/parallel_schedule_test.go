@@ -53,6 +53,19 @@ epics:
 		assert.True(t, got.RateLimit.Checked)
 		assert.Equal(t, 1, gh.calls)
 		assert.Equal(t, []string{"US-2.1", "US-2.2", "US-2.3"}, spawner.spawnedStoryIDs())
+		for _, spawned := range got.Spawned {
+			assert.Equal(t, spawned.StoryID, spawned.Contract.StoryID)
+			assert.Equal(t, 1, spawned.Contract.Attempt)
+			assert.Equal(t, spawned.Prompt, spawned.Contract.Input)
+			assert.Equal(t, "Implement the requested story and return completed code changes with tests", spawned.Contract.ExpectedOutput)
+			assert.False(t, spawned.Contract.Deadline.IsZero())
+		}
+		for _, req := range spawner.requestsSnapshot() {
+			assert.Equal(t, req.StoryID, req.Contract.StoryID)
+			assert.Equal(t, req.Prompt, req.Contract.Input)
+			assert.Equal(t, 1, req.Contract.Attempt)
+			assert.False(t, req.Contract.Deadline.IsZero())
+		}
 	})
 }
 
@@ -277,6 +290,7 @@ func (s *scheduleSpawner) Spawn(req agentspawn.Request) (agentspawn.SpawnHandle,
 		StoryID:  req.StoryID,
 		Prompt:   req.Prompt,
 		Worktree: req.Worktree,
+		Contract: req.Contract,
 		Path:     "/usr/bin/code",
 		Args:     []string{"chat", "-m", "loom-orchestrator", "--worktree", req.Worktree, req.Prompt},
 		PID:      s.nextPID,
@@ -295,6 +309,14 @@ func (s *scheduleSpawner) spawnedStoryIDs() []string {
 		ids = append(ids, req.StoryID)
 	}
 	return ids
+}
+
+func (s *scheduleSpawner) requestsSnapshot() []agentspawn.Request {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	requests := make([]agentspawn.Request, len(s.requests))
+	copy(requests, s.requests)
+	return requests
 }
 
 type scheduleSpawnHandle struct {
@@ -320,6 +342,117 @@ func withDependenciesFile(t *testing.T, content string, fn func()) {
 	require.NoError(t, os.Mkdir(filepath.Join(tempDir, ".loom"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(tempDir, ".loom", "dependencies.yaml"), []byte(content), 0o644))
 	fn()
+}
+
+func TestLoomScheduleEpic_ReschedulesExitedStoryAsAttempt2(t *testing.T) {
+	withDependenciesFile(t, `version: 1
+epics:
+  - id: E2
+    depends_on: []
+    stories:
+      - id: US-2.1
+        depends_on: []
+`, func() {
+		gh := &scheduleGitHubClientMock{budget: loomgh.RateLimit{Limit: 5000, Remaining: 4000}}
+		spawner := newScheduleSpawner()
+		machine := fsm.NewMachine(fsm.DefaultConfig())
+		st := newMemStore()
+		s := mcp.NewServer(machine, st, gh, mcp.WithSpawner(spawner))
+		mcpSvr := s.MCPServer()
+
+		// First pass: spawns US-2.1 with attempt 1.
+		first := callTool(t, mcpSvr, "loom_schedule_epic", nil)
+		require.False(t, first.IsError, toolText(t, first))
+		var firstResult mcp.ScheduleEpicResult
+		require.NoError(t, json.Unmarshal([]byte(toolText(t, first)), &firstResult))
+		require.Len(t, firstResult.Spawned, 1)
+		assert.Equal(t, "US-2.1", firstResult.Spawned[0].StoryID)
+		assert.Equal(t, 1, firstResult.Spawned[0].Contract.Attempt)
+
+		// Simulate exit of US-2.1 without merge/completion.
+		require.NoError(t, st.WriteAction(context.Background(), store.Action{
+			SessionID:    "test-session",
+			OperationKey: "background_agent_exit:test-session:US-2.1:1234:5678",
+			StateBefore:  "background_agent_running",
+			StateAfter:   "background_agent_exited",
+			Event:        "background_agent_exited",
+			Detail:       `{"story_id":"US-2.1","exit_code":1,"success":false}`,
+		}))
+
+		// Second pass: US-2.1 is exited and not complete, so it becomes a candidate again.
+		second := callTool(t, mcpSvr, "loom_schedule_epic", nil)
+		require.False(t, second.IsError, toolText(t, second))
+		var secondResult mcp.ScheduleEpicResult
+		require.NoError(t, json.Unmarshal([]byte(toolText(t, second)), &secondResult))
+		require.Len(t, secondResult.Spawned, 1)
+		assert.Equal(t, "US-2.1", secondResult.Spawned[0].StoryID)
+		assert.Equal(t, 2, secondResult.Spawned[0].Contract.Attempt)
+		assert.Empty(t, secondResult.RunningStories)
+
+		// Third pass: attempt 2 is now active (spawnCount=2 > exitCount=1).
+		// The scheduler must not spawn attempt 3 and must report US-2.1 as running.
+		third := callTool(t, mcpSvr, "loom_schedule_epic", nil)
+		require.False(t, third.IsError, toolText(t, third))
+		var thirdResult mcp.ScheduleEpicResult
+		require.NoError(t, json.Unmarshal([]byte(toolText(t, third)), &thirdResult))
+		assert.Empty(t, thirdResult.Spawned, "must not spawn attempt 3 while attempt 2 is active")
+		assert.Equal(t, []string{"US-2.1"}, thirdResult.RunningStories, "attempt 2 must appear as running")
+		assert.Equal(t, "idle", thirdResult.Status)
+	})
+}
+
+func TestLoomScheduleEpic_AttemptIncrementedFromPriorSpawnActions(t *testing.T) {
+	withDependenciesFile(t, `version: 1
+epics:
+  - id: E2
+    depends_on: []
+    stories:
+      - id: US-2.1
+        depends_on: []
+      - id: US-2.2
+        depends_on: []
+`, func() {
+		gh := &scheduleGitHubClientMock{budget: loomgh.RateLimit{Limit: 5000, Remaining: 4000}}
+		spawner := newScheduleSpawner()
+		machine := fsm.NewMachine(fsm.DefaultConfig())
+		st := newMemStore()
+		s := mcp.NewServer(machine, st, gh, mcp.WithSpawner(spawner))
+		mcpSvr := s.MCPServer()
+
+		// Seed a prior spawn event for US-2.1 to simulate a previous session.
+		require.NoError(t, st.WriteAction(context.Background(), store.Action{
+			SessionID:    "prior-session",
+			OperationKey: "background_agent_spawn:prior-session:US-2.1:999:111",
+			StateBefore:  "background_agent_pending",
+			StateAfter:   "background_agent_running",
+			Event:        "background_agent_spawned",
+			Detail:       `{"story_id":"US-2.1"}`,
+		}))
+		// Seed exit so US-2.1 is not counted as running.
+		require.NoError(t, st.WriteAction(context.Background(), store.Action{
+			SessionID:    "prior-session",
+			OperationKey: "background_agent_exit:prior-session:US-2.1:999:222",
+			StateBefore:  "background_agent_running",
+			StateAfter:   "background_agent_exited",
+			Event:        "background_agent_exited",
+			Detail:       `{"story_id":"US-2.1","exit_code":1,"success":false}`,
+		}))
+
+		result := callTool(t, mcpSvr, "loom_schedule_epic", nil)
+		require.False(t, result.IsError, toolText(t, result))
+		var got mcp.ScheduleEpicResult
+		require.NoError(t, json.Unmarshal([]byte(toolText(t, result)), &got))
+		require.Len(t, got.Spawned, 2)
+
+		attemptByStory := make(map[string]int, 2)
+		for _, spawned := range got.Spawned {
+			attemptByStory[spawned.StoryID] = spawned.Contract.Attempt
+		}
+		// US-2.1 had one prior spawn action → attempt 2.
+		assert.Equal(t, 2, attemptByStory["US-2.1"])
+		// US-2.2 had no prior spawn action → attempt 1.
+		assert.Equal(t, 1, attemptByStory["US-2.2"])
+	})
 }
 
 func spawnedIDs(spawned []mcp.BackgroundAgentSpawnResult) []string {

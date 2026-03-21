@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/guillaume7/loom/internal/gitworktree"
 )
@@ -18,11 +19,27 @@ var ErrCodeCLINotFound = errors.New("code CLI not found on PATH")
 
 const storyIDEnvVar = "LOOM_STORY_ID"
 
+// JobContract describes a bounded unit of agent work dispatched by the runtime.
+type JobContract struct {
+	JobID string `json:"job_id"`
+	// StoryID identifies the authoritative runtime scope for this job attempt.
+	StoryID string `json:"story_id"`
+	// Attempt is the retry or replacement number for this bounded job, starting at 1.
+	Attempt int `json:"attempt"`
+	// Input is the bounded task input sent to the worker.
+	Input string `json:"input"`
+	// ExpectedOutput describes the explicit output contract the worker must satisfy.
+	ExpectedOutput string `json:"expected_output"`
+	// Deadline is the runtime-chosen cutoff for the bounded job.
+	Deadline time.Time `json:"deadline"`
+}
+
 // Request describes a background agent session to spawn.
 type Request struct {
 	StoryID  string
 	Prompt   string
 	Worktree string
+	Contract JobContract
 }
 
 // Started contains immutable metadata for a spawned agent process.
@@ -30,6 +47,7 @@ type Started struct {
 	StoryID  string
 	Prompt   string
 	Worktree string
+	Contract JobContract
 	Path     string
 	Args     []string
 	PID      int
@@ -100,11 +118,9 @@ func New() *Spawner {
 
 // Spawn starts a background agent process and returns immediately.
 func (s *Spawner) Spawn(req Request) (SpawnHandle, error) {
-	if req.StoryID == "" {
-		return nil, fmt.Errorf("story_id is required")
-	}
-	if req.Prompt == "" {
-		return nil, fmt.Errorf("prompt is required")
+	contract, err := validateRequest(req)
+	if err != nil {
+		return nil, err
 	}
 
 	codePath, err := s.lookPath("code")
@@ -112,7 +128,9 @@ func (s *Spawner) Spawn(req Request) (SpawnHandle, error) {
 		return nil, ErrCodeCLINotFound
 	}
 
-	expectedWorktreeName := gitworktree.ManagedName(req.StoryID)
+	storyID := contract.StoryID
+	prompt := contract.Input
+	expectedWorktreeName := gitworktree.ManagedName(storyID)
 	if req.Worktree == "" {
 		return nil, fmt.Errorf("worktree is required")
 	}
@@ -128,7 +146,7 @@ func (s *Spawner) Spawn(req Request) (SpawnHandle, error) {
 	if err != nil {
 		return nil, err
 	}
-	worktreePath, err := s.worktrees.Ensure(context.Background(), repoRoot, req.StoryID)
+	worktreePath, err := s.worktrees.Ensure(context.Background(), repoRoot, storyID)
 	if err != nil {
 		return nil, err
 	}
@@ -137,10 +155,10 @@ func (s *Spawner) Spawn(req Request) (SpawnHandle, error) {
 		return nil, fmt.Errorf("resolve worktree path: %w", err)
 	}
 
-	args := []string{"chat", "-m", "loom-orchestrator", "--worktree", worktreeArg, req.Prompt}
+	args := []string{"chat", "-m", "loom-orchestrator", "--worktree", worktreeArg, prompt}
 	cmd := s.command(codePath, args...)
 	cmd.Dir = repoRoot
-	cmd.Env = append(filteredEnv(os.Environ()), storyIDEnvVar+"="+req.StoryID)
+	cmd.Env = append(filteredEnv(os.Environ()), storyIDEnvVar+"="+storyID)
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard
 	if err := cmd.Start(); err != nil {
@@ -152,9 +170,10 @@ func (s *Spawner) Spawn(req Request) (SpawnHandle, error) {
 	}
 
 	started := Started{
-		StoryID:  req.StoryID,
-		Prompt:   req.Prompt,
+		StoryID:  storyID,
+		Prompt:   prompt,
 		Worktree: worktreeArg,
+		Contract: contract,
 		Path:     codePath,
 		Args:     append([]string(nil), args...),
 		PID:      cmd.Process.Pid,
@@ -182,6 +201,34 @@ func (s *Spawner) Spawn(req Request) (SpawnHandle, error) {
 	}()
 
 	return &Handle{started: started, done: results}, nil
+}
+
+func validateRequest(req Request) (JobContract, error) {
+	if req.Contract.JobID == "" {
+		return JobContract{}, fmt.Errorf("contract.job_id is required")
+	}
+	if req.Contract.StoryID == "" {
+		return JobContract{}, fmt.Errorf("contract.story_id is required")
+	}
+	if req.Contract.Attempt < 1 {
+		return JobContract{}, fmt.Errorf("contract.attempt must be at least 1")
+	}
+	if req.Contract.Input == "" {
+		return JobContract{}, fmt.Errorf("contract.input is required")
+	}
+	if req.Contract.ExpectedOutput == "" {
+		return JobContract{}, fmt.Errorf("contract.expected_output is required")
+	}
+	if req.Contract.Deadline.IsZero() {
+		return JobContract{}, fmt.Errorf("contract.deadline is required")
+	}
+	if req.StoryID != "" && req.StoryID != req.Contract.StoryID {
+		return JobContract{}, fmt.Errorf("story_id must match contract.story_id")
+	}
+	if req.Prompt != "" && req.Prompt != req.Contract.Input {
+		return JobContract{}, fmt.Errorf("prompt must match contract.input")
+	}
+	return req.Contract, nil
 }
 
 func filteredEnv(env []string) []string {
