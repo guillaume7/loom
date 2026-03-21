@@ -125,7 +125,7 @@ func TestAssembleObservationModel_UsesPersistedRuntimeRecords(t *testing.T) {
 
 	if assert.NotNil(t, model.Summaries.CI) {
 		assert.Equal(t, loomruntime.ObservationAuthorityDerived, model.Summaries.CI.Authority)
-		assert.Equal(t, "resume", model.Summaries.CI.Verdict)
+		assert.Equal(t, "continue", model.Summaries.CI.Verdict)
 	}
 	if assert.NotNil(t, model.Summaries.Operator) {
 		assert.Equal(t, loomruntime.ObservationAuthorityDerived, model.Summaries.Operator.Authority)

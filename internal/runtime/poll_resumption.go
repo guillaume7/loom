@@ -60,22 +60,29 @@ func (s ciPollSummary) allGreen() bool {
 }
 
 type pollObservation struct {
-	SessionID            string            `json:"session_id"`
-	CorrelationID        string            `json:"correlation_id"`
-	WakeKind             string            `json:"wake_kind"`
-	PreviousState        string            `json:"previous_state"`
-	NewState             string            `json:"new_state"`
-	DecisionVerdict      string            `json:"decision_verdict"`
-	ActionEvent          string            `json:"action_event"`
-	Outcome              string            `json:"outcome"`
-	PRNumber             int               `json:"pr_number,omitempty"`
-	RetryCount           int               `json:"retry_count"`
-	ResumeState          string            `json:"resume_state,omitempty"`
-	ReviewStatus         string            `json:"review_status,omitempty"`
-	Draft                *bool             `json:"draft,omitempty"`
-	ForcedReadyForReview bool              `json:"forced_ready_for_review,omitempty"`
-	Branch               branchPollSummary `json:"branch,omitempty"`
-	CI                   ciPollSummary     `json:"ci,omitempty"`
+	SessionID              string            `json:"session_id"`
+	CorrelationID          string            `json:"correlation_id"`
+	WakeKind               string            `json:"wake_kind"`
+	PolicyDecision         string            `json:"policy_decision,omitempty"`
+	PolicyOutcome          string            `json:"policy_outcome,omitempty"`
+	PolicyReason           string            `json:"policy_reason,omitempty"`
+	MergePolicyDecision    string            `json:"merge_policy_decision,omitempty"`
+	MergePolicyOutcome     string            `json:"merge_policy_outcome,omitempty"`
+	MergePolicyReason      string            `json:"merge_policy_reason,omitempty"`
+	PersistedVerdict       string            `json:"-"` // not persisted to JSON; used for PolicyDecision record only
+	PreviousState          string            `json:"previous_state"`
+	NewState               string            `json:"new_state"`
+	DecisionVerdict        string            `json:"decision_verdict"`
+	ActionEvent            string            `json:"action_event"`
+	Outcome                string            `json:"outcome"`
+	PRNumber               int               `json:"pr_number,omitempty"`
+	RetryCount             int               `json:"retry_count"`
+	ResumeState            string            `json:"resume_state,omitempty"`
+	ReviewStatus           string            `json:"review_status,omitempty"`
+	Draft                  *bool             `json:"draft,omitempty"`
+	ForcedReadyForReview   bool              `json:"forced_ready_for_review,omitempty"`
+	Branch                 branchPollSummary `json:"branch,omitempty"`
+	CI                     ciPollSummary     `json:"ci,omitempty"`
 }
 
 type pollEvaluation struct {
@@ -246,40 +253,23 @@ func (c *Controller) evaluateDueWake(ctx context.Context, cp store.Checkpoint, g
 			return pollEvaluation{}, err
 		}
 		observation.CI = summary
-		if summary.allGreen() {
-			observation.Outcome = "ci_green"
-			observation.ActionEvent = string(fsm.EventCIGreen)
-			observation.DecisionVerdict = "resume"
-			nextCheckpoint.State = string(fsm.StateReviewing)
-			nextCheckpoint.ResumeState = ""
-			nextCheckpoint.RetryCount = 0
-			break
-		}
-		if len(summary.FailedChecks) > 0 {
-			observation.Outcome = "ci_failed"
-			observation.ActionEvent = string(fsm.EventCIRed)
-			observation.DecisionVerdict = "debug"
-			nextCheckpoint.State = string(fsm.StateDebugging)
-			nextCheckpoint.ResumeState = ""
-			nextCheckpoint.RetryCount = 0
-			break
-		}
-
-		nextRetryCount := cp.RetryCount + 1
-		observation.Outcome = "ci_pending"
-		observation.ActionEvent = string(fsm.EventTimeout)
-		if nextRetryCount > fsm.DefaultConfig().MaxRetriesAwaitingCI {
-			observation.DecisionVerdict = "pause"
-			nextCheckpoint.State = string(fsm.StatePaused)
-			nextCheckpoint.ResumeState = cp.State
-			nextCheckpoint.RetryCount = 0
-		} else {
-			observation.DecisionVerdict = "await"
-			nextCheckpoint.State = cp.State
-			nextCheckpoint.ResumeState = ""
-			nextCheckpoint.RetryCount = nextRetryCount
-		}
-		observation.RetryCount = nextCheckpoint.RetryCount
+		decision := EvaluateCIReadiness(CIReadinessInput{
+			Checkpoint: checkpointObservationFromCheckpoint(cp),
+			Observation: &CIObservation{
+				Authority:     ObservationAuthorityAuthoritative,
+				Source:        pollEventSource,
+				CorrelationID: correlationID,
+				ObservedAt:    now,
+				EventKind:     wakeKind,
+				TotalChecks:   summary.TotalChecks,
+				GreenChecks:   summary.GreenChecks,
+				PendingChecks: append([]string(nil), summary.PendingChecks...),
+				FailedChecks:  append([]string(nil), summary.FailedChecks...),
+			},
+			EvaluatedAt: now,
+			StaleAfter:  c.cfg.PollInterval,
+		})
+		applyCIReadinessDecision(cp, decision, &observation, &nextCheckpoint)
 
 	case fsm.StateReviewing:
 		if cp.PRNumber <= 0 {
@@ -303,25 +293,26 @@ func (c *Controller) evaluateDueWake(ctx context.Context, cp store.Checkpoint, g
 		}
 		normalizedStatus := strings.ToUpper(strings.TrimSpace(status))
 		observation.ReviewStatus = normalizedStatus
-		nextCheckpoint.ResumeState = ""
-		nextCheckpoint.RetryCount = 0
-		switch normalizedStatus {
-		case "APPROVED":
-			observation.Outcome = "review_approved"
-			observation.ActionEvent = string(fsm.EventReviewApproved)
-			observation.DecisionVerdict = "resume"
-			nextCheckpoint.State = string(fsm.StateMerging)
-		case "CHANGES_REQUESTED":
-			observation.Outcome = "changes_requested"
-			observation.ActionEvent = string(fsm.EventReviewChangesRequested)
-			observation.DecisionVerdict = "address_feedback"
-			nextCheckpoint.State = string(fsm.StateAddressingFeedback)
-		default:
-			observation.Outcome = "review_pending"
-			observation.ActionEvent = pollWaitEvent
-			observation.DecisionVerdict = "await"
-			nextCheckpoint.State = cp.State
+		freshReviewObs := &ReviewObservation{
+			Authority:     ObservationAuthorityAuthoritative,
+			Source:        pollEventSource,
+			CorrelationID: correlationID,
+			ObservedAt:    now,
+			EventKind:     wakeKind,
+			Status:        normalizedStatus,
 		}
+		decision := EvaluateReviewReadiness(ReviewReadinessInput{
+			Checkpoint:  checkpointObservationFromCheckpoint(cp),
+			Observation: freshReviewObs,
+			EvaluatedAt: now,
+			StaleAfter:  c.cfg.PollInterval,
+		})
+		historicalModel, err := AssembleObservationModel(ctx, c.store)
+		if err != nil {
+			return pollEvaluation{}, err
+		}
+		historicalModel.Review = append([]ReviewObservation{*freshReviewObs}, historicalModel.Review...)
+		applyReviewReadinessDecision(cp, decision, &observation, &nextCheckpoint, historicalModel, now, c.cfg.PollInterval)
 
 	default:
 		return pollEvaluation{}, fmt.Errorf("%w: %s", ErrUnsupportedPollResume, cp.State)
@@ -332,6 +323,11 @@ func (c *Controller) evaluateDueWake(ctx context.Context, cp store.Checkpoint, g
 	payload, err := json.Marshal(observation)
 	if err != nil {
 		return pollEvaluation{}, err
+	}
+
+	persistedVerdict := observation.PersistedVerdict
+	if persistedVerdict == "" {
+		persistedVerdict = observation.DecisionVerdict
 	}
 
 	operationKey := pollResumeOperationKey(sessionID, wake)
@@ -357,8 +353,8 @@ func (c *Controller) evaluateDueWake(ctx context.Context, cp store.Checkpoint, g
 		PolicyDecision: store.PolicyDecision{
 			SessionID:     sessionID,
 			CorrelationID: correlationID,
-			DecisionKind:  pollDecisionKind,
-			Verdict:       observation.DecisionVerdict,
+			DecisionKind:  pollDecisionKindForObservation(observation),
+			Verdict:       persistedVerdict,
 			InputHash:     hashPollInput(payload),
 			Detail:        string(payload),
 			CreatedAt:     now,
@@ -376,6 +372,124 @@ func (c *Controller) evaluateDueWake(ctx context.Context, cp store.Checkpoint, g
 	}
 
 	return pollEvaluation{record: record, next: nextCheckpoint, nextWake: nextWake, verdict: observation.DecisionVerdict}, nil
+}
+
+func checkpointObservationFromCheckpoint(cp store.Checkpoint) CheckpointObservation {
+	return CheckpointObservation{
+		Authority:   ObservationAuthorityAuthoritative,
+		State:       cp.State,
+		ResumeState: cp.ResumeState,
+		Phase:       cp.Phase,
+		PRNumber:    cp.PRNumber,
+		IssueNumber: cp.IssueNumber,
+		RetryCount:  cp.RetryCount,
+		UpdatedAt:   cp.UpdatedAt.UTC(),
+	}
+}
+
+func applyCIReadinessDecision(cp store.Checkpoint, decision PolicyEvaluation, observation *pollObservation, nextCheckpoint *store.Checkpoint) {
+	observation.PolicyDecision = string(decision.Name)
+	observation.PolicyOutcome = string(decision.Outcome)
+	observation.PolicyReason = decision.Reason
+	nextRetryCount := cp.RetryCount + 1
+
+	switch decision.Outcome {
+	case PolicyOutcomeContinue:
+		observation.Outcome = "ci_green"
+		observation.ActionEvent = string(fsm.EventCIGreen)
+		observation.DecisionVerdict = "resume"
+		observation.PersistedVerdict = string(PolicyOutcomeContinue)
+		nextCheckpoint.State = string(fsm.StateReviewing)
+		nextCheckpoint.ResumeState = ""
+		nextCheckpoint.RetryCount = 0
+	case PolicyOutcomeEscalate:
+		observation.Outcome = "ci_failed"
+		observation.ActionEvent = string(fsm.EventCIRed)
+		observation.DecisionVerdict = "debug"
+		observation.PersistedVerdict = string(PolicyOutcomeEscalate)
+		nextCheckpoint.State = string(fsm.StateDebugging)
+		nextCheckpoint.ResumeState = ""
+		nextCheckpoint.RetryCount = 0
+	default:
+		observation.Outcome = decision.Reason
+		observation.ActionEvent = string(fsm.EventTimeout)
+		if nextRetryCount > fsm.DefaultConfig().MaxRetriesAwaitingCI {
+			observation.DecisionVerdict = "pause"
+			observation.PersistedVerdict = "pause"
+			nextCheckpoint.State = string(fsm.StatePaused)
+			nextCheckpoint.ResumeState = cp.State
+			nextCheckpoint.RetryCount = 0
+		} else {
+			observation.DecisionVerdict = "await"
+			observation.PersistedVerdict = string(PolicyOutcomeWait)
+			nextCheckpoint.State = cp.State
+			nextCheckpoint.ResumeState = ""
+			nextCheckpoint.RetryCount = nextRetryCount
+		}
+	}
+	observation.RetryCount = nextCheckpoint.RetryCount
+}
+
+func applyReviewReadinessDecision(cp store.Checkpoint, decision PolicyEvaluation, observation *pollObservation, nextCheckpoint *store.Checkpoint, model ObservationModel, evaluatedAt time.Time, staleAfter time.Duration) {
+	observation.PolicyDecision = string(decision.Name)
+	observation.PolicyOutcome = string(decision.Outcome)
+	observation.PolicyReason = decision.Reason
+	nextCheckpoint.ResumeState = ""
+	nextCheckpoint.RetryCount = 0
+
+	switch decision.Outcome {
+	case PolicyOutcomeContinue:
+		mergeDecision := EvaluateMergeReadiness(MergeReadinessInput{
+			Model:       model,
+			EvaluatedAt: evaluatedAt,
+			StaleAfter:  staleAfter,
+		})
+		observation.MergePolicyDecision = string(mergeDecision.Name)
+		observation.MergePolicyOutcome = string(mergeDecision.Outcome)
+		observation.MergePolicyReason = mergeDecision.Reason
+		switch mergeDecision.Outcome {
+		case PolicyOutcomeContinue:
+			observation.Outcome = "review_approved"
+			observation.ActionEvent = string(fsm.EventReviewApproved)
+			observation.DecisionVerdict = "resume"
+			observation.PolicyOutcome = string(PolicyOutcomeContinue)
+			observation.PersistedVerdict = string(PolicyOutcomeContinue)
+			nextCheckpoint.State = string(fsm.StateMerging)
+		case PolicyOutcomeWait:
+			observation.Outcome = mergeDecision.Reason
+			observation.ActionEvent = pollWaitEvent
+			observation.DecisionVerdict = "await"
+			observation.PolicyOutcome = string(PolicyOutcomeWait)
+			observation.PersistedVerdict = string(PolicyOutcomeWait)
+			nextCheckpoint.State = cp.State
+		default:
+			observation.Outcome = mergeDecision.Reason
+			observation.ActionEvent = pollWaitEvent
+			observation.DecisionVerdict = "await"
+			observation.PolicyOutcome = string(PolicyOutcomeBlock)
+			observation.PersistedVerdict = string(PolicyOutcomeBlock)
+			nextCheckpoint.State = cp.State
+		}
+	case PolicyOutcomeBlock:
+		observation.Outcome = "changes_requested"
+		observation.ActionEvent = string(fsm.EventReviewChangesRequested)
+		observation.DecisionVerdict = "address_feedback"
+		observation.PersistedVerdict = string(PolicyOutcomeBlock)
+		nextCheckpoint.State = string(fsm.StateAddressingFeedback)
+	default:
+		observation.Outcome = decision.Reason
+		observation.ActionEvent = pollWaitEvent
+		observation.DecisionVerdict = "await"
+		observation.PersistedVerdict = string(PolicyOutcomeWait)
+		nextCheckpoint.State = cp.State
+	}
+}
+
+func pollDecisionKindForObservation(observation pollObservation) string {
+	if observation.PolicyDecision != "" {
+		return observation.PolicyDecision
+	}
+	return pollDecisionKind
 }
 
 func pollResumeOperationKey(sessionID string, wake store.WakeSchedule) string {

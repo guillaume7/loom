@@ -471,6 +471,14 @@
 ### 2026-03-21T01:50:00Z
 - status-change: TH3.E3.US1 -> done
 - Context: Added a typed runtime observation assembler over persisted checkpoint, event, and decision records; filtered GitHub observations to the active PR, persisted branch facts on poll observations, and added regression coverage for unrelated-event rejection and polling-only branch reconstruction.
+
+### 2026-03-21T01:55:00Z
+- status-change: TH3.E3.US2 -> in-progress
+- Context: Selected the next in-order E3 story after TH3.E3.US1 approval and commit; starting deterministic CI, review, and merge policy decisions so runtime gating can produce named outcomes without agent interpretation.
+
+### 2026-03-21T02:05:00Z
+- status-change: TH3.E3.US2 -> in-progress
+- Context: Reviewer requested changes because merge-readiness remains a pure helper instead of a live runtime gate, and persisted policy decisions still write legacy controller verdicts rather than the new policy outcome taxonomy.
 2026-03-20T21:11:16Z | Subagent completed
 2026-03-20T21:13:41Z | Subagent completed
 2026-03-20T21:18:12Z | Subagent completed
@@ -489,3 +497,8 @@
 2026-03-20T22:01:37Z | Subagent completed
 2026-03-20T22:07:46Z | Subagent completed
 2026-03-20T22:09:50Z | Subagent completed
+2026-03-20T22:16:59Z | Subagent completed
+2026-03-20T22:18:38Z | Subagent completed
+2026-03-20T22:20:57Z | Subagent completed
+2026-03-20T22:37:04Z | Subagent completed
+2026-03-21T11:43:37Z | Subagent completed

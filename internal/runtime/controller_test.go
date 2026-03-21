@@ -639,10 +639,12 @@ func TestControllerProcessDueWake_CIPollWritesObservationAndSchedulesReviewPolli
 	require.NoError(t, json.Unmarshal([]byte(st.events[0].Payload), &payload))
 	assert.Equal(t, "ci_green", payload["outcome"])
 	assert.Equal(t, "resume", payload["decision_verdict"])
+	assert.Equal(t, "ci_readiness", payload["policy_decision"])
+	assert.Equal(t, "continue", payload["policy_outcome"])
 
 	require.Len(t, st.decisions, 1)
-	assert.Equal(t, "runtime_poll", st.decisions[0].DecisionKind)
-	assert.Equal(t, "resume", st.decisions[0].Verdict)
+	assert.Equal(t, "ci_readiness", st.decisions[0].DecisionKind)
+	assert.Equal(t, "continue", st.decisions[0].Verdict)
 }
 
 func TestControllerProcessDueWake_CIGreenDoesNotMutateGitHubBeforePersistence(t *testing.T) {
@@ -714,7 +716,7 @@ func TestControllerProcessDueWake_CIFailedTransitionsToDebugging(t *testing.T) {
 	require.NoError(t, readErr)
 	assert.Equal(t, "DEBUGGING", cp.State)
 	require.Len(t, st.decisions, 1)
-	assert.Equal(t, "debug", st.decisions[0].Verdict)
+	assert.Equal(t, "escalate", st.decisions[0].Verdict)
 }
 
 func TestControllerProcessDueWake_PRReadyRetryBudgetExhaustionPauses(t *testing.T) {
@@ -802,6 +804,7 @@ func TestControllerProcessDueWake_CIRetryBudgetExhaustionPauses(t *testing.T) {
 
 func TestControllerProcessDueWake_ReviewApprovedTransitionsToMerging(t *testing.T) {
 	now := time.Date(2026, 3, 20, 14, 11, 0, 0, time.UTC)
+	ciRecordedAt := now.Add(-30 * time.Second)
 	st := newMemStore()
 	require.NoError(t, st.WriteCheckpoint(context.Background(), store.Checkpoint{State: "REVIEWING", Phase: 2, PRNumber: 42}))
 	require.NoError(t, st.UpsertWakeSchedule(context.Background(), store.WakeSchedule{
@@ -809,6 +812,17 @@ func TestControllerProcessDueWake_ReviewApprovedTransitionsToMerging(t *testing.
 		WakeKind:  "poll_review",
 		DueAt:     now.Add(-time.Minute),
 		DedupeKey: "run:default:poll_review",
+	}))
+	// Persist a prior CI readiness decision so merge-readiness gate has CI evidence.
+	ciObsDetail := `{"session_id":"default","correlation_id":"poll:default:poll_ci:1","wake_kind":"poll_ci","pr_number":42,"ci":{"total_checks":2,"green_checks":2}}`
+	require.NoError(t, st.WritePolicyDecision(context.Background(), store.PolicyDecision{
+		SessionID:     "default",
+		CorrelationID: "poll:default:poll_ci:1",
+		DecisionKind:  "ci_readiness",
+		Verdict:       "continue",
+		InputHash:     "hash1",
+		Detail:        ciObsDetail,
+		CreatedAt:     ciRecordedAt,
 	}))
 
 	controller := loomruntime.NewController(st, loomruntime.Config{
@@ -826,8 +840,45 @@ func TestControllerProcessDueWake_ReviewApprovedTransitionsToMerging(t *testing.
 	cp, readErr := st.ReadCheckpoint(context.Background())
 	require.NoError(t, readErr)
 	assert.Equal(t, "MERGING", cp.State)
+	// The persisted verdict now uses the policy outcome taxonomy.
+	require.Len(t, st.decisions, 2)
+	assert.Equal(t, "continue", st.decisions[1].Verdict)
+}
+
+func TestControllerProcessDueWake_ReviewApprovedBlocksWhenCIEvidenceMissing(t *testing.T) {
+	now := time.Date(2026, 3, 20, 14, 11, 30, 0, time.UTC)
+	st := newMemStore()
+	require.NoError(t, st.WriteCheckpoint(context.Background(), store.Checkpoint{State: "REVIEWING", Phase: 2, PRNumber: 42}))
+	require.NoError(t, st.UpsertWakeSchedule(context.Background(), store.WakeSchedule{
+		SessionID: "default",
+		WakeKind:  "poll_review",
+		DueAt:     now.Add(-time.Minute),
+		DedupeKey: "run:default:poll_review",
+	}))
+	// No prior CI decision persisted — merge-readiness gate has no CI evidence.
+
+	controller := loomruntime.NewController(st, loomruntime.Config{
+		HolderID:     "controller-1",
+		LeaseTTL:     time.Minute,
+		PollInterval: time.Minute,
+		Now:          func() time.Time { return now },
+	})
+
+	lifecycle, err := controller.ProcessDueWake(context.Background(), &pollingGitHubClientMock{reviewStatus: "APPROVED"})
+	require.NoError(t, err)
+	// Without CI evidence, merge-readiness returns block → stays in REVIEWING.
+	assert.Equal(t, "REVIEWING", lifecycle.WorkflowState)
+	assert.Equal(t, "poll_review", lifecycle.NextWakeKind)
+
+	cp, readErr := st.ReadCheckpoint(context.Background())
+	require.NoError(t, readErr)
+	assert.Equal(t, "REVIEWING", cp.State)
 	require.Len(t, st.decisions, 1)
-	assert.Equal(t, "resume", st.decisions[0].Verdict)
+	assert.Equal(t, "block", st.decisions[0].Verdict)
+
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal([]byte(st.decisions[0].Detail), &payload))
+	assert.Equal(t, "merge_observations_incomplete", payload["merge_policy_reason"])
 }
 
 func TestControllerProcessDueWake_ReviewChangesRequestedTransitionsToAddressingFeedback(t *testing.T) {
@@ -857,7 +908,7 @@ func TestControllerProcessDueWake_ReviewChangesRequestedTransitionsToAddressingF
 	require.NoError(t, readErr)
 	assert.Equal(t, "ADDRESSING_FEEDBACK", cp.State)
 	require.Len(t, st.decisions, 1)
-	assert.Equal(t, "address_feedback", st.decisions[0].Verdict)
+	assert.Equal(t, "block", st.decisions[0].Verdict)
 }
 
 func TestControllerStartDoesNotScheduleUnsupportedPollWakeStates(t *testing.T) {
@@ -919,7 +970,7 @@ func TestControllerProcessDueWake_ReviewPendingRecordsObservationWithoutPromptRe
 	require.Len(t, st.events, 1)
 	assert.Equal(t, "poll_review", st.events[0].EventKind)
 	require.Len(t, st.decisions, 1)
-	assert.Equal(t, "await", st.decisions[0].Verdict)
+	assert.Equal(t, "wait", st.decisions[0].Verdict)
 	assert.Equal(t, st.events[0].CorrelationID, st.decisions[0].CorrelationID)
 }
 
