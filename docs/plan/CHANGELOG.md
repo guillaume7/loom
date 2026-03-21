@@ -1,3 +1,39 @@
+## Epic TH3.E3 — Deterministic Policy Engine
+
+### Stories Completed
+- TH3.E3.US1 — Runtime observation model
+- TH3.E3.US2 — CI review and merge policy decisions
+- TH3.E3.US3 — Escalation and wait outcome taxonomy
+- TH3.E3.US4 — Policy evaluation audit trail
+
+### Key Changes
+- Added typed observation model (`ObservationModel`, `CIObservation`, `ReviewObservation`, etc.) assembled from persisted store records
+- Added `AssembleObservationModel()` with PR-scoped event filtering so unrelated GitHub events do not contaminate the policy inputs
+- Added deterministic policy evaluation functions: `EvaluateCIReadiness`, `EvaluateReviewReadiness`, `EvaluateMergeReadiness` — all pure, side-effect-free
+- Wired merge-readiness gate into the live REVIEWING poll path: review approval no longer advances directly to MERGING; it calls `EvaluateMergeReadiness` against historical CI evidence first
+- Added `PolicyOutcome` taxonomy (`continue`, `wait`, `retry`, `escalate`, `block`) and `PersistedVerdict` to store policy outcomes in `PolicyDecision.Verdict` instead of legacy action strings
+- Added `OutcomeAction` type and `OutcomeToAction()` mapping each `PolicyOutcome` to a concrete runtime action (schedule_wake, halt_progress, request_operator, continue)
+- Added named `EscalationCondition` and `BlockCondition` constants matching the exact `Reason` strings from policy evaluations for explicit, non-free-form escalation conditions
+- Added `AssemblePolicyAuditReport()` and `PolicyAuditEntry`/`PolicyAuditReport` types for operator-facing human-readable decision audit without JSON parsing
+- Split `poll_resumption.go` (was 627 lines) into `poll_resumption.go` (241 lines) and `poll_resumption_eval.go` (397 lines)
+
+### Files Modified
+- `internal/runtime/observation_types.go` (new)
+- `internal/runtime/observation_model.go` (new)
+- `internal/runtime/observation_model_test.go` (new)
+- `internal/runtime/policy.go` (new)
+- `internal/runtime/policy_test.go` (new)
+- `internal/runtime/outcome_actions.go` (new)
+- `internal/runtime/outcome_actions_test.go` (new)
+- `internal/runtime/audit.go` (new)
+- `internal/runtime/audit_test.go` (new)
+- `internal/runtime/poll_resumption.go` (modified + split)
+- `internal/runtime/poll_resumption_eval.go` (new, split from above)
+- `internal/runtime/controller_test.go` (modified)
+- `internal/github/types.go` (modified: HeadRef, BaseRef fields)
+- `internal/github/client.go` (modified: populate HeadRef, BaseRef)
+- `docs/plan/backlog.yaml`
+
 ## Epic TH2.E4 — Agent Definitions
 
 ### Stories Completed

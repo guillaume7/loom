@@ -8,7 +8,7 @@ import (
 	"github.com/guillaume7/loom/internal/store"
 )
 
-// PolicyAuditEntry is a decoded, human-readable view of a single policy decision record.
+// PolicyAuditEntry is a decoded, human-readable view of a single persisted policy decision.
 type PolicyAuditEntry struct {
 	SessionID     string
 	CorrelationID string
@@ -21,14 +21,13 @@ type PolicyAuditEntry struct {
 	RecordedAt    time.Time
 }
 
-// PolicyAuditReport groups audit entries by a session run.
+// PolicyAuditReport groups policy audit entries for a single session run.
 type PolicyAuditReport struct {
 	SessionID string
 	Entries   []PolicyAuditEntry
 }
 
-// AssemblePolicyAuditReport reads all PolicyDecision records for the current session
-// and converts them to a human-readable audit report for operators.
+// AssemblePolicyAuditReport reads all policy decisions for the current session and returns them as a chronological audit report.
 func AssemblePolicyAuditReport(ctx context.Context, st store.Store) (PolicyAuditReport, error) {
 	// Read the checkpoint to get the session ID
 	cp, err := st.ReadCheckpoint(ctx)

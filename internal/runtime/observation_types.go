@@ -2,6 +2,7 @@ package runtime
 
 import "time"
 
+// ObservationAuthority indicates the reliability level of an observation.
 type ObservationAuthority string
 
 const (
@@ -9,6 +10,7 @@ const (
 	ObservationAuthorityDerived       ObservationAuthority = "derived"
 )
 
+// ObservationModel aggregates all observations collected during a session.
 type ObservationModel struct {
 	SessionID  string
 	Checkpoint CheckpointObservation
@@ -20,6 +22,7 @@ type ObservationModel struct {
 	Summaries  ObservationSummaries
 }
 
+// CheckpointObservation represents a snapshot of the runtime checkpoint.
 type CheckpointObservation struct {
 	Authority   ObservationAuthority
 	State       string
@@ -31,6 +34,7 @@ type CheckpointObservation struct {
 	UpdatedAt   time.Time
 }
 
+// CIObservation represents CI/check run status.
 type CIObservation struct {
 	Authority     ObservationAuthority
 	Source        string
@@ -45,6 +49,7 @@ type CIObservation struct {
 	FailedChecks  []string
 }
 
+// ReviewObservation represents code review status.
 type ReviewObservation struct {
 	Authority     ObservationAuthority
 	Source        string
@@ -56,6 +61,7 @@ type ReviewObservation struct {
 	Action        string
 }
 
+// BranchObservation represents git branch metadata.
 type BranchObservation struct {
 	Authority     ObservationAuthority
 	Source        string
@@ -68,6 +74,7 @@ type BranchObservation struct {
 	HeadSHA       string
 }
 
+// PRObservation represents pull request state and metadata.
 type PRObservation struct {
 	Authority     ObservationAuthority
 	Source        string
@@ -82,6 +89,7 @@ type PRObservation struct {
 	Verdict       string
 }
 
+// OperatorObservation represents manual operator actions on the workflow.
 type OperatorObservation struct {
 	Authority     ObservationAuthority
 	Source        string
@@ -95,6 +103,7 @@ type OperatorObservation struct {
 	ResumeState   string
 }
 
+// ObservationSummaries groups latest observations from each source.
 type ObservationSummaries struct {
 	CI       *CISummary
 	Review   *ReviewSummary
@@ -103,6 +112,7 @@ type ObservationSummaries struct {
 	Operator *OperatorSummary
 }
 
+// CISummary is the latest recorded CI check status.
 type CISummary struct {
 	Authority     ObservationAuthority
 	CorrelationID string
@@ -113,6 +123,7 @@ type CISummary struct {
 	GreenChecks   int
 }
 
+// ReviewSummary is the latest recorded code review status.
 type ReviewSummary struct {
 	Authority     ObservationAuthority
 	CorrelationID string
@@ -121,6 +132,7 @@ type ReviewSummary struct {
 	Verdict       string
 }
 
+// BranchSummary is the latest recorded branch metadata.
 type BranchSummary struct {
 	Authority     ObservationAuthority
 	CorrelationID string
@@ -132,6 +144,7 @@ type BranchSummary struct {
 	HeadSHA       string
 }
 
+// PRSummary is the latest recorded pull request state.
 type PRSummary struct {
 	Authority     ObservationAuthority
 	CorrelationID string
@@ -142,6 +155,7 @@ type PRSummary struct {
 	Verdict       string
 }
 
+// OperatorSummary is the latest recorded operator action.
 type OperatorSummary struct {
 	Authority     ObservationAuthority
 	CorrelationID string

@@ -10,6 +10,7 @@ import (
 
 const defaultObservationLimit = 100
 
+// AssembleObservationModel reads all persisted runtime records and assembles a typed observation model for policy evaluation.
 func AssembleObservationModel(ctx context.Context, st store.Store) (ObservationModel, error) {
 	cp, err := st.ReadCheckpoint(ctx)
 	if err != nil {
@@ -253,7 +254,7 @@ func consumeOperatorObservationEvent(model *ObservationModel, event store.Extern
 
 func consumeObservationSummary(model *ObservationModel, decision store.PolicyDecision) {
 	switch decision.DecisionKind {
-	case pollDecisionKind:
+	case pollDecisionKind, string(PolicyDecisionCIReadiness), string(PolicyDecisionReviewReadiness):
 		observation, ok := decodePollObservation(decision.Detail)
 		if !ok || !isObservationPRRelevant(model.Checkpoint.PRNumber, observation.PRNumber) {
 			return

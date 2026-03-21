@@ -21,7 +21,7 @@ const (
 )
 
 var (
-	ErrNothingToPause      = errors.New("nothing to pause")
+	ErrNothingToPause       = errors.New("nothing to pause")
 	ErrNothingToResume      = errors.New("nothing to resume")
 	errInvalidManualControl = errors.New("invalid manual override action")
 )
