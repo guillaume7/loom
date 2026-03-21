@@ -391,7 +391,7 @@ backlog:
               depends-on: [TH3.E4.US1]
             - id: TH3.E4.US3
               title: "Lease expiry and recovery"
-              status: todo
+              status: done
               file: docs/themes/TH3-runtime-first-reengineering/epics/E4-locking-and-recovery/user-stories/US3-lease-expiry-and-recovery.md
               depends-on: [TH3.E4.US1, TH3.E2.US4]
             - id: TH3.E4.US4
