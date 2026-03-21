@@ -1,7 +1,7 @@
 # Backlog — Core State File
 backlog:
   project: "loom"
-  last-updated: "2026-03-21T15:46:04Z"
+  last-updated: "2026-03-21T16:00:00Z"
   themes:
     # ── TH1: Loom v1 Core ────────────────────────────────────────────
     - id: TH1
@@ -295,7 +295,7 @@ backlog:
     # ── TH3: Runtime-First Reengineering ────────────────────────────
     - id: TH3
       name: "Runtime-First Reengineering"
-      status: in-progress
+      status: done
       vision-ref: docs/vision_of_product/VP3-runtime-first/
       depends-on: [TH1]
       epics:
