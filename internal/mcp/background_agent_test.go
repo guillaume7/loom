@@ -55,10 +55,10 @@ func TestLoomSpawnAgent_StartsBackgroundProcessAndLogsExitCode(t *testing.T) {
 
 	exitAction := waitForActionEvent(t, s.Store(), "background_agent_exited")
 	var exitDetail struct {
-		StoryID         string `json:"story_id"`
-		Prompt          string `json:"prompt"`
-		Worktree        string `json:"worktree"`
-		Contract        struct {
+		StoryID  string `json:"story_id"`
+		Prompt   string `json:"prompt"`
+		Worktree string `json:"worktree"`
+		Contract struct {
 			JobID          string    `json:"job_id"`
 			StoryID        string    `json:"story_id"`
 			Attempt        int       `json:"attempt"`
@@ -66,10 +66,10 @@ func TestLoomSpawnAgent_StartsBackgroundProcessAndLogsExitCode(t *testing.T) {
 			ExpectedOutput string    `json:"expected_output"`
 			Deadline       time.Time `json:"deadline"`
 		} `json:"contract"`
-		PID             int    `json:"pid"`
-		ExitCode        int    `json:"exit_code"`
-		Success         bool   `json:"success"`
-		WorktreeRemoved bool   `json:"worktree_removed"`
+		PID             int  `json:"pid"`
+		ExitCode        int  `json:"exit_code"`
+		Success         bool `json:"success"`
+		WorktreeRemoved bool `json:"worktree_removed"`
 	}
 	require.NoError(t, json.Unmarshal([]byte(exitAction.Detail), &exitDetail))
 	assert.Equal(t, "US-2.1", exitDetail.StoryID)
