@@ -421,6 +421,6 @@ backlog:
               depends-on: [TH3.E5.US2, TH3.E4.US4]
             - id: TH3.E5.US4
               title: "Replay-driven runtime regression suite"
-              status: todo
+              status: done
               file: docs/themes/TH3-runtime-first-reengineering/epics/E5-replay-and-bounded-agent-jobs/user-stories/US4-replay-driven-runtime-regression-suite.md
               depends-on: [TH3.E5.US1, TH3.E5.US3]
