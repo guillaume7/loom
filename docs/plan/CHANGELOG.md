@@ -1,3 +1,41 @@
+## Epic TH3.E5 — Replay and Bounded Agent Jobs
+
+### Stories Completed
+- TH3.E5.US1 — Deterministic replay fixtures
+- TH3.E5.US2 — Bounded agent job contract
+- TH3.E5.US3 — Agent failure containment
+- TH3.E5.US4 — Replay-driven runtime regression suite
+
+### Key Changes
+- Added deterministic replay fixture assembly and JSON serialization from persisted checkpoint, observation, policy, event, decision, and action records.
+- Added replay-focused regression suites that exercise representative runtime branches for wake-up, policy, locking, recovery, and bounded-job failure paths with fixture-specific failure labeling.
+- Added bounded agent-job contracts to spawn paths with explicit job ID, attempt number, expected output, and deadline metadata to preserve runtime authority while enabling retry attempts.
+- Added explicit agent failure containment outcomes for crash, timeout, malformed output, and cleanup failure, persisted as actionable runtime records for operator review and replay.
+- Added timeout watchdog and bounded stdout capture so hung or malformed worker runs resolve to explicit containment outcomes without indefinite scheduler stalls.
+- Updated scheduler running-state accounting to treat failed attempts as terminal for slot recovery while avoiding double-counting with late exit records.
+
+### Files Modified
+- `internal/runtime/replay_fixture.go` (new)
+- `internal/runtime/replay_fixture_test.go` (new)
+- `internal/runtime/replay_fixture_sqlite_test.go` (new)
+- `internal/runtime/replay_regression_test.go` (new)
+- `internal/runtime/observation_model.go` (modified)
+- `internal/runtime/audit.go` (modified)
+- `internal/mcp/agent_job_contract.go` (new)
+- `internal/mcp/background_agent.go` (modified)
+- `internal/mcp/parallel_schedule.go` (modified)
+- `internal/mcp/agent_job_failure.go` (new)
+- `internal/mcp/agent_job_failure_test.go` (new)
+- `internal/mcp/background_agent_failure_test.go` (new)
+- `internal/mcp/background_agent_test.go` (modified)
+- `internal/mcp/parallel_schedule_test.go` (modified)
+- `internal/agentspawn/agentspawn.go` (modified)
+- `internal/agentspawn/agentspawn_test.go` (modified)
+- `internal/store/sqlite_limits.go` (new)
+- `internal/store/sqlite.go` (modified)
+- `internal/store/sqlite_runtime.go` (modified)
+- `docs/plan/backlog.yaml`
+
 ## Epic TH3.E4 — Locking and Recovery
 
 ### Stories Completed
