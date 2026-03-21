@@ -36,6 +36,22 @@ type backgroundAgentExitDetail struct {
 	CleanupError    string `json:"cleanup_error,omitempty"`
 }
 
+// backgroundAgentFailedDetail is the payload written to the store when an
+// agent job exits with an explicit failure. It carries enough context for
+// operator review and eventual replay, satisfying AC1 and AC3.
+type backgroundAgentFailedDetail struct {
+	StoryID      string                 `json:"story_id"`
+	Contract     agentspawn.JobContract `json:"contract"`
+	PID          int                    `json:"pid"`
+	ExitCode     int                    `json:"exit_code"`
+	FailureKind  AgentJobFailureKind    `json:"failure_kind"`
+	Outcome      AgentJobFailureOutcome `json:"outcome"`
+	LockState    string                 `json:"lock_state"`
+	Error        string                 `json:"error,omitempty"`
+	CleanupError string                 `json:"cleanup_error,omitempty"`
+	ObservedAt   time.Time              `json:"observed_at"`
+}
+
 func (s *Server) handleSpawnAgent(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 	const toolName = "loom_spawn_agent"
 	start := time.Now()
@@ -100,6 +116,8 @@ func (s *Server) awaitBackgroundAgentExit(sessionID string, done <-chan agentspa
 		return
 	}
 
+	observedAt := time.Now().UTC()
+
 	detail := backgroundAgentExitDetail{
 		StoryID:         result.Started.StoryID,
 		Prompt:          result.Started.Prompt,
@@ -120,13 +138,51 @@ func (s *Server) awaitBackgroundAgentExit(sessionID string, done <-chan agentspa
 	}
 	if err := s.st.WriteAction(context.Background(), store.Action{
 		SessionID:    sessionID,
-		OperationKey: fmt.Sprintf("background_agent_exit:%s:%s:%d:%d", sessionID, result.Started.StoryID, result.Started.PID, time.Now().UTC().UnixNano()),
+		OperationKey: fmt.Sprintf("background_agent_exit:%s:%s:%d:%d", sessionID, result.Started.StoryID, result.Started.PID, observedAt.UnixNano()),
 		StateBefore:  "background_agent_running",
 		StateAfter:   "background_agent_exited",
 		Event:        "background_agent_exited",
 		Detail:       string(payload),
 	}); err != nil {
 		slog.Error("background agent exit action log write failed", "story_id", result.Started.StoryID, "pid", result.Started.PID, "error", err)
+	}
+
+	if failure, failed := ClassifyAgentJobExit(result, result.Started.Contract, observedAt); failed {
+		s.writeBackgroundAgentFailedAction(sessionID, result, failure, observedAt)
+	}
+}
+
+func (s *Server) writeBackgroundAgentFailedAction(sessionID string, result agentspawn.Exit, failure AgentJobFailureResult, observedAt time.Time) {
+	failedDetail := backgroundAgentFailedDetail{
+		StoryID:     result.Started.StoryID,
+		Contract:    result.Started.Contract,
+		PID:         result.Started.PID,
+		ExitCode:    result.ExitCode,
+		FailureKind: failure.Kind,
+		Outcome:     failure.Outcome,
+		LockState:   failure.LockState,
+		ObservedAt:  observedAt,
+	}
+	if result.Err != nil {
+		failedDetail.Error = result.Err.Error()
+	}
+	if result.CleanupErr != nil {
+		failedDetail.CleanupError = result.CleanupErr.Error()
+	}
+	payload, err := json.Marshal(failedDetail)
+	if err != nil {
+		slog.Error("background agent failed marshal failed", "story_id", result.Started.StoryID, "pid", result.Started.PID, "error", err)
+		return
+	}
+	if err := s.st.WriteAction(context.Background(), store.Action{
+		SessionID:    sessionID,
+		OperationKey: fmt.Sprintf("background_agent_failed:%s:%s:%d:%d", sessionID, result.Started.StoryID, result.Started.PID, observedAt.UnixNano()),
+		StateBefore:  "background_agent_exited",
+		StateAfter:   "background_agent_failed",
+		Event:        "background_agent_failed",
+		Detail:       string(payload),
+	}); err != nil {
+		slog.Error("background agent failed action log write failed", "story_id", result.Started.StoryID, "pid", result.Started.PID, "error", err)
 	}
 }
 
